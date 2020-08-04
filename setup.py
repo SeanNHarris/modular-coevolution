@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name='ceads_evolution',
+    name='modular-coevolution',
     packages=[
         'alternate_genotypes',
         'AlternateGenerators',
@@ -10,5 +10,5 @@ setup(
         'GeneticProgramming',
     ],
     include_package_data=True,
-    install_requires=[]
+    install_requires=["munkres"]
 )
