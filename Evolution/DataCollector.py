@@ -51,6 +51,7 @@ class DataCollector:
 
     def __getstate__(self):
         state = self.__dict__.copy()
+        return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
