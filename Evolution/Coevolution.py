@@ -43,16 +43,16 @@ class Coevolution:
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)
         self.result_log_attacker = open(self.log_path + "/resultLogAttacker.txt", "a+")
-        self.agent_log_attacker = open(self.log_path + "/solutionLogAttacker.txt", "a+")
+        self.solution_log_attacker = open(self.log_path + "/solutionLogAttacker.txt", "a+")
         self.result_log_defender = open(self.log_path + "/resultLogDefender.txt", "a+")
-        self.agent_log_defender = open(self.log_path + "/solutionLogDefender.txt", "a+")
+        self.solution_log_defender = open(self.log_path + "/solutionLogDefender.txt", "a+")
         self.tournament_data_attacker = open(self.log_path + "/tournamentDataAttacker.txt", "a+")
         self.tournament_data_defender = open(self.log_path + "/tournamentDataDefender.txt", "a+")
         if self.generation == 0:
             self.result_log_attacker.truncate(0)
-            self.agent_log_attacker.truncate(0)
+            self.solution_log_attacker.truncate(0)
             self.result_log_defender.truncate(0)
-            self.agent_log_defender.truncate(0)
+            self.solution_log_defender.truncate(0)
             self.tournament_data_attacker.truncate(0)
             self.tournament_data_defender.truncate(0)
 
@@ -70,8 +70,8 @@ class Coevolution:
             self.finalizing = True
         else:
             self.generation += 1
-            self.attacker_generator.next_generation(self.result_log_attacker, None)#self.agent_log_attacker)
-            self.defender_generator.next_generation(self.result_log_defender, None)#self.agent_log_defender)
+            self.attacker_generator.next_generation(self.result_log_attacker, None)#self.solution_log_attacker)
+            self.defender_generator.next_generation(self.result_log_defender, None)#self.solution_log_defender)
 
         self.remaining_evolution_evaluations.clear()
         self.remaining_tournament_evaluations.clear()
@@ -220,8 +220,11 @@ class Coevolution:
 
         if self.data_collector is not None:
             attacker, defender = self.get_pair(evaluation_ID)
-            self.data_collector.set_evaluation_data(evaluation_ID, attacker.genotype.ID, defender.genotype.ID,
-                                                    attacker_objectives, defender_objectives)
+            attacker_name = type(attacker).agent_type_name
+            defender_name = type(defender).agent_type_name
+            self.data_collector.set_evaluation_data(evaluation_ID,
+                                                    {attacker_name: attacker.genotype.ID, defender_name: defender.genotype.ID},
+                                                    {attacker_name: attacker_objectives, defender_name: defender_objectives})
         if evaluation_ID in self.remaining_evolution_evaluations:
             pair = self.evaluation_table[evaluation_ID]
             self.completed_pairings[pair] = self.completed_pairings.setdefault(pair, 0) + 1
@@ -299,21 +302,21 @@ class Coevolution:
     def __getstate__(self):
         state = self.__dict__.copy()
         del state["result_log_attacker"]
-        del state["agent_log_attacker"]
+        del state["solution_log_attacker"]
         del state["result_log_defender"]
-        del state["agent_log_defender"]
+        del state["solution_log_defender"]
         del state["tournament_data_attacker"]
         del state["tournament_data_defender"]
         return state
 
     def __setstate__(self, state):
         self.__dict__.update(state)
-        self.result_log_attacker = open("Logs/resultLogAttacker.txt", "a+")
-        self.agent_log_attacker = open("Logs/solutionLogAttacker.txt", "a+")
-        self.result_log_defender = open("Logs/resultLogDefender.txt", "a+")
-        self.agent_log_defender = open("Logs/solutionLogDefender.txt", "a+")
-        self.tournament_data_attacker = open("Logs/tournamentDataAttacker.txt", "a+")
-        self.tournament_data_defender = open("Logs/tournamentDataDefender.txt", "a+")
+        self.result_log_attacker = open(self.log_path + "/resultLogAttacker.txt", "a+")
+        self.solution_log_attacker = open(self.log_path + "/solutionLogAttacker.txt", "a+")
+        self.result_log_defender = open(self.log_path + "/resultLogDefender.txt", "a+")
+        self.solution_log_defender = open(self.log_path + "/solutionLogDefender.txt", "a+")
+        self.tournament_data_attacker = open(self.log_path + "/tournamentDataAttacker.txt", "a+")
+        self.tournament_data_defender = open(self.log_path + "/tournamentDataDefender.txt", "a+")
 
 
 class EvolutionEndedException(Exception):

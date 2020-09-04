@@ -10,9 +10,9 @@ import random
 
 # Note: these functions assume objective maximization
 class NSGAIIGenerator(BaseEvolutionaryGenerator):
-    def __init__(self, agent_class, initial_size=1, children_size=1, mutation_fraction=0.25, recombination_fraction=0.75, tournament_size=2, seed=None, fitness_function=None, data_collector=None, copy_survivor_objectives=False, using_hall_of_fame=True):
-        super().__init__(agent_class=agent_class, initial_size=initial_size, seed=seed, fitness_function=fitness_function,
-                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, using_hall_of_fame=using_hall_of_fame)
+    def __init__(self, agent_class, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25, recombination_fraction=0.75, tournament_size=2, seed=None, fitness_function=None, data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
+        super().__init__(agent_class=agent_class, initial_size=initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
+                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -78,13 +78,13 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
             for individual in self.population:
                 average_objectives[name] += individual.objectives[name]
             average_objectives[name] /= len(self.population)
-        diversity = self.get_diversity()
+        diversity = self.get_diversity(presorted=True)
 
         if result_log is not None:
             result_columns = ["Generation"]
             for name in objective_names:
                 result_columns.extend([name + " best", name + " average nondominated", name + " average", name + " worst nondominated"])
-            result_columns.extend(["Front sizes", "Diversity"])
+            result_columns.extend(["Front sizes" + "-"*20, "Diversity"])
             result_log_format = "".join(
                 ["{{!s:<{0}.{1}}}".format(len(column) + 4, len(column)) for column in result_columns]) + "\n"
             if self.generation == 0:
@@ -274,14 +274,19 @@ def calculate_crowding_distances(front_population):
 def domination_comparison(individual_1, individual_2):
     objective_count = len(individual_1.get_active_objectives())
     greater_than_count = 0
+    equal_count = 0
     for objective in individual_1.get_active_objectives():
         if individual_1.objectives[objective] < individual_2.objectives[objective]:
             greater_than_count -= 1
         elif individual_1.objectives[objective] > individual_2.objectives[objective]:
             greater_than_count += 1
-    if greater_than_count == -objective_count:
+        else:
+            equal_count += 1
+    if equal_count == objective_count:
+        return 0
+    elif greater_than_count - equal_count == -objective_count:
         return -1
-    elif greater_than_count == objective_count:
+    elif greater_than_count + equal_count == objective_count:
         return 1
     else:
         return 0

@@ -1,3 +1,6 @@
+import random
+
+
 # Edit diversity from Diversity in Genetic Programming: An Analysis of Measures and Correlation With Fitness
 def edit_distance(tree_1, tree_2):
     return subtree_edit_distance(tree_1.root, tree_2.root)
@@ -29,12 +32,16 @@ def subtree_edit_distance(node_1, node_2):
     return distance
 
 
-def edit_diversity(population, reference=None):
-    population = population.copy()
+def edit_diversity(population, reference=None, samples=0):
+    if reference is None and any(not i.fitness for i in population):
+        reference = population[0]
     if reference is None:
-        population.sort(key=lambda x: x.fitness, reverse=True)
-        reference = population[0]  # Note: diversity score is in reference to the best individual?
+        reference = max(population, key=lambda x: x.fitness)   # Note: diversity score is in reference to the best individual?
     distance_sum = 0
-    for i in range(len(population)):
-        distance_sum += edit_distance(reference, population[i])
+    if samples is None:
+        comparisons = population
+    else:
+        comparisons = random.sample(population, samples)
+    for comparison in comparisons:
+        distance_sum += edit_distance(reference, comparison)
     return distance_sum / len(population)

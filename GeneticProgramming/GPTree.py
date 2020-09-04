@@ -284,5 +284,5 @@ class GPTree(BaseGenotype):
     def __hash__(self):
         return tuple(self.getNodeIDList()).__hash__()
 
-    def diversity_function(self, population, reference=None):
-        return edit_diversity(population, reference)
+    def diversity_function(self, population, reference=None, samples=None):
+        return edit_diversity(population, reference, samples)

@@ -27,13 +27,13 @@ class DataCollector:
         self.data["generations"][agent_type][generation]["metricStatistics"] = metric_statistics
         self.update_experiment()
 
-    def set_individual_data(self, agent_type, ID, genotype, evaluation_IDs, opponent_IDs, objective_statistics, metrics, parent_IDs, creation_information):
+    def set_individual_data(self, agent_type, ID, genotype, evaluation_IDs, objective_statistics, metrics, parent_IDs,
+                            creation_information):
         if agent_type not in self.data["individuals"]:
             self.data["individuals"][agent_type] = dict()
         self.data["individuals"][agent_type][ID] = dict()
         self.data["individuals"][agent_type][ID]["genotype"] = genotype
         self.data["individuals"][agent_type][ID]["evaluationIDs"] = evaluation_IDs
-        self.data["individuals"][agent_type][ID]["opponentIDs"] = opponent_IDs
         self.data["individuals"][agent_type][ID]["objectiveStatistics"] = objective_statistics
         self.data["individuals"][agent_type][ID]["metrics"] = metrics
         self.data["individuals"][agent_type][ID]["parentIDs"] = parent_IDs
@@ -41,12 +41,10 @@ class DataCollector:
         self.update_experiment()
 
     # TODO: Rename attacker and defender to be more generic, expand to more (or less) than a fixed two agents
-    def set_evaluation_data(self, ID, attacker_ID, defender_ID, attacker_objectives, defender_objectives):
+    def set_evaluation_data(self, ID, agent_IDs: dict, agent_objectives: dict):
         self.data["evaluations"][ID] = dict()
-        self.data["evaluations"][ID]["attackerID"] = attacker_ID
-        self.data["evaluations"][ID]["defenderID"] = defender_ID
-        self.data["evaluations"][ID]["attackerObjectives"] = attacker_objectives
-        self.data["evaluations"][ID]["defenderObjectives"] = defender_objectives
+        self.data["evaluations"][ID]["agentIDs"] = agent_IDs
+        self.data["evaluations"][ID]["agentObjectives"] = agent_objectives
         self.update_experiment()
 
     def __getstate__(self):

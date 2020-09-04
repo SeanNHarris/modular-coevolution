@@ -2,14 +2,12 @@ import abc
 import math
 
 
-# TODO: Rename variables
-
-
 class BaseGenotype:
     _metaclass__ = abc.ABCMeta
 
     ID_counter = 0
 
+    # TODO: for all genotypes, accept a parameter list as keywords rather than strings
     def __init__(self):
         self.ID = None
         self.claim_next_ID()
@@ -19,6 +17,7 @@ class BaseGenotype:
         self.objective_statistics = dict()
         self.fitness_counter = 0
         self.objectives_counter = dict()
+        self.evaluated = False
         self.metrics = dict()
         self.past_objectives = dict()
 
@@ -56,6 +55,9 @@ class BaseGenotype:
         for objective in objective_list:
             if objective not in average_flags:
                 average_flags[objective] = False
+
+        self.evaluated = True
+
         if inactive_objectives is not None:
             self.inactive_objectives = inactive_objectives
 
@@ -99,7 +101,7 @@ class BaseGenotype:
         pass
 
     @abc.abstractmethod
-    def diversity_function(self, population, reference=None):
+    def diversity_function(self, population, reference=None, samples=None):
         pass
 
     def claim_next_ID(self):

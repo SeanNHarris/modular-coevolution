@@ -56,8 +56,8 @@ class SelfAdaptiveWrapper(BaseGenotype):
     def get_raw_genotype(self):
         return {"genotype": self.genotype.get_raw_genotype(), "self-adaptive parameters": self.self_adaptive_parameters}
 
-    def diversity_function(self, population, reference=None):
-        return self.genotype.diversity_function([individual.genotype for individual in population], reference.genotype)
+    def diversity_function(self, population, reference=None, samples=None):
+        return self.genotype.diversity_function([individual.genotype for individual in population], reference.genotype, samples)
 
     def get_fitness_modifier(self):
         return self.genotype.get_fitness_modifier()

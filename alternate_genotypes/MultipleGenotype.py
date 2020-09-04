@@ -60,8 +60,10 @@ class MultipleGenotype(BaseGenotype):
         for name, member in self.members:
             raw_genotype[name] = member.get_raw_genotype()
 
-    def diversity_function(self, population, reference=None):
-        return multiple_genome_diversity(population, reference)
+
+    # TODO: This was probably like this to ensure compliance, but this can be redone with a function class variable, please do so
+    def diversity_function(self, population, reference=None, samples=None):
+        return multiple_genome_diversity(population, reference, samples)
 
     def __str__(self):
         string = "(Multiple Genotype)"
