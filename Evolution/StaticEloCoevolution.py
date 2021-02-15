@@ -68,7 +68,7 @@ class StaticEloCoevolution(EloCoevolution):
                 #normalized_score = normalized_score * 0.9 + 0.5 * 0.1
             self.total_scores[attacker_ID][objective] += normalized_score
             self.total_scores[defender_ID][objective] += 1 - normalized_score
-        for objective, score in defender_objectives.items():
+        for objective, score in [(objective, score) for objective, score in defender_objectives.items() if objective not in attacker_objectives]:
             if self.max_objectives[objective] == self.min_objectives[objective]:
                 normalized_score = 0.5
             else:
@@ -98,6 +98,7 @@ class StaticEloCoevolution(EloCoevolution):
         else:
             iterations = 100
         for i in range(iterations):
+            average_error = 0
             new_elos = dict()
             for player in self.elos_to_update:
                 new_elos[player] = dict()
@@ -106,11 +107,16 @@ class StaticEloCoevolution(EloCoevolution):
                         self.opponents[player])  # R_c
                     average_score = self.total_scores[player][objective] / len(self.opponents[player])
                     difference = self.expected_difference(average_score)
-                    new_elos[player][objective] = average_opponent_elo * 0.9 + difference
+                    new_elo = average_opponent_elo * 0.9 + difference
+                    average_error += abs(iteration_elos[player][objective] - new_elo) / len(self.elos_to_update)
+                    new_elos[player][objective] = new_elo
             iteration_elos = new_elos
             #if i % 1 == 0:
-                #print({player_id: iteration_elos[player_id]["time remaining"] for player_id in iteration_elos})
-                #print(str(iteration_elos[0]["time remaining"]) + "\t" + str(iteration_elos[50]["time remaining"]))
+            #   print(f"Average error: {average_error}")
+            #   print({player_id: iteration_elos[player_id]["time remaining"] for player_id in iteration_elos})
+            #   print(str(iteration_elos[0]["time remaining"]) + "\t" + str(iteration_elos[50]["time remaining"]))
+            if average_error < 0.1:
+                break
         self.elos.update(iteration_elos)
 
     def process_deferred_objectives(self):

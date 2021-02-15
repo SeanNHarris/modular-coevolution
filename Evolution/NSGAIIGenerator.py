@@ -12,7 +12,7 @@ import random
 class NSGAIIGenerator(BaseEvolutionaryGenerator):
     def __init__(self, agent_class, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25, recombination_fraction=0.75, tournament_size=2, seed=None, fitness_function=None, data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
         super().__init__(agent_class=agent_class, initial_size=initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
-                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame)
+                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -22,11 +22,14 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
 
     # Returns indices
     def get_representatives_from_generation(self, generation, amount, force=False):
-        pareto_front = self.past_fronts[generation][0]
-        if force:
-            return [i % len(pareto_front) for i in range(amount)]
-        else:
-            return range(min(amount, len(pareto_front)))
+        #pareto_front = self.past_fronts[generation][0]
+        #if force:
+        #    return [i % len(pareto_front) for i in range(amount)]
+        #else:
+        #    return range(min(amount, len(pareto_front)))
+        # Indexes of the amount individuals with the highest quality.
+        fitness_best = sorted(range(len(self.past_populations[generation])), key=lambda index: self.past_populations[generation][index].metrics["quality"], reverse=True)
+        return fitness_best[:amount]
 
     def get_fitness(self, index):
         raise NotImplementedError("This is a multi-objective algorithm and does not store a single fitness.")

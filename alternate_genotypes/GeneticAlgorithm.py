@@ -4,29 +4,43 @@ from Evolution.BaseGenotype import BaseGenotype
 import random
 
 # TODO: These should probably be parameters somewhere? Either per individual (may be inconsistent), per method (may be tedious), or per class (might be problematic for multiple populations)
-MAX_VALUE = 10
+MIN_VALUE_DEFAULT = 0
+MAX_VALUE_DEFAULT = 10
 MUTATION_RATE = 0.33
 
 
 class GeneticAlgorithm(BaseGenotype):
     def __init__(self, parameters):
         super().__init__()
+        if "min_value" in parameters:
+            self.min_value = parameters["min_value"]
+        else:
+            self.min_value = MIN_VALUE_DEFAULT
+
+        if "max_value" in parameters:
+            self.max_value = parameters["max_value"]
+        else:
+            self.max_value = MAX_VALUE_DEFAULT
+        
         if "values" in parameters:
             self.genes = parameters["values"].copy()
             return
-
+        
         if "length" in parameters:
             self.genes = list()
             for _ in range(parameters["length"]):
-                self.genes.append(random.random() * MAX_VALUE)
+                self.genes.append(self.random_gene())
         else:
             raise TypeError("If \"values\" is not provided, a \"length\" must be.")
+
+    def random_gene(self):
+        return random.random() * (self.max_value - self.min_value) + self.min_value
 
     def mutate(self):
         for i in range(len(self.genes)):
             if random.random() < MUTATION_RATE:
-                self.genes[i] = self.genes[i] + random.gauss(0, MAX_VALUE / 10)
-                self.genes[i] = max(0, min(self.genes[i], MAX_VALUE))
+                self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value - self.min_value) / 100)
+                self.genes[i] = max(self.min_value, min(self.genes[i], self.max_value))
         self.creation_method = "Mutation"
 
     def recombine_uniform(self, donor):
@@ -37,7 +51,7 @@ class GeneticAlgorithm(BaseGenotype):
         self.creation_method = "Recombination"
 
     def recombine(self, donor):
-        crossover_point = random.randrange(1, len(self.genes) - 1)
+        crossover_point = random.randrange(0, len(self.genes) - 0)  # Can copy whole individual, needed to prevent error on size 1 or 2
         for i in range(crossover_point):
             self.genes[i] = donor.genes[i]
         self.parents.append(donor)

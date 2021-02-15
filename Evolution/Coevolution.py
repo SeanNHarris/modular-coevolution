@@ -1,4 +1,5 @@
 from Evolution.BaseEvolutionaryGenerator import BaseEvolutionaryGenerator
+from Evolution.BaseEvolutionWrapper import BaseEvolutionWrapper, EvolutionEndedException
 
 import math
 import os
@@ -6,7 +7,7 @@ import random
 
 
 # Runs the coevolutionary algorithm with a generic attacker and defender.
-class Coevolution:
+class Coevolution():
     def __init__(self, attacker_generator, defender_generator, num_generations, evaluations_per_individual,
                  tournament_evaluations=None, tournament_batch_size=4, tournament_ratio=1, data_collector=None,
                  log_subfolder=""):
@@ -133,6 +134,7 @@ class Coevolution:
 
 
     # Generates pairs of attacker and defender IDs
+    #@numba.jit()
     def generate_pairs(self, size_1, size_2, pairs_per_individual, invalid_pairs=None, allow_repeats=False):
         if invalid_pairs is None:
             invalid_pairs = {}
@@ -248,34 +250,33 @@ class Coevolution:
                 self.opponents_this_generation[defender_ID] = set()
             self.opponents_this_generation[defender_ID].add(attacker_ID)
         else:  # tournament
+            attacker, defender = self.get_pair(evaluation_ID)
+            if len(attacker_objectives) > 0:
+                if self.attacker_generator.fitness_function is not None:
+                    attacker_objectives["quality"] = self.attacker_generator.fitness_function(attacker_objectives)
+                else:
+                    attacker_objectives["quality"] = sum(attacker_objectives.values()) / len(attacker_objectives)
+            if len(defender_objectives) > 0:
+                if self.defender_generator.fitness_function is not None:
+                    defender_objectives["quality"] = self.defender_generator.fitness_function(defender_objectives)
+                else:
+                    defender_objectives["quality"] = sum(defender_objectives.values()) / len(defender_objectives)
+
             attacker_generation = self.evaluation_table[evaluation_ID][0][0]
             defender_generation = self.evaluation_table[evaluation_ID][1][0]
-            for objective_name in attacker_objectives:
-                if objective_name not in self.tournament_objectives_attacker:
-                    self.tournament_objectives_attacker[objective_name] = dict()
-                if attacker_generation not in self.tournament_objectives_attacker[objective_name]:
-                    self.tournament_objectives_attacker[objective_name][attacker_generation] = dict()
-                if defender_generation not in self.tournament_objectives_attacker[objective_name][attacker_generation]:
-                    self.tournament_objectives_attacker[objective_name][attacker_generation][defender_generation] = 0
-                self.tournament_objectives_attacker[objective_name][attacker_generation][defender_generation] += \
-                    attacker_objectives[objective_name] / self.tournament_evaluation_count[(attacker_generation, defender_generation)]
-                if self.data_collector is not None:
-                    self.data_collector.set_experiment_master_tournament_objective(objective_name,
-                                                                                   self.tournament_objectives_attacker[
-                                                                                       objective_name])
-            for objective_name in defender_objectives:
-                if objective_name not in self.tournament_objectives_defender:
-                    self.tournament_objectives_defender[objective_name] = dict()
-                if attacker_generation not in self.tournament_objectives_defender[objective_name]:
-                    self.tournament_objectives_defender[objective_name][attacker_generation] = dict()
-                if defender_generation not in self.tournament_objectives_defender[objective_name][attacker_generation]:
-                    self.tournament_objectives_defender[objective_name][attacker_generation][defender_generation] = 0
-                self.tournament_objectives_defender[objective_name][attacker_generation][defender_generation] += \
-                    defender_objectives[objective_name] / self.tournament_evaluation_count[(attacker_generation, defender_generation)]
-                if self.data_collector is not None:
-                    self.data_collector.set_experiment_master_tournament_objective(objective_name,
-                                                                                   self.tournament_objectives_defender[
-                                                                                       objective_name])
+            for individual_objectives, tournament_objectives in \
+                    [(attacker_objectives, self.tournament_objectives_attacker), (defender_objectives, self.tournament_objectives_defender)]:
+                for objective_name in individual_objectives:
+                    if objective_name not in tournament_objectives:
+                        tournament_objectives[objective_name] = dict()
+                    if attacker_generation not in tournament_objectives[objective_name]:
+                        tournament_objectives[objective_name][attacker_generation] = dict()
+                    if defender_generation not in tournament_objectives[objective_name][attacker_generation]:
+                        tournament_objectives[objective_name][attacker_generation][defender_generation] = 0
+                    tournament_objectives[objective_name][attacker_generation][defender_generation] += \
+                        individual_objectives[objective_name] / self.tournament_evaluation_count[(attacker_generation, defender_generation)]
+                    if self.data_collector is not None:
+                        self.data_collector.set_experiment_master_tournament_objective(objective_name, tournament_objectives[objective_name])
 
             self.remaining_tournament_evaluations.remove(evaluation_ID)
             self.write_tournament_data()
@@ -317,7 +318,3 @@ class Coevolution:
         self.solution_log_defender = open(self.log_path + "/solutionLogDefender.txt", "a+")
         self.tournament_data_attacker = open(self.log_path + "/tournamentDataAttacker.txt", "a+")
         self.tournament_data_defender = open(self.log_path + "/tournamentDataDefender.txt", "a+")
-
-
-class EvolutionEndedException(Exception):
-    pass

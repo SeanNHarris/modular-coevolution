@@ -23,7 +23,7 @@ class GPNode(metaclass=GPNodeTypeRegistry):
     DATA_TYPES = None
 
     def __init__(self, output_type=None, function_id=-1, literal=None, terminal=False, non_semi_terminal=False,
-                 non_terminal=False, branch=False, forbidden_nodes=None):
+                 non_terminal=False, branch=False, forbidden_nodes=None, fixed_context=None):
         if forbidden_nodes is None:
             forbidden_nodes = []
         if function_id == -1:
@@ -38,8 +38,9 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         self.input_types = func_data[2]
         self.input_nodes = list()
         self.literal = literal
+        self.fixed_context = fixed_context
         if function_id in type(self).literals and literal is None:
-            self.literal = self.function()
+            self.literal = self.function(fixed_context)
         self.parent = None
 
     def execute(self, context):

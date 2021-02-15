@@ -22,7 +22,7 @@ class BaseAgent(metaclass=AgentTypeRegistry):
         pass
 
     @abc.abstractmethod
-    def performAction(self):
+    def performAction(self, *args, **kwargs):
         pass
 
     def __init__(self, parameters=None, active=True, *args, **kwargs):

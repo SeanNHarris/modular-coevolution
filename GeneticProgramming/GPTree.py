@@ -5,7 +5,6 @@ from diversity.GPDiversity import *
 
 import random
 
-PARSIMONY_WEIGHT = -1
 # BRANCH_CHANCE = 0.5
 MAXIMUM_HEIGHT = 100  # Not enforced, used for precalculation of type tables; trees larger than this will cause a crash
 
@@ -41,11 +40,22 @@ class GPTree(BaseGenotype):
             self.maxHeight = parameters["maxHeight"]
         else:
             self.maxHeight = 7
+        
+        if "parsimonyWeight" in parameters:
+            self.parsimony_weight = parameters["parsimonyWeight"]
+        else:
+            self.parsimony_weight = -1
 
         if "forbiddenNodes" in parameters:
             self.forbiddenNodes = parameters["forbiddenNodes"]
         else:
             self.forbiddenNodes = list()
+
+        if "fixedContext" in parameters:
+            self.fixed_context = parameters["fixedContext"]
+        else:
+            self.fixed_context = dict()
+
         self.growTable, self.fullTable = self.nodeType.build_height_tables(MAXIMUM_HEIGHT,
                                                                            self.forbiddenNodes)  # Todo: Cache these per node type, forbiddenNodes
         self.depthTable = self.nodeType.build_depth_table(MAXIMUM_HEIGHT, self.forbiddenNodes)
@@ -62,6 +72,8 @@ class GPTree(BaseGenotype):
     # Run the program the tree represents
     def execute(self, context):
         # print("Executing tree:\n" + str(self))
+        context = context.copy()
+        context.update(self.fixed_context)
         return self.root.execute(context)
 
     # Replaces a subtree with a replacement subtree
@@ -104,7 +116,7 @@ class GPTree(BaseGenotype):
     def point_mutate(self, mutation_amount):
         for node in self.root.get_node_list():
             if random.random() < mutation_amount:
-                new_node = self.nodeType(function_id=self.nodeType.random_function(node.output_type, num_children=len(node.input_types)))
+                new_node = self.nodeType(function_id=self.nodeType.random_function(node.output_type, num_children=len(node.input_types)), fixed_context=self.fixed_context)
                 if node is self.root:
                     self.root = new_node
                 else:
@@ -136,7 +148,7 @@ class GPTree(BaseGenotype):
 
     # Creates a deep copy of the tree
     def clone(self, copy_objectives=False):
-        cloned_genotype = GPTree({"nodeType": self.nodeType, "idList": self.getNodeIDList()})
+        cloned_genotype = GPTree({"nodeType": self.nodeType, "idList": self.getNodeIDList(), "fixedContext": self.fixed_context})
         if copy_objectives:
             for objective in self.objectives:
                 cloned_genotype.objectives[objective] = self.objectives[objective]
@@ -165,7 +177,7 @@ class GPTree(BaseGenotype):
 
     # Positive is good, negative is bad
     def get_fitness_modifier(self):
-        parsimony_pressure = PARSIMONY_WEIGHT * len(self)
+        parsimony_pressure = self.parsimony_weight * len(self)
         # print("Parsimony pressure penalty of " + str(parsimony_pressure))
         return parsimony_pressure
 
@@ -181,7 +193,7 @@ class GPTree(BaseGenotype):
         if function in self.nodeType.literals:
             literal = idList.pop(0)
 
-        node = self.nodeType(function_id=function, literal=literal)
+        node = self.nodeType(function_id=function, literal=literal, fixed_context=self.fixed_context)
         for inputType in node.input_types:
             child = self.generateFromList(idList)
             child.set_parent(node)
@@ -217,7 +229,7 @@ class GPTree(BaseGenotype):
                 return self.generateGrow(height, outputType)
 
             # Select a random function
-            node = self.nodeType(outputType, random.choice(deepChildren))
+            node = self.nodeType(outputType, random.choice(deepChildren), fixed_context=self.fixed_context)
 
             # Assign the inputs with a random start, picking one to generate to the desired depth and generating the rest through grow
             randStart = 0
@@ -244,7 +256,7 @@ class GPTree(BaseGenotype):
             if self.nodeType.random_function(outputType, terminal=True, forbidden_nodes=self.forbiddenNodes) is None:
                 print("Failure in full table (type 2). Relaxing restrictions.")
                 return self.generateGrow(height, outputType)
-            node = self.nodeType(outputType, terminal=True, forbidden_nodes=self.forbiddenNodes)
+            node = self.nodeType(outputType, terminal=True, forbidden_nodes=self.forbiddenNodes, fixed_context=self.fixed_context)
 
         return node
 
@@ -260,7 +272,7 @@ class GPTree(BaseGenotype):
                     continue
                 functionInfo = self.nodeType.get_function(function)
                 if self.growTable[height - 1].issuperset(functionInfo[2]):
-                    node = self.nodeType(outputType, function)
+                    node = self.nodeType(outputType, function, fixed_context=self.fixed_context)
                     break
             if node is None:
                 print("Failure in grow table (type 1). Relaxing restrictions.")
@@ -270,7 +282,7 @@ class GPTree(BaseGenotype):
             if self.nodeType.random_function(outputType, terminal=True, forbidden_nodes=self.forbiddenNodes) is None:
                 print("Failure in grow table (type 2). Relaxing restrictions.")
                 return self.generateGrow(height + 1, outputType)
-            node = self.nodeType(outputType, terminal=True, forbidden_nodes=self.forbiddenNodes)
+            node = self.nodeType(outputType, terminal=True, forbidden_nodes=self.forbiddenNodes, fixed_context=self.fixed_context)
 
         for inputType in node.input_types:
             child = self.generateGrow(height - 1, inputType)
