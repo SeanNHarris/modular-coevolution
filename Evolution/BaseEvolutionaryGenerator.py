@@ -100,7 +100,11 @@ class BaseEvolutionaryGenerator(BaseGenerator):
         self.evaluation_lists[individual.ID].append((objectives, evaluation_number))
 
         if self.data_collector is not None:
-            agent_type_name = self.agent_class.agent_type_name
+            if "agent_type_name" in self.agent_parameters:
+                agent_type_name = self.agent_parameters["agent_type_name"]
+            else:
+                # Temporary while deprecating the class version of this variable
+                agent_type_name = self.agent_class.agent_type_name
             evaluations = [evaluation_ID for fitness, evaluation_ID in
                            self.evaluation_lists[individual.ID]]
 

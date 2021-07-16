@@ -222,8 +222,14 @@ class Coevolution():
 
         if self.data_collector is not None:
             attacker, defender = self.get_pair(evaluation_ID)
-            attacker_name = type(attacker).agent_type_name
-            defender_name = type(defender).agent_type_name
+            if hasattr(attacker, "agent_type_name"):
+                attacker_name = attacker.agent_type_name
+            else:
+                attacker_name = type(attacker).agent_type_name
+            if hasattr(defender, "agent_type_name"):
+                defender_name = defender.agent_type_name
+            else:
+                defender_name = type(defender).agent_type_name
             self.data_collector.set_evaluation_data(evaluation_ID,
                                                     {attacker_name: attacker.genotype.ID, defender_name: defender.genotype.ID},
                                                     {attacker_name: attacker_objectives, defender_name: defender_objectives})

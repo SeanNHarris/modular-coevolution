@@ -6,7 +6,7 @@ import random
 # TODO: These should probably be parameters somewhere? Either per individual (may be inconsistent), per method (may be tedious), or per class (might be problematic for multiple populations)
 MIN_VALUE_DEFAULT = 0
 MAX_VALUE_DEFAULT = 10
-MUTATION_RATE = 0.33
+GENE_MUTATION_RATE_DEFAULT = 0.33
 
 
 class GeneticAlgorithm(BaseGenotype):
@@ -21,6 +21,11 @@ class GeneticAlgorithm(BaseGenotype):
             self.max_value = parameters["max_value"]
         else:
             self.max_value = MAX_VALUE_DEFAULT
+
+        if "gene_mutation_rate" in parameters:
+            self.gene_mutation_rate = parameters["gene_mutation_rate"]
+        else:
+            self.gene_mutation_rate = GENE_MUTATION_RATE_DEFAULT
         
         if "values" in parameters:
             self.genes = parameters["values"].copy()
@@ -38,7 +43,7 @@ class GeneticAlgorithm(BaseGenotype):
 
     def mutate(self):
         for i in range(len(self.genes)):
-            if random.random() < MUTATION_RATE:
+            if random.random() < self.gene_mutation_rate:
                 self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value - self.min_value) / 100)
                 self.genes[i] = max(self.min_value, min(self.genes[i], self.max_value))
         self.creation_method = "Mutation"
@@ -58,7 +63,7 @@ class GeneticAlgorithm(BaseGenotype):
         self.creation_method = "Recombination"
 
     def clone(self, copy_objectives={}):
-        parameters = {"values": self.genes}
+        parameters = {"min_value": self.min_value, "max_value": self.max_value, "gene_mutation_rate": self.gene_mutation_rate, "values": self.genes}
         cloned_genotype = type(self)(parameters)  # TODO: Had to change this to type(self) for inheritance, make sure this is consistent elsewhere. Maybe this function can be partly moved to the base class?
         if copy_objectives:
             for objective in self.objectives:
