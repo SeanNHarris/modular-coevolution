@@ -29,14 +29,18 @@ class GeneticAlgorithm(BaseGenotype):
         
         if "values" in parameters:
             self.genes = parameters["values"].copy()
-            return
         
         if "length" in parameters:
             self.genes = list()
             for _ in range(parameters["length"]):
                 self.genes.append(self.random_gene())
-        else:
+        if self.genes is None:
             raise TypeError("If \"values\" is not provided, a \"length\" must be.")
+
+        if "loop_genes" in parameters:
+            self.loop_genes = parameters["loop_genes"]
+        else:
+            self.loop_genes = [False for _ in self.genes]
 
     def random_gene(self):
         return random.random() * (self.max_value - self.min_value) + self.min_value
@@ -45,7 +49,11 @@ class GeneticAlgorithm(BaseGenotype):
         for i in range(len(self.genes)):
             if random.random() < self.gene_mutation_rate:
                 self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value - self.min_value) / 100)
-                self.genes[i] = max(self.min_value, min(self.genes[i], self.max_value))
+                if self.loop_genes[i]:
+                    self.genes[i] = (self.genes[i] - self.min_value) % (self.max_value - self.min_value) + self.min_value
+                else:
+                    self.genes[i] = max(self.min_value, min(self.genes[i], self.max_value))
+
         self.creation_method = "Mutation"
 
     def recombine_uniform(self, donor):
@@ -63,7 +71,7 @@ class GeneticAlgorithm(BaseGenotype):
         self.creation_method = "Recombination"
 
     def clone(self, copy_objectives={}):
-        parameters = {"min_value": self.min_value, "max_value": self.max_value, "gene_mutation_rate": self.gene_mutation_rate, "values": self.genes}
+        parameters = {"min_value": self.min_value, "max_value": self.max_value, "gene_mutation_rate": self.gene_mutation_rate, "values": self.genes, "loop_genes": self.loop_genes}
         cloned_genotype = type(self)(parameters)  # TODO: Had to change this to type(self) for inheritance, make sure this is consistent elsewhere. Maybe this function can be partly moved to the base class?
         if copy_objectives:
             for objective in self.objectives:

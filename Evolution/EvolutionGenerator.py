@@ -165,8 +165,6 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
             next_generation.append(survivor)
             next_generation_set.add(survivor)
 
-        self.population.sort(key=lambda x: self.calculate_diversity_fitness(x), reverse=True)
-
         num_mutation = int(math.ceil(self.mutation_fraction * self.children_size))
         num_recombination = int(math.floor(self.recombination_fraction * self.children_size))
 

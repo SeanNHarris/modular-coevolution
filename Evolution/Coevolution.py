@@ -15,6 +15,8 @@ class Coevolution():
         assert isinstance(defender_generator, BaseEvolutionaryGenerator)
         self.attacker_generator = attacker_generator
         self.defender_generator = defender_generator
+        self.current_attackers = list()
+        self.current_defenders = list()
 
         self.evaluation_ID_counter = 0
         self.evaluation_table = dict()
@@ -123,10 +125,10 @@ class Coevolution():
             self.tournament_buffer.clear()
 
     def add_initial_evaluations(self):
-        attackers = self.attacker_generator.get_individuals_to_test()
-        defenders = self.defender_generator.get_individuals_to_test()
-        pair_ids = self.generate_pairs(len(attackers), len(defenders), self.evaluations_per_individual)
-        pairs = [(attackers[i], defenders[j]) for i, j in pair_ids]
+        self.current_attackers = self.attacker_generator.get_individuals_to_test()
+        self.current_defenders = self.defender_generator.get_individuals_to_test()
+        pair_ids = self.generate_pairs(len(self.current_attackers), len(self.current_defenders), self.evaluations_per_individual)
+        pairs = [(self.current_attackers[i], self.current_defenders[j]) for i, j in pair_ids]
         for pair in pairs:
             evaluation_ID = self.claim_evaluation_ID()
             self.evaluation_table[evaluation_ID] = pair
@@ -158,7 +160,9 @@ class Coevolution():
 
         for j in range(greater):
             valid = [i for i in range(lesser) if (i, j) not in pairs and (i, j) not in invalid_pairs]
-            assert len(valid) > 0
+            if len(valid) == 0:
+                print("Failure in pair generation: No valid pairs.")
+                return self.generate_pairs(size_1, size_2, pairs_per_individual, None, allow_repeats)
             random.shuffle(valid)
             valid.sort(key=lesser_count.get)
             #print([(i, lesser_count[i]) for i in valid])
@@ -167,8 +171,8 @@ class Coevolution():
                 pairs.append((i, j))
                 lesser_count[i] += 1
         if max(lesser_count.values()) - min(lesser_count.values()) > 1:
-            print("Failure in pair generation, go fix this already")
-            return self.generate_pairs(size_1, size_2, pairs_per_individual, invalid_pairs, allow_repeats)
+            print("Failure in pair generation: Uneven evaluation pairings.")
+            return self.generate_pairs(size_1, size_2, pairs_per_individual, None, allow_repeats)
         if reverse:
             pairs = [(j, i) for (i, j) in pairs]
         return pairs

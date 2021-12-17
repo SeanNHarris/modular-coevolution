@@ -1,7 +1,7 @@
 from Evolution.Coevolution import *
 from Evolution.EvolutionGenerator import *
 
-import munkres
+#import munkres
 
 
 class EloCoevolution(Coevolution):
@@ -126,7 +126,8 @@ class EloCoevolution(Coevolution):
         super().send_objectives(evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags,
                                 defender_average_flags, False, False, attacker_inactive_objectives, defender_inactive_objectives)
 
-        if len(self.remaining_evolution_evaluations) == 0 and self.total_evaluations < self.evaluations_per_individual * max(self.attacker_generator.population_size, self.defender_generator.population_size):
+        current_evaluations_per_individual = min(self.evaluations_per_individual, self.attacker_generator.population_size, self.defender_generator.population_size)
+        if len(self.remaining_evolution_evaluations) == 0 and self.total_evaluations < current_evaluations_per_individual * max(self.attacker_generator.population_size, self.defender_generator.population_size):
             self.add_additional_evaluations()
 
     def add_initial_evaluations(self):

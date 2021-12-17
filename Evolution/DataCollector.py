@@ -1,3 +1,5 @@
+import json
+
 class DataCollector:
     def __init__(self):
         self.data = dict()
@@ -53,3 +55,10 @@ class DataCollector:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+
+    class StringDefaultJSONEncoder(json.JSONEncoder):
+        def default(self, o):
+            try:
+                return super().default(o)
+            except TypeError:
+                return str(o)

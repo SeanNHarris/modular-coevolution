@@ -16,6 +16,7 @@ class GPTree(BaseGenotype):
     def __init__(self, parameters):
         super().__init__()
 
+        self.parameters = parameters
         if "nodeType" in parameters:
             if isinstance(parameters["nodeType"], type):
                 self.nodeType = parameters["nodeType"]
@@ -148,7 +149,7 @@ class GPTree(BaseGenotype):
 
     # Creates a deep copy of the tree
     def clone(self, copy_objectives=False):
-        cloned_genotype = GPTree({"nodeType": self.nodeType, "idList": self.getNodeIDList(), "fixedContext": self.fixed_context})
+        cloned_genotype = GPTree({**self.parameters, "idList": self.getNodeIDList()})
         if copy_objectives:
             for objective in self.objectives:
                 cloned_genotype.objectives[objective] = self.objectives[objective]
