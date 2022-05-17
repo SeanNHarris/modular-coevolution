@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='modular-coevolution',
     packages=[
-        'alternate_genotypes',
+        'AlternateGenotypes',
         'AlternateGenerators',
         'diversity',
         'Evolution',

@@ -1,4 +1,4 @@
-import diversity.GPDiversity as GPDiversity
+import Diversity.GPDiversity as GPDiversity
 
 import math
 import random
@@ -25,13 +25,13 @@ def genetic_algorithm_diversity(population, reference=None, samples=None):
 
 
 def multiple_genome_distance(multiple_1, multiple_2):
-    from alternate_genotypes.GeneticAlgorithm import GeneticAlgorithm
+    from AlternateGenotypes.LinearGenotype import LinearGenotype
     from GeneticProgramming.GPTree import GPTree
     distance_sum = 0
     for member_1, member_2 in zip(multiple_1.members, multiple_2.members):
         if isinstance(member_1, GPTree):
             distance_sum += GPDiversity.edit_distance(member_1, member_2)
-        if isinstance(member_1, GeneticAlgorithm):
+        if isinstance(member_1, LinearGenotype):
             distance_sum += genetic_algorithm_distance(member_1, member_2)
     return distance_sum / len(multiple_1.members)
 

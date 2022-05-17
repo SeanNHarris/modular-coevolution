@@ -1,6 +1,6 @@
 from Evolution.BaseEvolutionaryAgent import BaseEvolutionaryAgent
 from Evolution.BaseEvolutionaryGenerator import BaseEvolutionaryGenerator
-from alternate_genotypes.SelfAdaptiveWrapper import SelfAdaptiveWrapper
+from AlternateGenotypes.SelfAdaptiveWrapper import SelfAdaptiveWrapper
 
 import ast
 import functools

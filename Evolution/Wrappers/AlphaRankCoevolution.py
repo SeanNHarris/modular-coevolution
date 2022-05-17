@@ -48,7 +48,7 @@ class AlphaRankCoevolution(SimilarStrengthCoevolution):
                 payoff_matrix[1, defender_index, attacker_index] = attacker_payoff
 
             # assert numpy.array_equal(payoff_matrix[0], payoff_matrix[1].T)
-            heuristic_payoff_tables = [heuristic_payoff_table.from_matrix_game(payoff_matrix[0])]
+            # heuristic_payoff_tables = [heuristic_payoff_table.from_matrix_game(payoff_matrix[0])]
             # heuristic_payoff_tables = [heuristic_payoff_table.from_matrix_game(payoff_matrix[0]),
             #                            heuristic_payoff_table.from_matrix_game(payoff_matrix[1].T)]
             # assert numpy.array_equal(heuristic_payoff_tables[0](), heuristic_payoff_tables[1]())
@@ -57,12 +57,19 @@ class AlphaRankCoevolution(SimilarStrengthCoevolution):
             #assert is_symmetric
 
             (rhos, rho_m, pi, num_profiles, num_strats_per_population) =\
-                alpharank.compute(heuristic_payoff_tables, alpha=1e2)
+                alpharank.compute(payoff_matrix[0:1], alpha=1e2)
             # alpharank.compute_and_report_alpharank(heuristic_payoff_tables, alpha=1e2)
+            print(f"Pi: {sorted(pi, reverse=True)}")
             for index, attacker_id in enumerate(current_attacker_ids):
-                self.ratings[attacker_id][objective] = math.log(pi[index])
+                if pi[index] > 0:
+                    self.ratings[attacker_id][objective] = math.log(pi[index])
+                else:
+                    self.ratings[attacker_id][objective] = -100
             for index, defender_id in enumerate(current_defender_ids):
-                self.ratings[defender_id][objective] = math.log(pi[index + len(current_attacker_ids)])
+                if pi[index + len(current_attacker_ids)] > 0:
+                    self.ratings[defender_id][objective] = math.log(pi[index + len(current_attacker_ids)])
+                else:
+                    self.ratings[defender_id][objective] = -100
 
         '''
         # Calculate connected components

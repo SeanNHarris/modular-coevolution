@@ -1,12 +1,12 @@
-from diversity.AlternateDiversity import genetic_algorithm_diversity
-from alternate_genotypes.GeneticAlgorithm import GeneticAlgorithm
+from Diversity.AlternateDiversity import genetic_algorithm_diversity
+from AlternateGenotypes.LinearGenotype import LinearGenotype
 
 import random
 
 MUTATION_RATE = 0.1
 
 
-class BinaryGenotype(GeneticAlgorithm):
+class BinaryGenotype(LinearGenotype):
     def __init__(self, parameters):
         if "initial_rate" in parameters:
             self.initial_rate = parameters["initial_rate"]
@@ -15,7 +15,7 @@ class BinaryGenotype(GeneticAlgorithm):
 
         super().__init__(parameters)
 
-    def random_gene(self):
+    def random_gene(self, index):
         return random.random() < self.initial_rate
     
     def mutate(self):

@@ -15,13 +15,13 @@ An explanation of this repository's subdirectories follows:
 [`AlternateGenerators`](/AlternateGenerators) contains some alternative genotype generators to the standard `EvolutionGenerator`.
 
 ### alternate_genotypes
-[`alternate_genotypes`](/alternate_genotypes) contains genotypes other than the standard `GPTree`, including `MultipleGenotype` which can contain a set of other genotypes.
+[`alternate_genotypes`](/AlternateGenotypes) contains genotypes other than the standard `GPTree`, including `MultipleGenotype` which can contain a set of other genotypes.
 
 ### diversity
-[`diversity`](/diversity) contains functions related to population diversity and novelty calculation.
+[`diversity`](/Diversity) contains functions related to population diversity and novelty calculation.
 
 ### postprocessing
-[`postprocessing`](/postprocessing) contains data visualization functions to be run on log files.
+[`postprocessing`](/Postprocessing) contains data visualization functions to be run on log files.
 
 ### utilities
-[`utilities`](/utilities) contains debugging tools, such as `LogReader` and tools for starting test evaluations.
+[`utilities`](/Utilities) contains debugging tools, such as `LogReader` and tools for starting test evaluations.

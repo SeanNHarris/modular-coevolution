@@ -17,7 +17,7 @@ class SelfAdaptiveWrapper(BaseGenotype):
         if "mutation types" in parameters:
             self.mutation_types = parameters["mutation types"]
         else:
-            self.mutation_types = [self.genotype.mutate]
+            self.mutation_types = {self.genotype.mutate: []}
 
         self.self_adaptive_parameters = {"mutation rate": random.random(), "mutation amount": random.random(),
                                          "mutation type": random.choice(list(self.mutation_types))}
@@ -59,8 +59,8 @@ class SelfAdaptiveWrapper(BaseGenotype):
     def diversity_function(self, population, reference=None, samples=None):
         return self.genotype.diversity_function([individual.genotype for individual in population], reference.genotype, samples)
 
-    def get_fitness_modifier(self):
-        return self.genotype.get_fitness_modifier()
+    def get_fitness_modifier(self, raw_fitness):
+        return self.genotype.get_fitness_modifier(raw_fitness)
 
     def execute(self, context):
         return self.genotype.execute(context)

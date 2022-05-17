@@ -1,6 +1,6 @@
 from Evolution.BaseEvolutionaryAgent import BaseEvolutionaryAgent
 from Evolution.BaseEvolutionaryGenerator import BaseEvolutionaryGenerator
-from alternate_genotypes.SelfAdaptiveWrapper import SelfAdaptiveWrapper
+from AlternateGenotypes.SelfAdaptiveWrapper import SelfAdaptiveWrapper
 
 import math
 import random
@@ -11,14 +11,13 @@ import random
 class EvolutionGenerator(BaseEvolutionaryGenerator):
     def __init__(self, agent_class, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25,
                  recombination_fraction=0.75,
-                 parsimony_weight=0, diversity_weight=0, diverse_elites=False, seed=None, fitness_function=None,
+                 diversity_weight=0, diverse_elites=False, seed=None, fitness_function=None,
                  data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
         super().__init__(agent_class, initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
                          data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
-        self.parsimony_weight = parsimony_weight
         self.diversity_weight = diversity_weight
         self.diverse_elites = diverse_elites
         self.max_novelty = 0

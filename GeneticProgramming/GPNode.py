@@ -127,6 +127,11 @@ class GPNode(metaclass=GPNodeTypeRegistry):
                 if len(node_data[2]) > 1:
                     cls.branch_list.append(node)
 
+        if cls.functions is None:
+            cls.functions = list()
+        if cls.literals is None:
+            cls.literals = list()
+
     @classmethod
     def build_height_tables(cls, height, forbidden_nodes=None):
         if forbidden_nodes is None:
@@ -269,7 +274,7 @@ class GPNode(metaclass=GPNodeTypeRegistry):
 
     @classmethod
     def random_function(cls, output_type, terminal=False, non_semi_terminal=False, non_terminal=False, branch=False,
-                        num_children=None, forbidden_nodes=None):
+                        num_children=None, child_types=None, forbidden_nodes=None):
         if forbidden_nodes is None:
             forbidden_nodes = []
         possible = list([function for function in cls.type_functions[output_type] if function not in forbidden_nodes])
@@ -303,11 +308,21 @@ class GPNode(metaclass=GPNodeTypeRegistry):
                 possible = new_possible
             else:
                 return None
+        if child_types is not None:
+            new_possible = [function for function in possible if cls.get_function(function)[2] == child_types]
+            if len(new_possible) > 0:
+                possible = new_possible
+            else:
+                return None
         return random.choice(possible)
 
     @classmethod
     def get_function(cls, func_id):
         return cls.functions[func_id]
+
+    @classmethod
+    def get_id(cls, function):
+        return [func_id for func_id, func_tuple in enumerate(cls.functions) if func_tuple[0] == function][0]
 
     @classmethod
     def gp_primitive(cls, output_type, input_types):

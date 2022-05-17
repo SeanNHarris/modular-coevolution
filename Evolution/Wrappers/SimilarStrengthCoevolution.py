@@ -174,13 +174,43 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
 
     def add_additional_evaluations(self):
         # pairs = self.generate_matchmaking_pairs(attackers, defenders)
-        pairs = self.generate_matchmaking_pairs_local_search(self.current_attackers, self.current_defenders)
+        pairs = self.generate_matchmaking_pairs_greedy(self.current_attackers, self.current_defenders)
         for attacker_index, defender_index in pairs:
             evaluation_ID = self.claim_evaluation_ID()
             self.evaluation_table[evaluation_ID] = (self.current_attackers[attacker_index], self.current_defenders[defender_index])
             self.remaining_evolution_evaluations.append(evaluation_ID)
 
+    def generate_matchmaking_pairs_greedy(self, attackers, defenders):
+        # Select the closest valid partner to each individual, in decreasing order of fitness
+
+        sorted_attackers = sorted(attackers, key=lambda attacker: self.attacker_generator.get_from_generation(*attacker).genotype.fitness, reverse=True)
+        sorted_defenders = sorted(defenders, key=lambda defender: self.defender_generator.get_from_generation(*defender).genotype.fitness, reverse=True)
+
+        pairs = list()
+        while len(sorted_attackers) > 0 and len(sorted_defenders) > 0:
+            opponent_index = 0
+            while True:
+                if (sorted_attackers[0], sorted_defenders[opponent_index]) not in self.completed_pairings:
+                    pairs.append((sorted_attackers[0], sorted_defenders[opponent_index]))
+                    sorted_attackers.pop(0)
+                    sorted_defenders.pop(opponent_index)
+                    break
+                elif opponent_index > 0 and (sorted_attackers[opponent_index], sorted_defenders[0]) not in self.completed_pairings:
+                    pairs.append((sorted_attackers[opponent_index], sorted_defenders[0]))
+                    sorted_attackers.pop(opponent_index)
+                    sorted_defenders.pop(0)
+                    break
+                else:
+                    opponent_index += 1
+                    if opponent_index >= len(sorted_attackers) or opponent_index >= len(sorted_defenders):
+                        pairs.append((sorted_attackers[0], sorted_defenders[0]))
+                        sorted_attackers.pop(0)
+                        sorted_defenders.pop(0)
+                        break
+        return [(attackers.index(attacker), defenders.index(defender)) for attacker, defender in pairs]
+
     def generate_matchmaking_pairs_local_search(self, attackers, defenders):
+        alternate_pairs = self.generate_matchmaking_pairs_greedy(attackers, defenders)  # TODO: REMOVE AFTER TESTING
         attacker_ids = dict()
         for attacker in attackers:
             attacker_ids[attacker] = self.attacker_generator.get_from_generation(*attacker).genotype.ID
@@ -250,8 +280,11 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         opponents = dict()
         for attacker, defender in pairs:
             opponents[attacker] = defender
-        # distance_sum = sum([distances.setdefault((attacker, defender), self.get_rating_distance(attackers[attacker], defenders[defender])) for attacker, defender in opponents.items()])
-        # print("Random distance of {}".format(distance_sum))
+        distance_sum = sum([distances.setdefault((attacker, defender), get_rating_distance(attackers[attacker], defenders[defender])) for attacker, defender in pairs])
+        alternate_distance_sum = sum([distances.setdefault((attacker, defender), get_rating_distance(attackers[attacker], defenders[defender])) for attacker, defender in alternate_pairs])
+
+        print(f"Random distance of {distance_sum}")
+        print(f"Greedy distance of {alternate_distance_sum}")
         improvement_steps = 0
         steps_since_improvement = 0
         while steps_since_improvement < 200:
@@ -279,6 +312,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         # print("Final distance of {0} after {1} improvements".format(distance_sum, improvement_steps))
         print("Hill-climber made {0} improvements.".format(improvement_steps))
         pairs = [(attacker, defender) for attacker, defender in opponents.items()]
+        final_distance_sum = sum([distances.setdefault((attacker, defender), get_rating_distance(attackers[attacker], defenders[defender])) for attacker, defender in pairs])
+        print(f"Final distance of {final_distance_sum}")
         for attacker, defender in pairs:
             attacker_ID = self.attacker_generator.get_from_generation(*attackers[attacker]).genotype.ID
             defender_ID = self.defender_generator.get_from_generation(*defenders[defender]).genotype.ID

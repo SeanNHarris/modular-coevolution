@@ -93,7 +93,7 @@ class BaseGenotype:
         return {objective: self.objectives[objective] for objective in self.objectives if
                 objective not in self.inactive_objectives}
 
-    def get_fitness_modifier(self):
+    def get_fitness_modifier(self, raw_fitness):
         return 0
 
     @abc.abstractmethod

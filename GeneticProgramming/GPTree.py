@@ -1,7 +1,7 @@
 # Represents a genetic programming tree. Nodes for the tree are in GPNodes.py.
 from Evolution.BaseGenotype import BaseGenotype
 from GeneticProgramming.GPNode import GPNode, GPNodeTypeRegistry
-from diversity.GPDiversity import *
+from Diversity.GPDiversity import *
 
 import random
 
@@ -41,11 +41,12 @@ class GPTree(BaseGenotype):
             self.maxHeight = parameters["maxHeight"]
         else:
             self.maxHeight = 7
-        
+
+        # parsimonyWeight - a percentage of fitness removed per node in the tree, should be on the order of 0.01 = 1%
         if "parsimonyWeight" in parameters:
             self.parsimony_weight = parameters["parsimonyWeight"]
         else:
-            self.parsimony_weight = -1
+            self.parsimony_weight = 0.0025
 
         if "forbiddenNodes" in parameters:
             self.forbiddenNodes = parameters["forbiddenNodes"]
@@ -57,6 +58,7 @@ class GPTree(BaseGenotype):
         else:
             self.fixed_context = dict()
 
+        self.nodeType.build_data_type_tables()
         self.growTable, self.fullTable = self.nodeType.build_height_tables(MAXIMUM_HEIGHT,
                                                                            self.forbiddenNodes)  # Todo: Cache these per node type, forbiddenNodes
         self.depthTable = self.nodeType.build_depth_table(MAXIMUM_HEIGHT, self.forbiddenNodes)
@@ -117,7 +119,7 @@ class GPTree(BaseGenotype):
     def point_mutate(self, mutation_amount):
         for node in self.root.get_node_list():
             if random.random() < mutation_amount:
-                new_node = self.nodeType(function_id=self.nodeType.random_function(node.output_type, num_children=len(node.input_types)), fixed_context=self.fixed_context)
+                new_node = self.nodeType(function_id=self.nodeType.random_function(node.output_type, child_types=node.input_types), fixed_context=self.fixed_context)
                 if node is self.root:
                     self.root = new_node
                 else:
@@ -177,10 +179,12 @@ class GPTree(BaseGenotype):
         return len(self.root.get_node_list())
 
     # Positive is good, negative is bad
-    def get_fitness_modifier(self):
-        parsimony_pressure = self.parsimony_weight * len(self)
+    def get_fitness_modifier(self, raw_fitness):
+        assert self.parsimony_weight > 0  # Check that the old parameter is not being used.
+        parsimony_pressure = min(0.9, self.parsimony_weight * len(self))  # Cap penalty at 90%
+        fitness_modifier = -raw_fitness * parsimony_pressure  # Percentage penalty based on size
         # print("Parsimony pressure penalty of " + str(parsimony_pressure))
-        return parsimony_pressure
+        return fitness_modifier
 
     # def getTransmitString(self):
     #    idList = self.getNodeIDList()

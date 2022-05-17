@@ -86,7 +86,7 @@ class Coevolution():
             self.opponents_this_generation = dict()
             self.add_initial_evaluations()
             current_generation = self.generation - 1
-            if current_generation % self.tournament_ratio == 0:
+            if self.tournament_ratio > 0 and current_generation % self.tournament_ratio == 0:
                 tournament_representatives = math.ceil(math.sqrt(self.tournament_evaluations))
                 for opponent_generation in range(0, self.generation, self.tournament_ratio):
                     recent_attacker_representatives = self.attacker_generator \

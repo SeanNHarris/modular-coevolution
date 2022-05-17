@@ -1,4 +1,4 @@
-from diversity.AlternateDiversity import multiple_genome_diversity
+from Diversity.AlternateDiversity import multiple_genome_diversity
 from Evolution.BaseGenotype import BaseGenotype
 
 import random
@@ -52,8 +52,8 @@ class MultipleGenotype(BaseGenotype):
             cloned_genotype.members[name].creation_method = "Cloning"
         return cloned_genotype
 
-    def get_fitness_modifier(self):
-        return 0
+    def get_fitness_modifier(self, raw_fitness):
+        return 0  # TODO: IMPLEMENT THIS
 
     def get_raw_genotype(self):
         raw_genotype = dict()

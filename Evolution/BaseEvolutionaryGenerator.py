@@ -83,16 +83,18 @@ class BaseEvolutionaryGenerator(BaseGenerator):
         individual.set_objectives(objectives, average_flags, inactive_objectives)
         if len(individual.get_active_objectives()) > 0:
             if self.fitness_function is not None:
-                fitness_modifier = individual.get_fitness_modifier()
-                fitness = self.fitness_function(individual.get_active_objectives()) + fitness_modifier
+                raw_fitness = self.fitness_function(individual.get_active_objectives())
+                fitness_modifier = individual.get_fitness_modifier(raw_fitness)
+                fitness = raw_fitness + fitness_modifier
                 individual.set_fitness(fitness, average_fitness)
-                individual.metrics["quality"] = individual.fitness
+                individual.metrics["quality"] = raw_fitness
             else:
-                fitness_modifier = individual.get_fitness_modifier()
-                fitness = sum(individual.get_active_objectives().values()) / len(
-                    individual.get_active_objectives()) + fitness_modifier
+                raw_fitness = sum(individual.get_active_objectives().values()) /\
+                                        len(individual.get_active_objectives())
+                fitness_modifier = individual.get_fitness_modifier(raw_fitness)
+                fitness = raw_fitness + fitness_modifier
                 individual.set_fitness(fitness, average_fitness)
-                individual.metrics["quality"] = individual.fitness
+                individual.metrics["quality"] = raw_fitness
         if "novelty" not in individual.metrics:
             individual.metrics["novelty"] = self.get_diversity(index)
         if individual.ID not in self.evaluation_lists:

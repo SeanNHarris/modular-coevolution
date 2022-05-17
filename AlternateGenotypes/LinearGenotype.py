@@ -1,4 +1,4 @@
-from diversity.AlternateDiversity import genetic_algorithm_diversity
+from Diversity.AlternateDiversity import genetic_algorithm_diversity
 from Evolution.BaseGenotype import BaseGenotype
 
 import random
@@ -9,50 +9,66 @@ MAX_VALUE_DEFAULT = 10
 GENE_MUTATION_RATE_DEFAULT = 0.33
 
 
-class GeneticAlgorithm(BaseGenotype):
+class LinearGenotype(BaseGenotype):
     def __init__(self, parameters):
         super().__init__()
-        if "min_value" in parameters:
-            self.min_value = parameters["min_value"]
-        else:
-            self.min_value = MIN_VALUE_DEFAULT
-
-        if "max_value" in parameters:
-            self.max_value = parameters["max_value"]
-        else:
-            self.max_value = MAX_VALUE_DEFAULT
-
         if "gene_mutation_rate" in parameters:
             self.gene_mutation_rate = parameters["gene_mutation_rate"]
         else:
             self.gene_mutation_rate = GENE_MUTATION_RATE_DEFAULT
-        
+
+        must_generate = False
+        self.genes = None
         if "values" in parameters:
             self.genes = parameters["values"].copy()
-        
-        if "length" in parameters:
+            self.length = len(self.genes)
+        elif "length" in parameters:
+            must_generate = True
             self.genes = list()
-            for _ in range(parameters["length"]):
-                self.genes.append(self.random_gene())
+            self.length = parameters["length"]
         if self.genes is None:
             raise TypeError("If \"values\" is not provided, a \"length\" must be.")
+
+        if "min_value" in parameters:
+            if isinstance(parameters["min_value"], list):
+                self.min_value = list()
+                for i in range(self.length):
+                    self.min_value.append(parameters["min_value"][i % len(parameters["min_value"])])
+            else:
+                self.min_value = [parameters["min_value"] for _ in range(self.length)]
+        else:
+            self.min_value = [MIN_VALUE_DEFAULT for _ in range(self.length)]
+
+        if "max_value" in parameters:
+            if isinstance(parameters["max_value"], list):
+                self.max_value = list()
+                for i in range(self.length):
+                    self.max_value.append(parameters["max_value"][i % len(parameters["max_value"])])
+            else:
+                self.max_value = [parameters["max_value"] for _ in range(self.length)]
+        else:
+            self.max_value = [MAX_VALUE_DEFAULT for _ in range(self.length)]
 
         if "loop_genes" in parameters:
             self.loop_genes = parameters["loop_genes"]
         else:
-            self.loop_genes = [False for _ in self.genes]
+            self.loop_genes = [False for _ in range(self.length)]
 
-    def random_gene(self):
-        return random.random() * (self.max_value - self.min_value) + self.min_value
+        if must_generate:
+            for index in range(parameters["length"]):
+                self.genes.append(self.random_gene(index))
+
+    def random_gene(self, index):
+        return random.random() * (self.max_value[index] - self.min_value[index]) + self.min_value[index]
 
     def mutate(self):
         for i in range(len(self.genes)):
             if random.random() < self.gene_mutation_rate:
-                self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value - self.min_value) / 100)
+                self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value[i] - self.min_value[i]) / 100)
                 if self.loop_genes[i]:
-                    self.genes[i] = (self.genes[i] - self.min_value) % (self.max_value - self.min_value) + self.min_value
+                    self.genes[i] = (self.genes[i] - self.min_value[i]) % (self.max_value[i] - self.min_value[i]) + self.min_value[i]
                 else:
-                    self.genes[i] = max(self.min_value, min(self.genes[i], self.max_value))
+                    self.genes[i] = max(self.min_value[i], min(self.genes[i], self.max_value[i]))
 
         self.creation_method = "Mutation"
 
@@ -83,7 +99,7 @@ class GeneticAlgorithm(BaseGenotype):
         cloned_genotype.creation_method = "Cloning"
         return cloned_genotype
 
-    def get_fitness_modifier(self):
+    def get_fitness_modifier(self, raw_fitness):
         return 0
 
     def get_raw_genotype(self):
