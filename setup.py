@@ -3,11 +3,11 @@ from setuptools import setup
 setup(
     name='modular-coevolution',
     packages=[
-        'AlternateGenotypes',
-        'AlternateGenerators',
+        'alternategenotypes',
+        'alternategenerators',
         'diversity',
-        'Evolution',
-        'GeneticProgramming',
+        'evolution',
+        'geneticprogramming',
     ],
     include_package_data=True,
     install_requires=["munkres"]

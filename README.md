@@ -1,27 +1,27 @@
-# ceads-evolution
-CSSI CEADS-LIN Evolutionary Computation
+# modular-coevolution
+A competitive coevolution library by Sean Harris
 
-The `ceads-evolution` repository contains general-purpose functions for evolutionary genotypes and agents used by both attackers and defenders, as well as the functions which coordinate evolution.
+The `modular-coevolution` repository contains general-purpose functions for evolutionary genotypes and agents, as well as the functions which coordinate evolution.
 The main script for running evolution, `CoevolutionDriver.py` is located here.
 An explanation of this repository's subdirectories follows:
 
 ### Evolution
-[`Evolution`](/Evolution) contains the immediate components needed to run evolution or coevolution.
+[`Evolution`](/modularcoevolution/evolution) contains the immediate components needed to run evolution or coevolution. The `Evolution` readme explains the general structure of classes used for evolution.
 
 ### GeneticProgramming
-[`GeneticProgramming`](/GeneticProgramming) contains the `GPTree` class used by all genetic programming trees, and the base class for `GPNode`s.
+[`GeneticProgramming`](/modularcoevolution/geneticprogramming) contains the `GPTree` class used by all genetic programming trees, and the base class for `GPNode`s.
 
 ### AlternateGenerators
-[`AlternateGenerators`](/AlternateGenerators) contains some alternative genotype generators to the standard `EvolutionGenerator`.
+[`AlternateGenerators`](/modularcoevolution/alternategenerators) contains some alternative genotype generators to the standard `EvolutionGenerator`.
 
-### alternate_genotypes
-[`alternate_genotypes`](/AlternateGenotypes) contains genotypes other than the standard `GPTree`, including `MultipleGenotype` which can contain a set of other genotypes.
+### AlternateGenotypes
+[`AlternateGenotypes`](/modularcoevolution/alternategenotypes) contains genotypes other than the standard `GPTree`, including the basic `LinearGenotype`, and `MultipleGenotype` which can contain a set of other genotypes.
 
-### diversity
-[`diversity`](/Diversity) contains functions related to population diversity and novelty calculation.
+### Diversity
+[`Diversity`](/modularcoevolution/diversity) contains functions related to population diversity and novelty calculation.
 
-### postprocessing
-[`postprocessing`](/Postprocessing) contains data visualization functions to be run on log files.
+### Postprocessing
+[`Postprocessing`](/modularcoevolution/postprocessing) contains data postprocessing functions to be run on log files, such as generating CIAO/master tournament plots.
 
-### utilities
-[`utilities`](/Utilities) contains debugging tools, such as `LogReader` and tools for starting test evaluations.
+### Utilities
+[`Utilities`](/modularcoevolution/utilities) contains miscellaneous helper functions for things like debugging.
