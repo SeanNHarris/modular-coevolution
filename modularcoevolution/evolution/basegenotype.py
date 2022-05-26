@@ -1,16 +1,20 @@
+from typing import ClassVar, NewType
+
 import abc
 import math
 
 
-class BaseGenotype:
-    _metaclass__ = abc.ABCMeta
+GenotypeID = NewType("GenotypeID", int)
 
-    ID_counter = 0
+
+class BaseGenotype(metaclass=abc.ABCMeta):
+    ID_counter: ClassVar[GenotypeID] = GenotypeID(0)
+
+    id: GenotypeID
 
     # TODO: for all genotypes, accept a parameter list as keywords rather than strings
     def __init__(self, **kwargs):
-        self.id = None
-        self.claim_next_ID()
+        self.claim_next_id()  # Sets self.id
         self.fitness = None
         self.objectives = dict()
         self.inactive_objectives = list()
@@ -104,6 +108,6 @@ class BaseGenotype:
     def diversity_function(self, population, reference=None, samples=None):
         pass
 
-    def claim_next_ID(self):
+    def claim_next_id(self):
         self.id = BaseGenotype.ID_counter
         BaseGenotype.ID_counter += 1

@@ -5,7 +5,7 @@ Todo:
 """
 
 from modularcoevolution.evolution.baseevolutionaryagent import BaseEvolutionaryAgent
-from modularcoevolution.evolution.basegenotype import BaseGenotype
+from modularcoevolution.evolution.basegenotype import BaseGenotype, GenotypeID
 from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 
 from modularcoevolution.evolution.datacollector import DataCollector
@@ -15,10 +15,10 @@ from typing import Any, Callable, Generic, Type, TypeVar
 import abc
 
 
-AGENT_TYPE = TypeVar("AGENT_TYPE", bound=BaseEvolutionaryAgent)
+AgentType = TypeVar("AgentType", bound=BaseEvolutionaryAgent)
 
 
-class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=abc.ABCMeta):
+class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc.ABCMeta):
     """A base class for evolutionary algorithms (EAs) that implements many of the abstract functions from
     :class:`.BaseGenerator`.
 
@@ -33,12 +33,12 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
     abstract base class."""
     using_hall_of_fame: bool
     """Whether to use the hall of fame."""
-    genotype_ids: dict[int, BaseGenotype]
+    genotypes_by_id: dict[GenotypeID, BaseGenotype]
     """A mapping from an ID to a genotype with that :attr:`.BaseGenotype.id`."""
     generation: int
     """The current generation of evolution."""
 
-    agent_class: Type[AGENT_TYPE]
+    agent_class: Type[AgentType]
     """The class to instantiate agents with."""
     genotype_class: Type[BaseGenotype]
     """The class to instantiate genotypes with, determined by :attr:`agent_class`."""
@@ -62,7 +62,7 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
 
-    def __init__(self, agent_class: Type[AGENT_TYPE], initial_size: int,
+    def __init__(self, agent_class: Type[AgentType], initial_size: int,
                  agent_parameters: dict[str, Any] = None, genotype_parameters: dict[str, Any] = None, seed: list = None,
                  fitness_function: Callable[[dict[str, float]], float] = None, data_collector: DataCollector = None,
                  copy_survivor_objectives: bool = False, reevaluate_per_generation: bool = True,
@@ -117,7 +117,7 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
         self.past_populations = list()
         self.using_hall_of_fame = using_hall_of_fame
         self.hall_of_fame = list()
-        self.genotype_ids = dict()
+        self.genotypes_by_id = dict()
 
         population_set = set()
         for i in range(self.initial_size):
@@ -139,7 +139,7 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
                 self.population.append(individual)
                 population_set.add(hash(individual))
         for genotype in self.population:
-            self.genotype_ids[genotype.id] = genotype
+            self.genotypes_by_id[genotype.id] = genotype
 
         self.evaluation_lists = dict()
 
@@ -152,12 +152,12 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
         Returns: The genotype associated with the ID ``agent_id``.
 
         """
-        if agent_id not in self.genotype_ids:
+        if agent_id not in self.genotypes_by_id:
             raise ValueError(f"The agent ID {agent_id} is not present in this generator."
                              f"Ensure the correct generator is being queried.")
-        return self.genotype_ids[agent_id]
+        return self.genotypes_by_id[agent_id]
 
-    def build_agent_from_id(self, agent_id: int, active: bool) -> BaseEvolutionaryAgent:
+    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> BaseEvolutionaryAgent:
         """Return a new instance of an agent based on the given agent ID.
 
         Args:
@@ -167,13 +167,13 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
         Returns: A newly created agent associated with the ID ``agent_id`` and with ``active`` as its activity state.
 
         """
-        if agent_id not in self.genotype_ids:
+        if agent_id not in self.genotypes_by_id:
             raise ValueError(f"The agent ID {agent_id} is not present in this generator."
                              f"Ensure the correct generator is being queried.")
-        agent = self.agent_class(genotype=self.genotype_ids[agent_id], active=active, **self.agent_parameters)
+        agent = self.agent_class(genotype=self.genotypes_by_id[agent_id], active=active, **self.agent_parameters)
         return agent
     
-    def get_individuals_to_test(self) -> list[int]:
+    def get_individuals_to_test(self) -> list[GenotypeID]:
         """Get a list of agent IDs in need of evaluation, skipping those already evaluated if
         :attr:`reevaluate_per_generation` is False.
 
@@ -192,7 +192,7 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
             result += [genotype.id for genotype in self.hall_of_fame]
         return result
 
-    def set_objectives(self, agent_id, objectives, average_flags=None, average_fitness=False, opponent=None,
+    def set_objectives(self, agent_id: GenotypeID, objectives, average_flags=None, average_fitness=False, opponent=None,
                        evaluation_number=None, inactive_objectives=None):
         """Called by a :class:`.BaseEvolutionWrapper` to record objective results from an evaluation
         for the agent with given index.
@@ -260,14 +260,14 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
                                                     [parent.id for parent in individual.parents],
                                                     individual.creation_method)
 
-    def get_diversity(self, reference_index: int = None, samples: int = None) -> float:
+    def get_diversity(self, reference_id: GenotypeID = None, samples: int = None) -> float:
         """Calculates the diversity of the population with respect to a reference individual.
 
         Population diversity is calculated by averaging the diversity metric from the reference individual to several
         other individuals.
 
         Args:
-            reference_index: The index of the genotype to calculate diversity with respect to.
+            reference_id: The id of the genotype to calculate diversity with respect to.
                 If omitted, the highest-fitness genotype will be used, or a random one if no fitness is assigned.
             samples: The number of genotypes to compare against, selected at random without replacement.
                 If omitted, the entire population will be compared against.
@@ -275,8 +275,8 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AGENT_TYPE], metaclass=ab
         Returns: The average diversity from the reference individual to other members of the population.
 
         """
-        if reference_index is not None:
-            reference = self.population[reference_index]
+        if reference_id is not None:
+            reference = self.genotypes_by_id[reference_id]
         else:
             reference = None
         return reference.diversity_function(self.population, reference, samples)

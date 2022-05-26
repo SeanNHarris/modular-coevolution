@@ -46,28 +46,6 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         self._population_size = value
 
     @abc.abstractmethod
-    def get_from_generation(self, generation: int, index: int) -> BaseAgent:
-        """ Return an agent with given index from a previous generation of the given number.
-
-            .. warning::
-                Agents will often be referenced multiple times. Ensure that the ordering of stored populations does not
-                change, such as due to sorting the population before storing it.
-
-            "Negative generations" can be used for internal purposes such as a hall of fame but are not assumed.
-
-        Args:
-            generation: The generation to draw the agent from. Can be the current generation.
-                If the generator is not generational, this parameter can be ignored.
-            index:
-                The index of the agent being requested in the population.
-
-        Returns:
-            The ``index``\ th agent from the population at generation ``generation``.
-
-        """
-        pass
-
-    @abc.abstractmethod
     def get_genotype_with_id(self, agent_id) -> Any:
         """Return the agent parameters associated with the given ID. The type used for storing agent parameters is not
         prescribed by this abstract base class, but is frequently a :class:`.BaseGenotype`.

@@ -57,14 +57,14 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
     def send_objectives(self, evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags=None,
                         defender_average_flags=None, attacker_inactive_objectives=None,
                         defender_inactive_objectives=None):
-        # args = [evaluation_ID, attacker_objectives, defender_objectives]
+        # args = [evaluation_id, attacker_objectives, defender_objectives]
         # kwargs = {"attacker_average_flags": attacker_average_flags,
         #                "defender_average_flags": defender_average_flags, "attacker_inactive_objectives": attacker_inactive_objectives,
         #                "defender_inactive_objectives": defender_inactive_objectives}
         self.update_objective_range(attacker_objectives, attacker_objectives)
         self.update_objective_range(defender_objectives, defender_objectives)
 
-        attacker, defender = self.get_pair(evaluation_ID)
+        attacker, defender = self.get_genotype_pair(evaluation_ID)
         attacker_ID = attacker.genotype.id
         defender_ID = defender.genotype.id
         for objective in list(attacker_objectives) + list(defender_objectives):
@@ -130,7 +130,7 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
                 defender_inactive_objectives = list()
 
             self.total_evaluations += 1
-            attacker, defender = self.get_pair(evaluation_ID)
+            attacker, defender = self.get_genotype_pair(evaluation_ID)
             attacker_ID = attacker.genotype.id
             defender_ID = defender.genotype.id
 
@@ -166,7 +166,7 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             pair_ids = self.generate_pairs(len(self.current_attackers), len(self.current_defenders), self.evaluations_per_individual)
         pairs = [(self.current_attackers[i], self.current_defenders[j]) for i, j in pair_ids]
         for pair in pairs:
-            evaluation_ID = self.claim_evaluation_ID()
+            evaluation_ID = self.claim_evaluation_id()
             self.evaluation_table[evaluation_ID] = pair
             self.remaining_evolution_evaluations.append(evaluation_ID)
 
@@ -176,15 +176,15 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         # pairs = self.generate_matchmaking_pairs(attackers, defenders)
         pairs = self.generate_matchmaking_pairs_greedy(self.current_attackers, self.current_defenders)
         for attacker_index, defender_index in pairs:
-            evaluation_ID = self.claim_evaluation_ID()
+            evaluation_ID = self.claim_evaluation_id()
             self.evaluation_table[evaluation_ID] = (self.current_attackers[attacker_index], self.current_defenders[defender_index])
             self.remaining_evolution_evaluations.append(evaluation_ID)
 
-    def generate_matchmaking_pairs_greedy(self, attackers, defenders):
+    def generate_matchmaking_pairs_greedy(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
         # Select the closest valid partner to each individual, in decreasing order of fitness
 
-        sorted_attackers = sorted(attackers, key=lambda attacker: self.attacker_generator.get_from_generation(*attacker).genotype.fitness, reverse=True)
-        sorted_defenders = sorted(defenders, key=lambda defender: self.defender_generator.get_from_generation(*defender).genotype.fitness, reverse=True)
+        sorted_attackers = sorted(attackers, key=lambda attacker_id: self.attacker_generator.get_genotype_with_id(attacker_id).fitness, reverse=True)
+        sorted_defenders = sorted(defenders, key=lambda defender_id: self.defender_generator.get_genotype_with_id(defender_id).fitness, reverse=True)
 
         pairs = list()
         while len(sorted_attackers) > 0 and len(sorted_defenders) > 0:
@@ -209,14 +209,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
                         break
         return [(attackers.index(attacker), defenders.index(defender)) for attacker, defender in pairs]
 
-    def generate_matchmaking_pairs_local_search(self, attackers, defenders):
+    def generate_matchmaking_pairs_local_search(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
         alternate_pairs = self.generate_matchmaking_pairs_greedy(attackers, defenders)  # TODO: REMOVE AFTER TESTING
-        attacker_ids = dict()
-        for attacker in attackers:
-            attacker_ids[attacker] = self.attacker_generator.get_from_generation(*attacker).genotype.id
-        defender_ids = dict()
-        for defender in defenders:
-            defender_ids[defender] = self.defender_generator.get_from_generation(*defender).genotype.id
 
         '''min_attacker_rating = 1000000
         max_attacker_rating = -1000000
@@ -224,44 +218,39 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         max_defender_rating = -1000000'''
 
         attacker_ranks = dict()
-        for objective in self.ratings[attacker_ids[attackers[0]]]:
+        for objective in self.ratings[attackers[0]]:
             attacker_ranks[objective] = list(range(len(attackers)))
-            attacker_ranks[objective].sort(key=lambda a: self.ratings[attacker_ids[attackers[a]]][objective],
+            attacker_ranks[objective].sort(key=lambda a: self.ratings[attackers[a]][objective],
                                            reverse=True)
             attacker_ranks[objective] = [attacker_ranks[objective].index(i) for i in
                                          range(len(attacker_ranks[objective]))]
         defender_ranks = dict()
-        for objective in self.ratings[defender_ids[defenders[0]]]:
+        for objective in self.ratings[defenders[0]]:
             defender_ranks[objective] = list(range(len(defenders)))
-            defender_ranks[objective].sort(key=lambda d: self.ratings[defender_ids[defenders[d]]][objective],
+            defender_ranks[objective].sort(key=lambda d: self.ratings[defenders[d]][objective],
                                               reverse=True)
             defender_ranks[objective] = [defender_ranks[objective].index(i) for i in
                                             range(len(defender_ranks[objective]))]
 
         if not self.use_rank:
-            def get_rating_distance(attacker, defender):
+            def get_rating_distance(attacker_id, defender_id):
                 # Direct rating distance
-                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
-                if (attacker, defender) in self.completed_pairings:
+                if (attacker_id, defender_id) in self.completed_pairings:
                     return float("inf")
                 sum_of_squares = 0
-                for objective in self.ratings[attacker_ID]:
-                    sum_of_squares += (self.ratings[attacker_ID][objective] - self.ratings[defender_ID][
-                        objective]) ** 2
+                for objective in self.ratings[attacker_id]:
+                    sum_of_squares += (self.ratings[attacker_id][objective] - self.ratings[defender_id][objective]) ** 2
                 distance = math.sqrt(sum_of_squares)
                 return distance
         else:
-            def get_rating_distance(attacker, defender):
+            def get_rating_distance(attacker_id, defender_id):
                 # Rank distance, preventing the failures that occur when the populations have heavily different mean ratings
-                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
-                if (attacker, defender) in self.completed_pairings:
+                if (attacker_id, defender_id) in self.completed_pairings:
                     return float("inf")
                 sum_of_squares = 0
-                for objective in self.ratings[attacker_ID]:
-                    sum_of_squares += (attacker_ranks[objective][attackers.index(attacker)] -
-                                       defender_ranks[objective][defenders.index(defender)]) ** 2
+                for objective in self.ratings[attacker_id]:
+                    sum_of_squares += (attacker_ranks[objective][attackers.index(attacker_id)] -
+                                       defender_ranks[objective][defenders.index(defender_id)]) ** 2
                 distance = math.sqrt(sum_of_squares)
                 return distance
 
@@ -314,25 +303,21 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         pairs = [(attacker, defender) for attacker, defender in opponents.items()]
         final_distance_sum = sum([distances.setdefault((attacker, defender), get_rating_distance(attackers[attacker], defenders[defender])) for attacker, defender in pairs])
         print(f"Final distance of {final_distance_sum}")
-        for attacker, defender in pairs:
-            attacker_ID = self.attacker_generator.get_from_generation(*attackers[attacker]).genotype.id
-            defender_ID = self.defender_generator.get_from_generation(*defenders[defender]).genotype.id
-            print(f"{attacker_ID}: {self.ratings[attacker_ID]} <---> {defender_ID}: {self.ratings[defender_ID]}")
+        for attacker_id, defender_id in pairs:
+            print(f"{attacker_id}: {self.ratings[attacker_id]} <---> {defender_id}: {self.ratings[defender_id]}")
         return pairs
 
-    def generate_matchmaking_pairs(self, attackers, defenders):
+    def generate_matchmaking_pairs(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
         distances = list()
-        for attacker in attackers:
+        for attacker_id in attackers:
             distances.append(list())
-            attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
-            for defender in defenders:
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
-                if (attacker, defender) in self.completed_pairings:
+            for defender_id in defenders:
+                if (attacker_id, defender_id) in self.completed_pairings:
                     distances[-1].append(float("inf"))
                     continue
                 sum_of_squares = 0
-                for objective in self.ratings[attacker_ID]:
-                    sum_of_squares += (self.ratings[attacker_ID][objective] - self.ratings[defender_ID][objective]) ** 2
+                for objective in self.ratings[attacker_id]:
+                    sum_of_squares += (self.ratings[attacker_id][objective] - self.ratings[defender_id][objective]) ** 2
                 distances[-1].append(math.sqrt(sum_of_squares))
 
         pairs = munkres.Munkres().compute(distances)

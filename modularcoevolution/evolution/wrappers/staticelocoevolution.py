@@ -18,10 +18,10 @@ class StaticEloCoevolution(EloCoevolution):
         self.elos_to_update = list()
         super().start_generation()
 
-    def send_objectives(self, evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags=None,
+    def send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
                         defender_average_flags=None, attacker_inactive_objectives=None,
                         defender_inactive_objectives=None):
-        #args = [evaluation_ID, attacker_objectives, defender_objectives]
+        #args = [evaluation_id, attacker_objectives, defender_objectives]
         #kwargs = {"attacker_average_flags": attacker_average_flags,
         #                "defender_average_flags": defender_average_flags, "attacker_inactive_objectives": attacker_inactive_objectives,
         #                "defender_inactive_objectives": defender_inactive_objectives}
@@ -29,7 +29,7 @@ class StaticEloCoevolution(EloCoevolution):
         self.update_objective_range(attacker_objectives, attacker_objectives)
         self.update_objective_range(defender_objectives, defender_objectives)
 
-        attacker, defender = self.get_pair(evaluation_ID)
+        attacker, defender = self.get_genotype_pair(evaluation_id)
         attacker_ID = attacker.genotype.id
         defender_ID = defender.genotype.id
         for objective in list(attacker_objectives) + list(defender_objectives):
@@ -78,9 +78,9 @@ class StaticEloCoevolution(EloCoevolution):
             self.total_scores[defender_ID][objective] += normalized_score
             self.total_scores[attacker_ID][objective] += 1 - normalized_score
 
-        args = (evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags, attacker_inactive_objectives, defender_inactive_objectives)
-        if evaluation_ID in self.remaining_evolution_evaluations:
-            self.deferred_evaluation_results[evaluation_ID] = args
+        args = (evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags, attacker_inactive_objectives, defender_inactive_objectives)
+        if evaluation_id in self.remaining_evolution_evaluations:
+            self.deferred_evaluation_results[evaluation_id] = args
         else:
             super().send_objectives(*args)
             
@@ -133,7 +133,7 @@ class StaticEloCoevolution(EloCoevolution):
                 defender_inactive_objectives = list()
 
             self.total_evaluations += 1
-            attacker, defender = self.get_pair(evaluation_ID)
+            attacker, defender = self.get_genotype_pair(evaluation_ID)
             attacker_ID = attacker.genotype.id
             defender_ID = defender.genotype.id
 
