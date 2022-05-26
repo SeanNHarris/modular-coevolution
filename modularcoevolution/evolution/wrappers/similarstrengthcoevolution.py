@@ -1,4 +1,4 @@
-from modularcoevolution.evolution.wrappers.Coevolution import *
+from modularcoevolution.evolution.wrappers.coevolution import *
 from modularcoevolution.evolution.generators.evolutiongenerator import *
 
 from abc import ABCMeta, abstractmethod
@@ -65,8 +65,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         self.update_objective_range(defender_objectives, defender_objectives)
 
         attacker, defender = self.get_pair(evaluation_ID)
-        attacker_ID = attacker.genotype.ID
-        defender_ID = defender.genotype.ID
+        attacker_ID = attacker.genotype.id
+        defender_ID = defender.genotype.id
         for objective in list(attacker_objectives) + list(defender_objectives):
             if attacker_ID not in self.ratings:
                 self.ratings[attacker_ID] = dict()
@@ -131,8 +131,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
 
             self.total_evaluations += 1
             attacker, defender = self.get_pair(evaluation_ID)
-            attacker_ID = attacker.genotype.ID
-            defender_ID = defender.genotype.ID
+            attacker_ID = attacker.genotype.id
+            defender_ID = defender.genotype.id
 
             attacker_objective_ratings = {(objective + " rating"): self.ratings[attacker_ID][objective] for objective in
                                        attacker_objectives}
@@ -213,10 +213,10 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         alternate_pairs = self.generate_matchmaking_pairs_greedy(attackers, defenders)  # TODO: REMOVE AFTER TESTING
         attacker_ids = dict()
         for attacker in attackers:
-            attacker_ids[attacker] = self.attacker_generator.get_from_generation(*attacker).genotype.ID
+            attacker_ids[attacker] = self.attacker_generator.get_from_generation(*attacker).genotype.id
         defender_ids = dict()
         for defender in defenders:
-            defender_ids[defender] = self.defender_generator.get_from_generation(*defender).genotype.ID
+            defender_ids[defender] = self.defender_generator.get_from_generation(*defender).genotype.id
 
         '''min_attacker_rating = 1000000
         max_attacker_rating = -1000000
@@ -241,8 +241,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         if not self.use_rank:
             def get_rating_distance(attacker, defender):
                 # Direct rating distance
-                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.ID
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.ID
+                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
+                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
                 if (attacker, defender) in self.completed_pairings:
                     return float("inf")
                 sum_of_squares = 0
@@ -254,8 +254,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         else:
             def get_rating_distance(attacker, defender):
                 # Rank distance, preventing the failures that occur when the populations have heavily different mean ratings
-                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.ID
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.ID
+                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
+                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
                 if (attacker, defender) in self.completed_pairings:
                     return float("inf")
                 sum_of_squares = 0
@@ -315,8 +315,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         final_distance_sum = sum([distances.setdefault((attacker, defender), get_rating_distance(attackers[attacker], defenders[defender])) for attacker, defender in pairs])
         print(f"Final distance of {final_distance_sum}")
         for attacker, defender in pairs:
-            attacker_ID = self.attacker_generator.get_from_generation(*attackers[attacker]).genotype.ID
-            defender_ID = self.defender_generator.get_from_generation(*defenders[defender]).genotype.ID
+            attacker_ID = self.attacker_generator.get_from_generation(*attackers[attacker]).genotype.id
+            defender_ID = self.defender_generator.get_from_generation(*defenders[defender]).genotype.id
             print(f"{attacker_ID}: {self.ratings[attacker_ID]} <---> {defender_ID}: {self.ratings[defender_ID]}")
         return pairs
 
@@ -324,9 +324,9 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         distances = list()
         for attacker in attackers:
             distances.append(list())
-            attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.ID
+            attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
             for defender in defenders:
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.ID
+                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
                 if (attacker, defender) in self.completed_pairings:
                     distances[-1].append(float("inf"))
                     continue

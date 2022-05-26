@@ -8,8 +8,8 @@ class BaseGenotype:
     ID_counter = 0
 
     # TODO: for all genotypes, accept a parameter list as keywords rather than strings
-    def __init__(self):
-        self.ID = None
+    def __init__(self, **kwargs):
+        self.id = None
         self.claim_next_ID()
         self.fitness = None
         self.objectives = dict()
@@ -105,5 +105,5 @@ class BaseGenotype:
         pass
 
     def claim_next_ID(self):
-        self.ID = BaseGenotype.ID_counter
+        self.id = BaseGenotype.ID_counter
         BaseGenotype.ID_counter += 1

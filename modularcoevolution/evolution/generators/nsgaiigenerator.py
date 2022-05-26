@@ -111,12 +111,12 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
             for individual in self.population:
                 parent_string = "({})".format(individual.creation_method)
                 if len(individual.parents) == 1:
-                    parent_string = "{} ({})".format(individual.parents[0].ID, individual.creation_method)
+                    parent_string = "{} ({})".format(individual.parents[0].id, individual.creation_method)
                 elif len(individual.parents) == 2:
-                    parent_string = "{}, {} ({})".format(individual.parents[0].ID, individual.parents[0].ID,
+                    parent_string = "{}, {} ({})".format(individual.parents[0].id, individual.parents[0].id,
                                                          individual.creation_method)
 
-                evaluation_list = self.evaluation_lists[individual.ID]
+                evaluation_list = self.evaluation_lists[individual.id]
                 evaluation_string = "["
                 for i in range(len(evaluation_list)):
                     if i > 0:
@@ -129,13 +129,13 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
                 evaluation_string += "]"
 
                 agent_log.write(
-                    agent_log_format.format(individual.ID, *individual.objectives.values(), individual.metrics["novelty"], parent_string,
+                    agent_log_format.format(individual.id, *individual.objectives.values(), individual.metrics["novelty"], parent_string,
                                             evaluation_string, str(individual)))
             agent_log.flush()
 
         if self.data_collector is not None:
             agent_type_name = self.agent_class.agent_type_name
-            population_IDs = [individual.ID for individual in self.population]
+            population_IDs = [individual.id for individual in self.population]
             objectives = dict()
 
             objectives = dict()
@@ -181,7 +181,7 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
             
             for name in objective_names:
                 objectives[name].update({"average nondominated": average_nondominated_objectives[name], "worst nondominated": worst_nondominated_objectives[name]})
-            front_members = [[individual.ID for individual in front] for front in nondominating_fronts]
+            front_members = [[individual.id for individual in front] for front in nondominating_fronts]
             metrics.update({"diversity": diversity, "front sizes": [len(front) for front in nondominating_fronts], "front members": front_members})
             self.data_collector.set_generation_data(agent_type_name, self.generation, population_IDs, objectives, metrics)
 

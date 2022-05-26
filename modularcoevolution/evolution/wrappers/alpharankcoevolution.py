@@ -1,4 +1,4 @@
-from modularcoevolution.evolution.wrappers.SimilarStrengthCoevolution import SimilarStrengthCoevolution
+from modularcoevolution.evolution.wrappers.similarstrengthcoevolution import SimilarStrengthCoevolution
 
 from open_spiel.python.egt import alpharank
 
@@ -16,18 +16,18 @@ class AlphaRankCoevolution(SimilarStrengthCoevolution):
         return value / (self.max_objectives[objective] - self.min_objectives[objective])
 
     def calculate_ratings(self, ratings_to_update):
-        current_attacker_ids = [self.attacker_generator.get_from_generation(*attacker_index).genotype.ID
+        current_attacker_ids = [self.attacker_generator.get_from_generation(*attacker_index).genotype.id
                                 for attacker_index in self.current_attackers]
-        current_defender_ids = [self.defender_generator.get_from_generation(*defender_index).genotype.ID
+        current_defender_ids = [self.defender_generator.get_from_generation(*defender_index).genotype.id
                                 for defender_index in self.current_defenders]
         num_agents = len(current_attacker_ids) + len(current_defender_ids)
         example_attacker, example_defender = self.get_pair(self.scored_pairings[0])
-        for objective in self.scores_per_opponent[example_attacker.genotype.ID][example_defender.genotype.ID]:
+        for objective in self.scores_per_opponent[example_attacker.genotype.id][example_defender.genotype.id]:
             payoff_matrix = numpy.zeros((2, num_agents, num_agents))
             for evaluation_id in self.scored_pairings:
                 attacker, defender = self.get_pair(evaluation_id)
-                attacker_id = attacker.genotype.ID
-                defender_id = defender.genotype.ID
+                attacker_id = attacker.genotype.id
+                defender_id = defender.genotype.id
                 assert attacker_id in current_attacker_ids
                 assert defender_id in current_defender_ids
                 attacker_scores = self.scores_per_opponent[attacker_id][defender_id][objective]

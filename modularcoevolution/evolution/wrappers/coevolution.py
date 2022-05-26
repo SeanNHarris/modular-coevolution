@@ -1,5 +1,5 @@
 from modularcoevolution.evolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator
-from modularcoevolution.evolution.wrappers.BaseEvolutionWrapper import EvolutionEndedException
+from modularcoevolution.evolution.wrappers.baseevolutionwrapper import EvolutionEndedException
 
 import math
 import os
@@ -186,9 +186,9 @@ class Coevolution():
         highest_objective_1 = max(individual_1.objectives.values())
         highest_objective_2 = max(individual_2.objectives.values())
         individual_1_score = highest_objective_1 * standard_deviation_1 / \
-                             len(self.opponents_this_generation[individual_1.ID])
+                             len(self.opponents_this_generation[individual_1.id])
         individual_2_score = highest_objective_2 * standard_deviation_2 / \
-                             len(self.opponents_this_generation[individual_2.ID])
+                             len(self.opponents_this_generation[individual_2.id])
         return individual_1_score - individual_2_score
 
     def claim_evaluation_ID(self):
@@ -235,21 +235,23 @@ class Coevolution():
             else:
                 defender_name = type(defender).agent_type_name
             self.data_collector.set_evaluation_data(evaluation_ID,
-                                                    {attacker_name: attacker.genotype.ID, defender_name: defender.genotype.ID},
+                                                    {attacker_name: attacker.genotype.id, defender_name: defender.genotype.id},
                                                     {attacker_name: attacker_objectives, defender_name: defender_objectives})
         if evaluation_ID in self.remaining_evolution_evaluations:
             pair = self.evaluation_table[evaluation_ID]
             self.completed_pairings[pair] = self.completed_pairings.setdefault(pair, 0) + 1
             attacker, defender = self.get_pair(evaluation_ID)
-            attacker_ID = attacker.genotype.ID
-            defender_ID = defender.genotype.ID
+            attacker_ID = attacker.genotype.id
+            defender_ID = defender.genotype.id
             self.attacker_generator.set_objectives(self.evaluation_table[evaluation_ID][0][1], attacker_objectives,
-                                                   average_flags=attacker_average_flags, average_fitness=attacker_average_fitness,
-                                                   opponent=defender, evaluation_number=evaluation_ID,
+                                                   average_flags=attacker_average_flags,
+                                                   average_fitness=attacker_average_fitness, opponent=defender,
+                                                   evaluation_number=evaluation_ID,
                                                    inactive_objectives=attacker_inactive_objectives)
             self.defender_generator.set_objectives(self.evaluation_table[evaluation_ID][1][1], defender_objectives,
-                                                   average_flags=defender_average_flags, average_fitness=defender_average_fitness,
-                                                   opponent=attacker, evaluation_number=evaluation_ID,
+                                                   average_flags=defender_average_flags,
+                                                   average_fitness=defender_average_fitness, opponent=attacker,
+                                                   evaluation_number=evaluation_ID,
                                                    inactive_objectives=defender_inactive_objectives)
             self.remaining_evolution_evaluations.remove(evaluation_ID)
 

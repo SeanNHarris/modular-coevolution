@@ -77,12 +77,12 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
             for individual in self.population:
                 parent_string = "({})".format(individual.creation_method)
                 if len(individual.parents) == 1:
-                    parent_string = "{} ({})".format(individual.parents[0].ID, individual.creation_method)
+                    parent_string = "{} ({})".format(individual.parents[0].id, individual.creation_method)
                 elif len(individual.parents) == 2:
-                    parent_string = "{}, {} ({})".format(individual.parents[0].ID, individual.parents[0].ID,
+                    parent_string = "{}, {} ({})".format(individual.parents[0].id, individual.parents[0].id,
                                                          individual.creation_method)
 
-                evaluation_list = self.evaluation_lists[individual.ID]
+                evaluation_list = self.evaluation_lists[individual.id]
                 evaluation_string = "["
                 for i in range(len(evaluation_list)):
                     if i > 0:
@@ -95,7 +95,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
                 evaluation_string += "]"
 
                 agent_log.write(
-                    agent_log_format.format(individual.ID, individual.fitness, individual.metrics["novelty"],
+                    agent_log_format.format(individual.id, individual.fitness, individual.metrics["novelty"],
                                             parent_string, evaluation_string, str(individual)))
             agent_log.flush()
 
@@ -105,7 +105,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
             else:
                 # Temporary while deprecating the class version of this variable
                 agent_type_name = self.agent_class.agent_type_name
-            population_IDs = [individual.ID for individual in self.population]
+            population_IDs = [individual.id for individual in self.population]
             objectives = dict()
             for objective in self.population[0].objectives:
                 objective_sum = 0

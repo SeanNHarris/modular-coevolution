@@ -79,14 +79,13 @@ class EvolutionWrapper:  # TODO: Merge into common superclass with CoevolutionWr
         individual = self.get_individual(evaluation_ID)
         if self.data_collector is not None:
             individual_name = type(individual).agent_type_name
-            self.data_collector.set_evaluation_data(evaluation_ID, {individual_name: individual.genotype.ID},
+            self.data_collector.set_evaluation_data(evaluation_ID, {individual_name: individual.genotype.id},
                                                     {individual_name: objectives})
 
-        individual_ID = individual.genotype.ID
-        self.generator.set_objectives(self.evaluation_table[evaluation_ID][1], objectives,
-                                               average_flags=average_flags, average_fitness=average_fitness,
-                                               evaluation_number=evaluation_ID,
-                                               inactive_objectives=inactive_objectives)
+        individual_ID = individual.genotype.id
+        self.generator.set_objectives(self.evaluation_table[evaluation_ID][1], objectives, average_flags=average_flags,
+                                      average_fitness=average_fitness, evaluation_number=evaluation_ID,
+                                      inactive_objectives=inactive_objectives)
         self.remaining_evolution_evaluations.remove(evaluation_ID)
 
     def check_generation_end(self):

@@ -1,5 +1,5 @@
-from modularcoevolution.evolution.wrappers.Coevolution import Coevolution
-from modularcoevolution.evolution.wrappers.EloCoevolution import EloCoevolution
+from modularcoevolution.evolution.wrappers.coevolution import Coevolution
+from modularcoevolution.evolution.wrappers.elocoevolution import EloCoevolution
 
 class StaticEloCoevolution(EloCoevolution):
     def __init__(self, *args, **kwargs):
@@ -30,8 +30,8 @@ class StaticEloCoevolution(EloCoevolution):
         self.update_objective_range(defender_objectives, defender_objectives)
 
         attacker, defender = self.get_pair(evaluation_ID)
-        attacker_ID = attacker.genotype.ID
-        defender_ID = defender.genotype.ID
+        attacker_ID = attacker.genotype.id
+        defender_ID = defender.genotype.id
         for objective in list(attacker_objectives) + list(defender_objectives):
             if attacker_ID not in self.elos:
                 self.elos[attacker_ID] = dict()
@@ -134,8 +134,8 @@ class StaticEloCoevolution(EloCoevolution):
 
             self.total_evaluations += 1
             attacker, defender = self.get_pair(evaluation_ID)
-            attacker_ID = attacker.genotype.ID
-            defender_ID = defender.genotype.ID
+            attacker_ID = attacker.genotype.id
+            defender_ID = defender.genotype.id
 
             attacker_objective_elos = {(objective + " elo"): self.elos[attacker_ID][objective] for objective in
                                        attacker_objectives}

@@ -1,4 +1,4 @@
-from modularcoevolution.evolution.wrappers.Coevolution import *
+from modularcoevolution.evolution.wrappers.coevolution import *
 from modularcoevolution.evolution.generators.evolutiongenerator import *
 
 #import munkres
@@ -73,8 +73,8 @@ class EloCoevolution(Coevolution):
         if evaluation_ID in self.remaining_evolution_evaluations:
             self.total_evaluations += 1
             attacker, defender = self.get_pair(evaluation_ID)
-            attacker_ID = attacker.genotype.ID
-            defender_ID = defender.genotype.ID
+            attacker_ID = attacker.genotype.id
+            defender_ID = defender.genotype.id
 
             for objective in list(attacker_objectives) + list(defender_objectives):
                 if attacker_ID not in self.elos:
@@ -158,10 +158,10 @@ class EloCoevolution(Coevolution):
     def generate_matchmaking_pairs_local_search(self, attackers, defenders):
         attacker_ids = dict()
         for attacker in attackers:
-            attacker_ids[attacker] = self.attacker_generator.get_from_generation(*attacker).genotype.ID
+            attacker_ids[attacker] = self.attacker_generator.get_from_generation(*attacker).genotype.id
         defender_ids = dict()
         for defender in defenders:
-            defender_ids[defender] = self.defender_generator.get_from_generation(*defender).genotype.ID
+            defender_ids[defender] = self.defender_generator.get_from_generation(*defender).genotype.id
 
         '''min_attacker_elo = 1000000
         max_attacker_elo = -1000000
@@ -181,8 +181,8 @@ class EloCoevolution(Coevolution):
 
         if not self.elo_ranking:
             def get_elo_distance(attacker, defender):  # Direct distance
-                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.ID
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.ID
+                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
+                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
                 if (attacker, defender) in self.completed_pairings:
                     return float("inf")
                 sum_of_squares = 0
@@ -193,8 +193,8 @@ class EloCoevolution(Coevolution):
                 return distance
         else:
             def get_elo_distance(attacker, defender):  # Rank distance, preventing the failures that occur when the populations have heavily different mean ratings
-                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.ID
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.ID
+                attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
+                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
                 if (attacker, defender) in self.completed_pairings:
                     return float("inf")
                 sum_of_squares = 0
@@ -250,9 +250,9 @@ class EloCoevolution(Coevolution):
         distances = list()
         for attacker in attackers:
             distances.append(list())
-            attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.ID
+            attacker_ID = self.attacker_generator.get_from_generation(*attacker).genotype.id
             for defender in defenders:
-                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.ID
+                defender_ID = self.defender_generator.get_from_generation(*defender).genotype.id
                 if (attacker, defender) in self.completed_pairings:
                     distances[-1].append(float("inf"))
                     continue

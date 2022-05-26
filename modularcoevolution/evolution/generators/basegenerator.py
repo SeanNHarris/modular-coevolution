@@ -1,68 +1,181 @@
+"""
+Todo:
+    * Determine why :meth:`~.generate_individual` ever existed, and if it is still needed.
+        It's used nowhere else, but might have been needed for CEADS-LIN
+
+"""
+
+
+from modularcoevolution.evolution.baseagent import BaseAgent
+
+from typing import Any
+from typing.io import IO
+
 import abc
 
 
-# The BaseGenerator is the superclass of all generators which participate in co-evolution, both attackers and defenders.
-# One of BaseAttackerGenerator or BaseDefenderGenerator must be implemented by generators used in co-evolution.
-class BaseGenerator:
-    __metaclass__ = abc.ABCMeta
+class BaseGenerator(metaclass=abc.ABCMeta):
+    """The superclass of all agent generators which participate in a :class:`.BaseEvolutionWrapper`, e.g.
+    an :class:`.EvolutionGenerator` participating in :class:`.Coevolution`.
 
-    # Inheriting classes should call this.
+    A :class:`.BaseGenerator` maintains a data structure representing a population of agent parameter sets
+    (such as genotypes for evolutionary agents).
+    The population should not change unless the :meth:`next_generation` method is called.
+    Each agent parameter set should be associated with a unique ID, and should remain accessible by this ID
+    even if it has been removed from the population (in order to allow comparison with past agents).
+
+    """
+
+    _population_size: int
+
     def __init__(self):
-        self._population_size = -1
-        self.next_ID = 0
-        self.ID_table = dict()
+        self.population_size = -1
 
     @property
-    def population_size(self):
-        assert self._population_size > 0  # The inheriting class MUST set a population size, even if it's just one
+    def population_size(self) -> int:
+        """The size of the generator's agent population.
+
+        The inheriting class *must* set a population size, even if it's just one.
+
+        """
+        assert self._population_size > 0
         return self._population_size
 
     @population_size.setter
-    def population_size(self, value):
+    def population_size(self, value: int) -> None:
         self._population_size = value
-    
-    # Associates the next available ID with the given individual in the ID table, and returns it.
-    # These are unique within a generator. If appropriate, 
-    def claim_ID(self, individual):
-        claimed_ID = self.next_ID
-        self.ID_table[claimed_ID] = individual
-        self.next_ID += 1
-        return claimed_ID
 
-    # Return the individual from the population with index ID, where ID will be an integer less than the population size
-    # If there is not a list of individuals being kept and instead a single reconfigurable one with a population of parameters, an implementation might just set the parameters and return the one individual.
     @abc.abstractmethod
-    def __getitem__(self, index):
+    def get_from_generation(self, generation: int, index: int) -> BaseAgent:
+        """ Return an agent with given index from a previous generation of the given number.
+
+            .. warning::
+                Agents will often be referenced multiple times. Ensure that the ordering of stored populations does not
+                change, such as due to sorting the population before storing it.
+
+            "Negative generations" can be used for internal purposes such as a hall of fame but are not assumed.
+
+        Args:
+            generation: The generation to draw the agent from. Can be the current generation.
+                If the generator is not generational, this parameter can be ignored.
+            index:
+                The index of the agent being requested in the population.
+
+        Returns:
+            The ``index``\ th agent from the population at generation ``generation``.
+
+        """
         pass
 
-    # Return an individual with given index from a previous generation of the given number. Previous populations must be stored for coevolution.
-    # If the generator is not generational, the normal method of selecting an individual can be used.
     @abc.abstractmethod
-    def get_from_generation(self, generation, index):
+    def get_genotype_with_id(self, agent_id) -> Any:
+        """Return the agent parameters associated with the given ID. The type used for storing agent parameters is not
+        prescribed by this abstract base class, but is frequently a :class:`.BaseGenotype`.
+
+        Args:
+            agent_id: The ID of the agent parameter set being requested.
+
+        Returns: The agent parameter set associated with the ID ``agent_id``.
+
+        """
+
+    @abc.abstractmethod
+    def build_agent_from_id(self, agent_id: int, active: bool) -> BaseAgent:
+        """Return a new instance of an agent based on the given agent ID.
+
+        Args:
+            agent_id: The ID associated with the agent being requested.
+            active: Used for the ``active`` parameter in :meth:`.BaseAgent.__init__`.
+
+        Returns: A newly created agent associated with the ID ``agent_id`` and with ``active`` as its activity state.
+
+        """
+
+    @abc.abstractmethod
+    def get_individuals_to_test(self) -> list[int]:
+        """Get a list of agent IDs in need of evaluation. This can return individuals
+        outside of the current generation, if desired (e.g. for a hall of fame).
+
+        Returns: A list of IDs for agents which need to be evaluated.
+
+        """
         pass
 
-    # Return a set of high-quality representatives of the population from a certain generation, for intergenerational comparisons.
-    # Duplicates can be returned if necessary, given the amount. If force is not set, fewer representatives may be returned.
     @abc.abstractmethod
-    def get_representatives_from_generation(self, generation, amount, force=False):
+    def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False) -> list[int]:
+        """Return a set of agent IDs for high-quality representatives of the population from a certain generation,
+        for intergenerational comparisons such as CIAO plots.
+
+        Args:
+            generation: The generation to choose the representatives from.
+            amount: The number of representatives to return.
+            force: If False, fewer than ``amount`` agents may be returned if there are not enough good choices.
+                If True, exactly ``amount`` agents must be returned, even if this involves duplicates
+                or low-quality agents.
+
+        Returns:
+            A set of IDs for high-quality agents to represent the requested generation, usually the ``amount`` best.
+            If ``force`` is True, the size will be exactly ``amount``.
+
+        """
         pass
 
-    # Called by co-evolution to record objective results from evaluations for the individual with given index, with the intent that it be internally stored in the generator.
-    # It is the responsibility of the generator to deal with what to do when multiple fitnesses are returned, such as averaging them.
-    # Fitness can be calculated here if desired.
     @abc.abstractmethod
-    def set_objectives(self, index, objectives, average_flags=None, average_fitness=False, opponent=None, evaluation_number=None, inactive_objectives=None):
+    def set_objectives(self, agent_id: int, objectives: dict[str, float], average_flags: dict[str, bool] = None,
+                       average_fitness: bool = False, opponent: BaseAgent = None, evaluation_number: int = None,
+                       inactive_objectives: dict[str, bool] = None) -> None:
+        """Called by a :class:`.BaseEvolutionWrapper` to record objective results from an evaluation
+        for the agent with given index.
+
+        Objectives should be stored internally in some way, as the :class:`.BaseEvolutionWrapper` is not required
+        to maintain them.
+
+        This function can be called multiple times for the same agent. When this occurs, consult ``average_flags``
+        to determine if the stored objective values should be overwritten, or store an average of objectives provided
+        across each function call.
+
+        Args:
+            agent_id: The ID of the agent associated with the objective results.
+            objectives: A dictionary keyed by objective name holding the value for each objective.
+            average_flags: A dictionary keyed by objective name.
+                When the value for an objective is False, the previously stored objective should be overwritten with the
+                new one.
+                When the value for an objective is True, the stored objective should be an average for this objective
+                across each function call.
+                Defaults to false for every objective.
+            average_fitness: Functions as ``average_flags``, but for a fitness value.
+            opponent: The opponent that resulted in these objective values, if applicable.
+            evaluation_number: The ID of evaluation associated with these objective values, for logging purposes.
+            inactive_objectives: A dictionary keyed by objective name. Notes that an objective should be marked as
+                "inactive" and only stored for logging purposes, rather than treated as a real objective.
+
+        """
         pass
 
-    # Signals the generator that a generation of co-evolution has completed. Generational generators such as evolutionary algorithms should generate a new generation.
-    # If the generator is not generational, nothing needs to be done.
-    # Two log files may be passed for logging statistics and agent data, but might be None, so check.
     @abc.abstractmethod
-    def next_generation(self, result_log=None, agent_log=None):
+    def next_generation(self, result_log: IO = None, agent_log: IO = None) -> None:
+        """Signals the generator that a generation has completed and that the generator may modify its population.
+
+        Changes to the population should only occur as a result of this method being called. However, modifying the
+        population at all is optional.
+
+        Two log files may be provided for optional logging of data.
+
+        Args:
+            result_log: A log file intended to log the overall state of the population each generation.
+            agent_log: A log file intended to log the state of individual agents in the population each generation.
+
+        """
         pass
 
-    # Returns a new individual of the type associated with the generator based on the parameter string passed.
-    # The requested format of the string should correspond to the individual's parameter string
-    @abc.abstractmethod
-    def generate_individual(self, parameter_string):
+    def generate_individual(self, parameter_string: str) -> BaseAgent:
+        """*Deprecated*, no longer required for implementation.
+        Returns a new agent created from the given parameter string, of a type determined by the generator.
+
+        Args:
+            parameter_string: A string that can be used to generate an agent.
+
+        Returns: An agent generated from the parameter string.
+
+        """
         pass
