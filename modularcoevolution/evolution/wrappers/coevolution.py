@@ -1,29 +1,65 @@
-from modularcoevolution.evolution.baseevolutionaryagent import BaseEvolutionaryAgent
-from modularcoevolution.evolution.basegenotype import BaseGenotype, GenotypeID
-from modularcoevolution.evolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator
 from modularcoevolution.evolution.wrappers.baseevolutionwrapper import EvolutionEndedException
+from modularcoevolution.evolution.specialtypes import EvaluationID, GenotypeID
 
-from typing import Generic, NewType, TypeVar
+from typing import Any, Generic, TypeVar, TYPE_CHECKING
+from typing.io import TextIO
 
 import math
 import os
 import random
 
+# if TYPE_CHECKING:
+from modularcoevolution.evolution.baseevolutionaryagent import BaseEvolutionaryAgent
+from modularcoevolution.evolution.basegenotype import BaseGenotype
+from modularcoevolution.evolution.datacollector import DataCollector
+from modularcoevolution.evolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator
+from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 
-EvaluationID = NewType("EvaluationID", int)
 AttackerType = TypeVar("AttackerType", bound=BaseEvolutionaryAgent)
 DefenderType = TypeVar("DefenderType", bound=BaseEvolutionaryAgent)
 
+
 # Runs the coevolutionary algorithm with a generic attacker and defender.
 class Coevolution(Generic[AttackerType, DefenderType]):
-    attacker_generator: BaseEvolutionaryGenerator[AttackerType]
-    defender_generator: BaseEvolutionaryGenerator[DefenderType]
+    attacker_generator: BaseGenerator[AttackerType]
+    defender_generator: BaseGenerator[DefenderType]
+    current_attackers: list[GenotypeID]
+    current_defenders: list[GenotypeID]
 
     evaluation_table: dict[EvaluationID, tuple[GenotypeID, GenotypeID]]
     evaluation_id_counter: EvaluationID
+    remaining_evolution_evaluations: list[EvaluationID]
 
-    def __init__(self, attacker_generator: BaseEvolutionaryGenerator[AttackerType],
-                 defender_generator: BaseEvolutionaryGenerator[DefenderType], num_generations, evaluations_per_individual,
+    remaining_tournament_evaluations: list[EvaluationID]
+    tournament_buffer: list[EvaluationID]
+    tournament_evaluations: int
+    tournament_evaluation_count: dict[tuple[int, int], int]
+    """How many times have the two keyed generations been evaluated against each other?"""
+    tournament_batch_size: int
+    tournament_ratio: int
+    tournament_objectives_attacker: dict[str, dict[int, dict[int, float]]]
+    tournament_objectives_defender: dict[str, dict[int, dict[int, float]]]
+    tournament_generations: dict[EvaluationID, tuple[int, int]]
+
+    generation: int
+    num_generations: int
+    finalizing: bool
+    evaluations_per_individual: int
+    completed_pairings: dict[tuple[GenotypeID, GenotypeID], int]
+    opponents_this_generation: dict[GenotypeID, set[GenotypeID]]
+
+    log_path: str
+    result_log_attacker: TextIO
+    result_log_defender: TextIO
+    solution_log_attacker: TextIO
+    solution_log_defender: TextIO
+    tournament_data_attacker: TextIO
+    tournament_data_defender: TextIO
+    data_collector: DataCollector
+
+
+    def __init__(self, attacker_generator: BaseGenerator[AttackerType],
+                 defender_generator: BaseGenerator[DefenderType], num_generations, evaluations_per_individual,
                  tournament_evaluations=None, tournament_batch_size=4, tournament_ratio=1, data_collector=None,
                  log_subfolder=""):
         self.attacker_generator = attacker_generator
@@ -44,6 +80,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
         self.tournament_ratio = tournament_ratio
         self.tournament_objectives_attacker = dict()
         self.tournament_objectives_defender = dict()
+        self.tournament_generations = dict()
 
         self.generation = 0
         self.num_generations = num_generations
@@ -91,6 +128,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
 
         self.remaining_evolution_evaluations.clear()
         self.remaining_tournament_evaluations.clear()
+        self.tournament_generations.clear()
         self.start_generation()
 
     def start_generation(self):
@@ -118,18 +156,19 @@ class Coevolution(Generic[AttackerType, DefenderType]):
                     self.tournament_evaluation_count[(current_generation, opponent_generation)] = len(vertical_pairs)
                     self.tournament_evaluation_count[(opponent_generation, current_generation)] = len(horizontal_pairs)
                     for pair in vertical_pairs:
-                        evaluation_ID = self.claim_evaluation_id()
-                        self.evaluation_table[evaluation_ID] = (
-                            (current_generation, recent_attacker_representatives[pair[0]]),
-                            (opponent_generation, past_defender_representatives[pair[1]]))
-                        self.tournament_buffer.append(evaluation_ID)
+                        evaluation_id = self.claim_evaluation_id()
+                        self.evaluation_table[evaluation_id] = (
+                            recent_attacker_representatives[pair[0]], past_defender_representatives[pair[1]])
+                        self.tournament_buffer.append(evaluation_id)
+                        self.tournament_generations[evaluation_id] = (current_generation, opponent_generation)
                     if opponent_generation != current_generation:
                         for pair in horizontal_pairs:
-                            reversed_evaluation_ID = self.claim_evaluation_id()
-                            self.evaluation_table[reversed_evaluation_ID] = (
-                                (opponent_generation, past_attacker_representatives[pair[0]]),
-                                (current_generation, recent_defender_representatives[pair[1]]))
-                            self.tournament_buffer.append(reversed_evaluation_ID)
+                            reversed_evaluation_id = self.claim_evaluation_id()
+                            self.evaluation_table[reversed_evaluation_id] = (
+                                past_attacker_representatives[pair[0]], recent_defender_representatives[pair[1]])
+                            self.tournament_buffer.append(reversed_evaluation_id)
+                            self.tournament_generations[reversed_evaluation_id] = \
+                                (opponent_generation, current_generation)
         while len(self.tournament_buffer) >= self.tournament_batch_size:
             for _ in range(self.tournament_batch_size):
                 self.remaining_tournament_evaluations.append(self.tournament_buffer.pop(0))
@@ -148,7 +187,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
             self.remaining_evolution_evaluations.append(evaluation_id)
 
 
-    # Generates pairs of attacker and defender IDs
+    # Generates pairs of attacker and defender ids
     #@numba.jit()
     def generate_pairs(self, size_1, size_2, pairs_per_individual, invalid_pairs=None, allow_repeats=False) -> list[tuple[int, int]]:
         if invalid_pairs is None:
@@ -223,7 +262,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
         return self.attacker_generator.build_agent_from_id(self.evaluation_table[evaluation_id][0], active), \
                self.defender_generator.build_agent_from_id(self.evaluation_table[evaluation_id][1], active)
 
-    def send_objectives(self, evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags=None,
+    def send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
                         defender_average_flags=None, attacker_average_fitness=True, defender_average_fitness=True,
                         attacker_inactive_objectives=None, defender_inactive_objectives=None):
         if attacker_average_flags is None:
@@ -242,7 +281,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
 
 
         if self.data_collector is not None:
-            attacker, defender = self.build_agent_pair(evaluation_ID, False)
+            attacker, defender = self.build_agent_pair(evaluation_id, False)
             if hasattr(attacker, "agent_type_name"):
                 attacker_name = attacker.agent_type_name
             else:
@@ -251,48 +290,48 @@ class Coevolution(Generic[AttackerType, DefenderType]):
                 defender_name = defender.agent_type_name
             else:
                 defender_name = type(defender).agent_type_name
-            self.data_collector.set_evaluation_data(evaluation_ID,
+            self.data_collector.set_evaluation_data(evaluation_id,
                                                     {attacker_name: attacker.genotype.id, defender_name: defender.genotype.id},
                                                     {attacker_name: attacker_objectives, defender_name: defender_objectives})
-        if evaluation_ID in self.remaining_evolution_evaluations:
-            pair = self.evaluation_table[evaluation_ID]
+        if evaluation_id in self.remaining_evolution_evaluations:
+            pair = self.evaluation_table[evaluation_id]
             self.completed_pairings[pair] = self.completed_pairings.setdefault(pair, 0) + 1
-            attacker, defender = self.get_genotype_pair(evaluation_ID)
-            attacker_ID = attacker.genotype.id
-            defender_ID = defender.genotype.id
-            self.attacker_generator.set_objectives(self.evaluation_table[evaluation_ID][0][1], attacker_objectives,
+            attacker_id, defender_id = self.evaluation_table[evaluation_id]
+            self.attacker_generator.set_objectives(self.evaluation_table[evaluation_id][0], attacker_objectives,
                                                    average_flags=attacker_average_flags,
-                                                   average_fitness=attacker_average_fitness, opponent=defender,
-                                                   evaluation_number=evaluation_ID,
+                                                   average_fitness=attacker_average_fitness, opponent=defender_id,
+                                                   evaluation_id=evaluation_id,
                                                    inactive_objectives=attacker_inactive_objectives)
-            self.defender_generator.set_objectives(self.evaluation_table[evaluation_ID][1][1], defender_objectives,
+            self.defender_generator.set_objectives(self.evaluation_table[evaluation_id][1], defender_objectives,
                                                    average_flags=defender_average_flags,
-                                                   average_fitness=defender_average_fitness, opponent=attacker,
-                                                   evaluation_number=evaluation_ID,
+                                                   average_fitness=defender_average_fitness, opponent=attacker_id,
+                                                   evaluation_id=evaluation_id,
                                                    inactive_objectives=defender_inactive_objectives)
-            self.remaining_evolution_evaluations.remove(evaluation_ID)
+            self.remaining_evolution_evaluations.remove(evaluation_id)
 
-            if attacker_ID not in self.opponents_this_generation:
-                self.opponents_this_generation[attacker_ID] = set()
-            self.opponents_this_generation[attacker_ID].add(defender_ID)
-            if defender_ID not in self.opponents_this_generation:
-                self.opponents_this_generation[defender_ID] = set()
-            self.opponents_this_generation[defender_ID].add(attacker_ID)
+            if attacker_id not in self.opponents_this_generation:
+                self.opponents_this_generation[attacker_id] = set()
+            self.opponents_this_generation[attacker_id].add(defender_id)
+            if defender_id not in self.opponents_this_generation:
+                self.opponents_this_generation[defender_id] = set()
+            self.opponents_this_generation[defender_id].add(attacker_id)
         else:  # tournament
-            attacker, defender = self.get_genotype_pair(evaluation_ID)
+            attacker, defender = self.get_genotype_pair(evaluation_id)
             if len(attacker_objectives) > 0:
-                if self.attacker_generator.fitness_function is not None:
+                if isinstance(self.attacker_generator, BaseEvolutionaryGenerator)\
+                        and self.attacker_generator.fitness_function is not None:
                     attacker_objectives["quality"] = self.attacker_generator.fitness_function(attacker_objectives)
                 else:
                     attacker_objectives["quality"] = sum(attacker_objectives.values()) / len(attacker_objectives)
             if len(defender_objectives) > 0:
-                if self.defender_generator.fitness_function is not None:
+                if isinstance(self.defender_generator, BaseEvolutionaryGenerator)\
+                        and self.defender_generator.fitness_function is not None:
                     defender_objectives["quality"] = self.defender_generator.fitness_function(defender_objectives)
                 else:
                     defender_objectives["quality"] = sum(defender_objectives.values()) / len(defender_objectives)
 
-            attacker_generation = self.evaluation_table[evaluation_ID][0][0]
-            defender_generation = self.evaluation_table[evaluation_ID][1][0]
+            attacker_generation = self.tournament_generations[evaluation_id][0]
+            defender_generation = self.tournament_generations[evaluation_id][1]
             for individual_objectives, tournament_objectives in \
                     [(attacker_objectives, self.tournament_objectives_attacker), (defender_objectives, self.tournament_objectives_defender)]:
                 for objective_name in individual_objectives:
@@ -307,7 +346,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
                     if self.data_collector is not None:
                         self.data_collector.set_experiment_master_tournament_objective(objective_name, tournament_objectives[objective_name])
 
-            self.remaining_tournament_evaluations.remove(evaluation_ID)
+            self.remaining_tournament_evaluations.remove(evaluation_id)
             self.write_tournament_data()
 
     def write_tournament_data(self):

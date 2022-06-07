@@ -3,6 +3,8 @@ from modularcoevolution.evolution.basegenotype import BaseGenotype
 from modularcoevolution.geneticprogramming.gpnode import GPNodeTypeRegistry
 from modularcoevolution.diversity.gpdiversity import *
 
+from typing import Any, TypedDict
+
 import random
 
 # BRANCH_CHANCE = 0.5
@@ -11,9 +13,20 @@ MAXIMUM_HEIGHT = 100  # Not enforced, used for precalculation of type tables; tr
 # TODO: Rename variables
 
 
-class GPTree(BaseGenotype):
+class GPTreeParameters(TypedDict, total=False):
+    node_type: type | str
+    return_type: int  # GPNode type
+    min_height: int
+    max_height: int
+    parsimony_weight: float
+    forbidden_nodes: list[int]  # list of GPNode IDs
+    fixed_context: list[str, Any]  # Also specific, can we do more typing enforcement with this?
+    idList: list[int]  # list of GPNode IDs
+
+
+class GPTree(BaseGenotype[GPTreeParameters]):
     # Generate a tree either at random or from a list of expansions.
-    def __init__(self, parameters):
+    def __init__(self, **parameters: GPTreeParameters):
         super().__init__()
 
         self.parameters = parameters

@@ -4,17 +4,20 @@ Todo:
         It's used nowhere else, but might have been needed for CEADS-LIN
 
 """
-
-
-from modularcoevolution.evolution.baseagent import BaseAgent
-
-from typing import Any
-from typing.io import IO
+from typing import Any, Generic, TypeVar, TYPE_CHECKING
+from typing.io import TextIO
 
 import abc
 
+# if TYPE_CHECKING:
+from modularcoevolution.evolution.baseagent import BaseAgent
+from modularcoevolution.evolution.specialtypes import GenotypeID, EvaluationID
 
-class BaseGenerator(metaclass=abc.ABCMeta):
+
+AgentType = TypeVar("AgentType", bound=BaseAgent)
+
+
+class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
     """The superclass of all agent generators which participate in a :class:`.BaseEvolutionWrapper`, e.g.
     an :class:`.EvolutionGenerator` participating in :class:`.Coevolution`.
 
@@ -26,24 +29,15 @@ class BaseGenerator(metaclass=abc.ABCMeta):
 
     """
 
-    _population_size: int
-
-    def __init__(self):
-        self.population_size = -1
-
     @property
+    @abc.abstractmethod
     def population_size(self) -> int:
         """The size of the generator's agent population.
 
         The inheriting class *must* set a population size, even if it's just one.
 
         """
-        assert self._population_size > 0
-        return self._population_size
-
-    @population_size.setter
-    def population_size(self, value: int) -> None:
-        self._population_size = value
+        pass
 
     @abc.abstractmethod
     def get_genotype_with_id(self, agent_id) -> Any:
@@ -58,7 +52,7 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def build_agent_from_id(self, agent_id: int, active: bool) -> BaseAgent:
+    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
         """Return a new instance of an agent based on the given agent ID.
 
         Args:
@@ -70,7 +64,7 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         """
 
     @abc.abstractmethod
-    def get_individuals_to_test(self) -> list[int]:
+    def get_individuals_to_test(self) -> list[GenotypeID]:
         """Get a list of agent IDs in need of evaluation. This can return individuals
         outside of the current generation, if desired (e.g. for a hall of fame).
 
@@ -80,7 +74,7 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False) -> list[int]:
+    def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False) -> list[GenotypeID]:
         """Return a set of agent IDs for high-quality representatives of the population from a certain generation,
         for intergenerational comparisons such as CIAO plots.
 
@@ -99,8 +93,8 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def set_objectives(self, agent_id: int, objectives: dict[str, float], average_flags: dict[str, bool] = None,
-                       average_fitness: bool = False, opponent: BaseAgent = None, evaluation_number: int = None,
+    def set_objectives(self, agent_id: GenotypeID, objectives: dict[str, float], average_flags: dict[str, bool] = None,
+                       average_fitness: bool = False, opponent: GenotypeID = None, evaluation_id: EvaluationID = None,
                        inactive_objectives: dict[str, bool] = None) -> None:
         """Called by a :class:`.BaseEvolutionWrapper` to record objective results from an evaluation
         for the agent with given index.
@@ -122,8 +116,8 @@ class BaseGenerator(metaclass=abc.ABCMeta):
                 across each function call.
                 Defaults to false for every objective.
             average_fitness: Functions as ``average_flags``, but for a fitness value.
-            opponent: The opponent that resulted in these objective values, if applicable.
-            evaluation_number: The ID of evaluation associated with these objective values, for logging purposes.
+            opponent: The ID of the opponent that resulted in these objective values, if applicable.
+            evaluation_id: The ID of evaluation associated with these objective values, for logging purposes.
             inactive_objectives: A dictionary keyed by objective name. Notes that an objective should be marked as
                 "inactive" and only stored for logging purposes, rather than treated as a real objective.
 
@@ -131,7 +125,7 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def next_generation(self, result_log: IO = None, agent_log: IO = None) -> None:
+    def next_generation(self, result_log: TextIO = None, agent_log: TextIO = None) -> None:
         """Signals the generator that a generation has completed and that the generator may modify its population.
 
         Changes to the population should only occur as a result of this method being called. However, modifying the
@@ -146,7 +140,7 @@ class BaseGenerator(metaclass=abc.ABCMeta):
         """
         pass
 
-    def generate_individual(self, parameter_string: str) -> BaseAgent:
+    def generate_individual(self, parameter_string: str) -> AgentType:
         """*Deprecated*, no longer required for implementation.
         Returns a new agent created from the given parameter string, of a type determined by the generator.
 

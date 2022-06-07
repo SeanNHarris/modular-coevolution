@@ -84,7 +84,7 @@ class EvolutionWrapper:  # TODO: Merge into common superclass with CoevolutionWr
 
         individual_ID = individual.genotype.id
         self.generator.set_objectives(self.evaluation_table[evaluation_ID][1], objectives, average_flags=average_flags,
-                                      average_fitness=average_fitness, evaluation_number=evaluation_ID,
+                                      average_fitness=average_fitness, evaluation_id=evaluation_ID,
                                       inactive_objectives=inactive_objectives)
         self.remaining_evolution_evaluations.remove(evaluation_ID)
 

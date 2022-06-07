@@ -1,19 +1,31 @@
-from modularcoevolution.evolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator
-from modularcoevolution.alternategenotypes.selfadaptivewrapper import SelfAdaptiveWrapper
+from modularcoevolution.evolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator, AgentType
+from modularcoevolution.evolution.specialtypes import GenotypeID
+
+from typing import Any, Callable, Generic, Type, TYPE_CHECKING
 
 import math
 import random
 
+# if TYPE_CHECKING:
+from modularcoevolution.evolution.basegenotype import BaseGenotype
+from modularcoevolution.alternategenotypes.selfadaptivewrapper import SelfAdaptiveWrapper
+from modularcoevolution.evolution.datacollector import DataCollector
+
 
 # TODO: Rename variables
 # Normal genetic programming evolutionary algorithm
-class EvolutionGenerator(BaseEvolutionaryGenerator):
-    def __init__(self, agent_class, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25,
-                 recombination_fraction=0.75,
-                 diversity_weight=0, diverse_elites=False, seed=None, fitness_function=None,
-                 data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
-        super().__init__(agent_class, initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
-                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame)
+class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
+    def __init__(self, agent_class: Type[AgentType], initial_size: int, children_size: int,
+                 agent_parameters: dict[str, Any] = None, genotype_parameters: dict[str, Any] = None,
+                 mutation_fraction: float = 0.25, recombination_fraction: float = 0.75,
+                 diversity_weight: float = 0, diverse_elites: bool = False, seed: Any = None,
+                 fitness_function: Callable[[dict[str, float]], float] = None, data_collector: DataCollector = None,
+                 copy_survivor_objectives: bool = False, reevaluate_per_generation: bool = True,
+                 using_hall_of_fame: bool = False):
+        super().__init__(agent_class, initial_size, agent_parameters=agent_parameters,
+                         genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
+                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives,
+                         reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -21,32 +33,30 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
         self.diverse_elites = diverse_elites
         self.max_novelty = 0
 
-    def get_fitness(self, index):
-        return self.population[index].fitness
-
-    # Returns indices
-    def get_representatives_from_generation(self, generation, amount, force=False):
+    def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False)\
+            -> list[GenotypeID]:
+        sorted_population = self.sorted_population(self.past_populations[generation])
         if force:
-            return [i % len(self.past_populations[generation]) for i in range(amount)]
+            indices = [i % len(sorted_population) for i in range(amount)]
         else:
-            return range(min(amount, len(self.past_populations[generation])))
+            indices = range(min(amount, len(sorted_population)))
+        return [sorted_population[i].id for i in indices]
 
     # Creates a new generation
     def next_generation(self, result_log=None, agent_log=None):
         random.shuffle(self.population)  # Python's list.sort maintains existing order between same-valued individuals, which can lead to stagnation in extreme cases such as all zero fitnesses
 
-        for i in range(len(self.population)):
-            novelty = self.get_diversity(i)
+        for genotype in self.population:
+            novelty = self.get_diversity(genotype.id)
             if novelty > self.max_novelty:
                 self.max_novelty = novelty
-            self.population[i].metrics["novelty"] = novelty
+            genotype.metrics["novelty"] = novelty
 
         if self.diverse_elites:
             best = max(self.population, key=lambda x: x.fitness)
             self.population.sort(key=lambda x: self.calculate_diversity_fitness(x), reverse=True)
             self.population.remove(best)
-            self.population.insert(0,
-                                   best)  # Even with diverse elites, keep the absolute best individual as an elite no matter what.
+            self.population.insert(0, best)  # Even with diverse elites, keep the absolute best individual as an elite no matter what.
         else:
             self.population.sort(key=lambda x: x.fitness, reverse=True)  # High fitness is good
 
@@ -184,8 +194,6 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
         self.past_populations.append(self.population)
         self.population = next_generation
         self.population_size = self.initial_size + self.children_size
-        for individual in self.population:
-            self.claim_ID(individual)
         if self.using_hall_of_fame:
             self.hall_of_fame.extend([self.population[i] for i in self.get_representatives_from_generation(self.generation, 1)])
             for individual in self.hall_of_fame:
@@ -230,3 +238,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator):
         child = parent.clone()
         child.recombine(donor)
         return child
+
+    @staticmethod
+    def sorted_population(population: list[BaseGenotype]):
+        return sorted(population, key=lambda x: x.fitness, reverse=True)

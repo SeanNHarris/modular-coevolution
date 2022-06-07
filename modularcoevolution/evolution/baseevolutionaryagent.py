@@ -1,9 +1,16 @@
 from modularcoevolution.evolution.baseagent import BaseAgent
-from modularcoevolution.evolution.basegenotype import BaseGenotype
 
-from typing import Any, Type
+from typing import Any, Generic, Type, TypedDict, TypeVar
 
 import abc
+
+#if TYPE_CHECKING:
+from modularcoevolution.evolution.basegenotype import BaseGenotype
+
+
+AgentParameters = TypeVar("AgentParameters", bound=dict[str, Any])
+GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
+GenotypeParameters = TypeVar("GenotypeParameters", bound=dict[str, Any])
 
 
 class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
@@ -82,7 +89,7 @@ class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
             return
         full_genotype_parameters = self.genotype_default_parameters()
         full_genotype_parameters.update(genotype_parameters)
-        self.genotype = self.genotype_class()(full_genotype_parameters)
+        self.genotype = self.genotype_class()(**full_genotype_parameters)
 
     def __init__(self, parameters: dict[str, Any] = None, genotype: BaseGenotype = None, *args, **kwargs):
         """
@@ -98,6 +105,6 @@ class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
         if genotype is not None:
             self.genotype = genotype
         elif parameters is None and genotype is None:
-            self.genotype = self.genotype_class()(self.genotype_default_parameters())
+            self.genotype = self.genotype_class()(**self.genotype_default_parameters())
 
         super().__init__(parameters, *args, **kwargs)

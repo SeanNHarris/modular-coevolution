@@ -1,12 +1,14 @@
-from modularcoevolution.evolution.basegenotype import BaseGenotype, GenotypeID
-
 from modularcoevolution.evolution.wrappers.coevolution import Coevolution
-from modularcoevolution.evolution.generators.evolutiongenerator import EvolutionGenerator
 
 #import munkres
 
+from typing import TYPE_CHECKING
+
 import math
 import random
+
+# if TYPE_CHECKING:
+from modularcoevolution.evolution.basegenotype import BaseGenotype, GenotypeID
 
 
 class EloCoevolution(Coevolution):
@@ -63,8 +65,8 @@ class EloCoevolution(Coevolution):
 
     # TODO: Handle tournaments
     def send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
-                        defender_average_flags=None, attacker_inactive_objectives=None,
-                        defender_inactive_objectives=None):
+                        defender_average_flags=None, attacker_average_fitness=True, defender_average_fitness=True,
+                        attacker_inactive_objectives=None, defender_inactive_objectives=None):
         self.update_objective_range(attacker_objectives, attacker_objectives)
         self.update_objective_range(defender_objectives, defender_objectives)
         if attacker_average_flags is None:

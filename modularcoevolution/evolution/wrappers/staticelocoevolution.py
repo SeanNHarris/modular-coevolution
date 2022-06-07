@@ -1,5 +1,5 @@
-from modularcoevolution.evolution.wrappers.coevolution import Coevolution
 from modularcoevolution.evolution.wrappers.elocoevolution import EloCoevolution
+
 
 class StaticEloCoevolution(EloCoevolution):
     def __init__(self, *args, **kwargs):

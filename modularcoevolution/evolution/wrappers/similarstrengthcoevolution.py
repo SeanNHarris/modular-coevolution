@@ -1,10 +1,26 @@
-from modularcoevolution.evolution.wrappers.coevolution import *
-from modularcoevolution.evolution.generators.evolutiongenerator import *
+from modularcoevolution.evolution.wrappers.coevolution import Coevolution
+from modularcoevolution.evolution.specialtypes import GenotypeID
 
 from abc import ABCMeta, abstractmethod
+from typing import TYPE_CHECKING
+
+import math
+import random
+
+# if TYPE_CHECKING:
+from modularcoevolution.evolution.generators.evolutiongenerator import EvolutionGenerator
 
 
 class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
+    enable_pairing: bool
+    use_rank: bool
+
+    ratings: dict[GenotypeID, dict[str, float]]
+    min_objectives: dict[str, float]
+    max_objectives: dict[str, float]
+    scores_per_opponent: dict[GenotypeID, dict[GenotypeID, dict[str, list[float]]]]
+
+
     def __init__(self, *args, enable_pairing=True, use_rank=False, **kwargs):
         self.enable_pairing = enable_pairing
         self.use_rank = use_rank
@@ -32,12 +48,12 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
 
     def next_generation(self):
         print("Attacker population:")
-        for attacker in self.attacker_generator.population:
-            objectives = list(attacker.objectives.values())
+        for attacker in self.current_attackers:
+            objectives = list(self.attacker_generator.get_genotype_with_id(attacker).objectives.values())
             print(f"{objectives[0]}, {objectives[1]}")
         print("Defender population:")
-        for defender in self.defender_generator.population:
-            objectives = list(defender.objectives.values())
+        for defender in self.current_defenders:
+            objectives = list(self.defender_generator.get_genotype_with_id(defender).objectives.values())
             print(f"{objectives[0]}, {objectives[1]}")
         super().next_generation()
 
@@ -54,9 +70,9 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
                 self.max_objectives[objective] = max(value, self.max_objectives[objective])
 
     # TODO: Handle tournaments
-    def send_objectives(self, evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags=None,
-                        defender_average_flags=None, attacker_inactive_objectives=None,
-                        defender_inactive_objectives=None):
+    def send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
+                        defender_average_flags=None, attacker_average_fitness=True, defender_average_fitness=True,
+                        attacker_inactive_objectives=None, defender_inactive_objectives=None):
         # args = [evaluation_id, attacker_objectives, defender_objectives]
         # kwargs = {"attacker_average_flags": attacker_average_flags,
         #                "defender_average_flags": defender_average_flags, "attacker_inactive_objectives": attacker_inactive_objectives,
@@ -64,48 +80,46 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         self.update_objective_range(attacker_objectives, attacker_objectives)
         self.update_objective_range(defender_objectives, defender_objectives)
 
-        attacker, defender = self.get_genotype_pair(evaluation_ID)
-        attacker_ID = attacker.genotype.id
-        defender_ID = defender.genotype.id
+        attacker_id, defender_id = self.evaluation_table[evaluation_id]
         for objective in list(attacker_objectives) + list(defender_objectives):
-            if attacker_ID not in self.ratings:
-                self.ratings[attacker_ID] = dict()
-            if objective not in self.ratings[attacker_ID]:
-                self.ratings[attacker_ID][objective] = 0
-            if defender_ID not in self.ratings:
-                self.ratings[defender_ID] = dict()
-            if objective not in self.ratings[defender_ID]:
-                self.ratings[defender_ID][objective] = 0
-            if attacker_ID not in self.scores_per_opponent:
-                self.scores_per_opponent[attacker_ID] = dict()
-            if defender_ID not in self.scores_per_opponent[attacker_ID]:
-                self.scores_per_opponent[attacker_ID][defender_ID] = dict()
-            if objective not in self.scores_per_opponent[attacker_ID][defender_ID]:
-                self.scores_per_opponent[attacker_ID][defender_ID][objective] = list()
-            if defender_ID not in self.scores_per_opponent:
-                self.scores_per_opponent[defender_ID] = dict()
-            if attacker_ID not in self.scores_per_opponent[defender_ID]:
-                self.scores_per_opponent[defender_ID][attacker_ID] = dict()
-            if objective not in self.scores_per_opponent[defender_ID][attacker_ID]:
-                self.scores_per_opponent[defender_ID][attacker_ID][objective] = list()
+            if attacker_id not in self.ratings:
+                self.ratings[attacker_id] = dict()
+            if objective not in self.ratings[attacker_id]:
+                self.ratings[attacker_id][objective] = 0
+            if defender_id not in self.ratings:
+                self.ratings[defender_id] = dict()
+            if objective not in self.ratings[defender_id]:
+                self.ratings[defender_id][objective] = 0
+            if attacker_id not in self.scores_per_opponent:
+                self.scores_per_opponent[attacker_id] = dict()
+            if defender_id not in self.scores_per_opponent[attacker_id]:
+                self.scores_per_opponent[attacker_id][defender_id] = dict()
+            if objective not in self.scores_per_opponent[attacker_id][defender_id]:
+                self.scores_per_opponent[attacker_id][defender_id][objective] = list()
+            if defender_id not in self.scores_per_opponent:
+                self.scores_per_opponent[defender_id] = dict()
+            if attacker_id not in self.scores_per_opponent[defender_id]:
+                self.scores_per_opponent[defender_id][attacker_id] = dict()
+            if objective not in self.scores_per_opponent[defender_id][attacker_id]:
+                self.scores_per_opponent[defender_id][attacker_id][objective] = list()
 
         for objective, score in attacker_objectives.items():
-            self.scores_per_opponent[attacker_ID][defender_ID][objective].append(score)
+            self.scores_per_opponent[attacker_id][defender_id][objective].append(score)
             if objective not in defender_objectives:
-                self.scores_per_opponent[defender_ID][attacker_ID][objective].append(0)
+                self.scores_per_opponent[defender_id][attacker_id][objective].append(0)
         for objective, score in defender_objectives.items():
-            self.scores_per_opponent[defender_ID][attacker_ID][objective].append(score)
+            self.scores_per_opponent[defender_id][attacker_id][objective].append(score)
             if objective not in attacker_objectives:
-                self.scores_per_opponent[attacker_ID][defender_ID][objective].append(0)
+                self.scores_per_opponent[attacker_id][defender_id][objective].append(0)
 
 
-        args = (evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags,
+        args = (evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags,
                 attacker_inactive_objectives, defender_inactive_objectives)
-        if evaluation_ID in self.remaining_evolution_evaluations:
-            self.ratings_to_update.append(attacker_ID)
-            self.ratings_to_update.append(defender_ID)
-            self.scored_pairings.append(evaluation_ID)
-            self.deferred_evaluation_results[evaluation_ID] = args
+        if evaluation_id in self.remaining_evolution_evaluations:
+            self.ratings_to_update.append(attacker_id)
+            self.ratings_to_update.append(defender_id)
+            self.scored_pairings.append(evaluation_id)
+            self.deferred_evaluation_results[evaluation_id] = args
         else:
             super().send_objectives(*args)
 
@@ -119,7 +133,7 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
     def process_deferred_objectives(self):
         self.calculate_ratings(self.ratings_to_update)
 
-        for evaluation_ID, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags, attacker_inactive_objectives, defender_inactive_objectives in self.deferred_evaluation_results.values():
+        for evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags, attacker_inactive_objectives, defender_inactive_objectives in self.deferred_evaluation_results.values():
             if attacker_average_flags is None:
                 attacker_average_flags = dict()
             if defender_average_flags is None:
@@ -130,13 +144,11 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
                 defender_inactive_objectives = list()
 
             self.total_evaluations += 1
-            attacker, defender = self.get_genotype_pair(evaluation_ID)
-            attacker_ID = attacker.genotype.id
-            defender_ID = defender.genotype.id
+            attacker_id, defender_id = self.evaluation_table[evaluation_id]
 
-            attacker_objective_ratings = {(objective + " rating"): self.ratings[attacker_ID][objective] for objective in
+            attacker_objective_ratings = {(objective + " rating"): self.ratings[attacker_id][objective] for objective in
                                        attacker_objectives}
-            defender_objective_ratings = {(objective + " rating"): self.ratings[defender_ID][objective] for objective in
+            defender_objective_ratings = {(objective + " rating"): self.ratings[defender_id][objective] for objective in
                                        defender_objectives}
             attacker_inactive_objectives.extend(attacker_objectives)
             defender_inactive_objectives.extend(defender_objectives)
@@ -145,7 +157,7 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             attacker_average_flags.update({objective: False for objective in attacker_objective_ratings})
             defender_average_flags.update({objective: False for objective in defender_objective_ratings})
 
-            Coevolution.send_objectives(self, evaluation_ID, attacker_objectives, defender_objectives,
+            Coevolution.send_objectives(self, evaluation_id, attacker_objectives, defender_objectives,
                                         attacker_average_flags, defender_average_flags, False, False,
                                         attacker_inactive_objectives, defender_inactive_objectives)
 
@@ -166,9 +178,9 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             pair_ids = self.generate_pairs(len(self.current_attackers), len(self.current_defenders), self.evaluations_per_individual)
         pairs = [(self.current_attackers[i], self.current_defenders[j]) for i, j in pair_ids]
         for pair in pairs:
-            evaluation_ID = self.claim_evaluation_id()
-            self.evaluation_table[evaluation_ID] = pair
-            self.remaining_evolution_evaluations.append(evaluation_ID)
+            evaluation_id = self.claim_evaluation_id()
+            self.evaluation_table[evaluation_id] = pair
+            self.remaining_evolution_evaluations.append(evaluation_id)
 
         self.total_evaluations = 0
 
@@ -176,9 +188,9 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         # pairs = self.generate_matchmaking_pairs(attackers, defenders)
         pairs = self.generate_matchmaking_pairs_greedy(self.current_attackers, self.current_defenders)
         for attacker_index, defender_index in pairs:
-            evaluation_ID = self.claim_evaluation_id()
-            self.evaluation_table[evaluation_ID] = (self.current_attackers[attacker_index], self.current_defenders[defender_index])
-            self.remaining_evolution_evaluations.append(evaluation_ID)
+            evaluation_id = self.claim_evaluation_id()
+            self.evaluation_table[evaluation_id] = (self.current_attackers[attacker_index], self.current_defenders[defender_index])
+            self.remaining_evolution_evaluations.append(evaluation_id)
 
     def generate_matchmaking_pairs_greedy(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
         # Select the closest valid partner to each individual, in decreasing order of fitness

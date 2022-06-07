@@ -3,22 +3,26 @@ Todo:
     * Figure out a more general way to implement a hall of fame.
 
 """
-
-from modularcoevolution.evolution.baseevolutionaryagent import BaseEvolutionaryAgent
-from modularcoevolution.evolution.basegenotype import BaseGenotype, GenotypeID
-from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
-
-from modularcoevolution.evolution.datacollector import DataCollector
+from modularcoevolution.evolution.generators.baseobjectivegenerator import BaseObjectiveGenerator
+from modularcoevolution.evolution.specialtypes import GenotypeID, EvaluationID
 
 from typing import Any, Callable, Generic, Type, TypeVar
 
 import abc
 
+# if TYPE_CHECKING:
+from modularcoevolution.evolution.basegenotype import BaseGenotype
+from modularcoevolution.evolution.baseevolutionaryagent import BaseEvolutionaryAgent
+from modularcoevolution.evolution.datacollector import DataCollector
+
 
 AgentType = TypeVar("AgentType", bound=BaseEvolutionaryAgent)
+AgentParameters = TypeVar("AgentParameters", bound=dict[str, Any])
+GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
+GenotypeParameters = TypeVar("GenotypeParameters", bound=dict[str, Any])
 
 
-class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc.ABCMeta):
+class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], metaclass=abc.ABCMeta):
     """A base class for evolutionary algorithms (EAs) that implements many of the abstract functions from
     :class:`.BaseGenerator`.
 
@@ -49,9 +53,6 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
     parameters from :meth:`.BaseEvolutionaryAgent.genotype_default_parameters`. Overwrites any default parameters."""
     initial_size: int
     """The initial size of the population. Can be treated as the *mu* parameter."""
-    fitness_function: Callable[[dict[str, float]], float]
-    """A function which takes a dictionary of named objectives, and outputs a single fitness value. If unset, fitness
-    will be the average of all active objectives."""
     copy_survivor_objectives: bool
     """If True, genotypes which survive to the next generation will keep their existing objective values. If False,
     objective values will be reset each generation."""
@@ -94,7 +95,7 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
             ``using_hall_of_fame`` currently uses a non-standard implementation of the hall of fame and is subject to
             change. It was intended for a specific application and has not been expanded.
         """
-        super().__init__()
+        super().__init__(fitness_function=fitness_function)
         self.agent_class = agent_class
         self.agent_parameters = agent_parameters
         if self.agent_parameters is None:
@@ -103,7 +104,6 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
         if self.genotype_parameters is None:
             self.genotype_parameters = dict()
         self.initial_size = initial_size
-        self.fitness_function = fitness_function
         self.seed = seed
         self.data_collector = data_collector
         self.copy_survivor_objectives = copy_survivor_objectives
@@ -142,6 +142,9 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
             self.genotypes_by_id[genotype.id] = genotype
 
         self.evaluation_lists = dict()
+
+    def population_size(self) -> int:
+        return len(self.population)
 
     def get_genotype_with_id(self, agent_id) -> BaseGenotype:
         """Return the genotype with the given ID.
@@ -192,8 +195,9 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
             result += [genotype.id for genotype in self.hall_of_fame]
         return result
 
-    def set_objectives(self, agent_id: GenotypeID, objectives, average_flags=None, average_fitness=False, opponent=None,
-                       evaluation_number=None, inactive_objectives=None):
+    def set_objectives(self, agent_id: GenotypeID, objectives: dict[str, float], average_flags: dict[str, bool] = None,
+                       average_fitness: bool = False, opponent: GenotypeID = None, evaluation_id: EvaluationID = None,
+                       inactive_objectives: dict[str, bool] = None) -> None:
         """Called by a :class:`.BaseEvolutionWrapper` to record objective results from an evaluation
         for the agent with given index.
 
@@ -201,7 +205,7 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
         will determine if the stored objective values should be overwritten, or store an average of objectives provided
         across each function call.
 
-        Objectives are stored with :meth:`.BaseGenotype.set_objectives`.
+        Objectives are stored with :meth:`.BaseObjectiveTracker.set_objectives`.
         Fitness values are also calculated and stored in this function, as well as novelty metrics.
 
         Args:
@@ -214,37 +218,20 @@ class BaseEvolutionaryGenerator(BaseGenerator, Generic[AgentType], metaclass=abc
                 across each function call.
                 Defaults to false for every objective.
             average_fitness: Functions as ``average_flags``, but for a fitness value.
-            opponent: The opponent that resulted in these objective values, if applicable.
-            evaluation_number: The ID of evaluation associated with these objective values, for logging purposes.
+            opponent: The ID of the opponent that resulted in these objective values, if applicable.
+            evaluation_id: The ID of evaluation associated with these objective values, for logging purposes.
             inactive_objectives: A dictionary keyed by objective name. Notes that an objective will be marked as
                 "inactive" and only stored for logging purposes, rather than treated as a real objective.
 
         """
-        if average_flags is None:
-            average_flags = {objective: False for objective in objectives}
-        if opponent is not None:
-            assert isinstance(opponent, BaseEvolutionaryAgent)
-        individual = self.population[agent_id]
-        individual.set_objectives(objectives, average_flags, inactive_objectives)
-        if len(individual.get_active_objectives()) > 0:
-            if self.fitness_function is not None:
-                raw_fitness = self.fitness_function(individual.get_active_objectives())
-                fitness_modifier = individual.get_fitness_modifier(raw_fitness)
-                fitness = raw_fitness + fitness_modifier
-                individual.set_fitness(fitness, average_fitness)
-                individual.metrics["quality"] = raw_fitness
-            else:
-                raw_fitness = sum(individual.get_active_objectives().values()) /\
-                                        len(individual.get_active_objectives())
-                fitness_modifier = individual.get_fitness_modifier(raw_fitness)
-                fitness = raw_fitness + fitness_modifier
-                individual.set_fitness(fitness, average_fitness)
-                individual.metrics["quality"] = raw_fitness
+        super().set_objectives(agent_id, objectives, average_flags, average_fitness, opponent, evaluation_id,
+                               inactive_objectives)
+        individual = self.get_genotype_with_id(agent_id)
         if "novelty" not in individual.metrics:
             individual.metrics["novelty"] = self.get_diversity(agent_id)
         if individual.id not in self.evaluation_lists:
             self.evaluation_lists[individual.id] = list()
-        self.evaluation_lists[individual.id].append((objectives, evaluation_number))
+        self.evaluation_lists[individual.id].append((objectives, evaluation_id))
 
         if self.data_collector is not None:
             if "agent_type_name" in self.agent_parameters:

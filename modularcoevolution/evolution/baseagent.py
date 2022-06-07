@@ -92,6 +92,7 @@ class BaseAgent(metaclass=AgentTypeRegistry):
             **kwargs: Consumes additional keyword arguments from the subclass.
 
         """
+        super().__init__(*args, **kwargs)
 
         self.active = active
         if agent_type_name is not None:

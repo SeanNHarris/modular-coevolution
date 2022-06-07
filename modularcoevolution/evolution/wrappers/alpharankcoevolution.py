@@ -17,8 +17,8 @@ class AlphaRankCoevolution(SimilarStrengthCoevolution):
 
     def calculate_ratings(self, ratings_to_update):
         num_agents = len(self.current_attackers) + len(self.current_defenders)
-        example_attacker, example_defender = self.get_genotype_pair(self.scored_pairings[0])
-        for objective in self.scores_per_opponent[example_attacker][example_defender]:
+        example_attacker_id, example_defender_id = self.evaluation_table[self.scored_pairings[0]]
+        for objective in self.scores_per_opponent[example_attacker_id][example_defender_id]:
             payoff_matrix = numpy.zeros((2, num_agents, num_agents))
             for evaluation_id in self.scored_pairings:
                 attacker_id, defender_id = self.evaluation_table[evaluation_id]
