@@ -24,9 +24,9 @@ class GPTreeParameters(TypedDict, total=False):
     idList: list[int]  # list of GPNode IDs
 
 
-class GPTree(BaseGenotype[GPTreeParameters]):
+class GPTree(BaseGenotype):
     # Generate a tree either at random or from a list of expansions.
-    def __init__(self, **parameters: GPTreeParameters):
+    def __init__(self, parameters):
         super().__init__()
 
         self.parameters = parameters
@@ -115,8 +115,11 @@ class GPTree(BaseGenotype[GPTreeParameters]):
     def randomNode(self, outputType=None):
         return random.choice(self.root.get_node_list())
 
-    # Subtree mutation
     def mutate(self):
+        mutation_function = random.choices((self.subtree_mutate, self.point_mutate), (0.5, 0.5), k=1)[0]
+        mutation_function()
+
+    def subtree_mutate(self):
         oldSubtree = self.randomNode()
         meanHeight = oldSubtree.get_height()
         realHeight = int(round(random.gauss(meanHeight, 1)))
@@ -129,7 +132,9 @@ class GPTree(BaseGenotype[GPTreeParameters]):
             raise Exception
         self.creation_method = "Mutation"
 
-    def point_mutate(self, mutation_amount):
+    def point_mutate(self, mutation_amount = None):
+        if mutation_amount is None:
+            mutation_amount = 1 / len(self)
         for node in self.root.get_node_list():
             if random.random() < mutation_amount:
                 new_node = self.nodeType(function_id=self.nodeType.random_function(node.output_type, child_types=node.input_types), fixed_context=self.fixed_context)

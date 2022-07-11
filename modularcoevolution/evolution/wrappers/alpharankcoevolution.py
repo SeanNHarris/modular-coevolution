@@ -8,23 +8,36 @@ import math
 import faulthandler
 
 class AlphaRankCoevolution(SimilarStrengthCoevolution):
+
+    payoff_matrix: numpy.ndarray
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         faulthandler.enable()
+
+    def start_generation(self):
+        super().start_generation()
+        num_agents = len(self.current_attackers) + len(self.current_defenders)
+        self.payoff_matrix = numpy.zeros((2, num_agents, num_agents))
 
     def normalize_objective(self, objective, value):
         return value / (self.max_objectives[objective] - self.min_objectives[objective])
 
     def calculate_ratings(self, ratings_to_update):
-        num_agents = len(self.current_attackers) + len(self.current_defenders)
-        example_attacker_id, example_defender_id = self.evaluation_table[self.scored_pairings[0]]
-        for objective in self.scores_per_opponent[example_attacker_id][example_defender_id]:
-            payoff_matrix = numpy.zeros((2, num_agents, num_agents))
+        objectives = set(self.evaluation_objectives_attacker[self.scored_pairings[0]]) |\
+                     set(self.evaluation_objectives_defender[self.scored_pairings[0]])
+        for objective in objectives:
+            observed_pairs = set()
+            # Pull attacker and defender pairs to update the payoff matrix for from evaluations,
+            # but use the full history for each pair. Skip further evaluations of the same pair if present.
             for evaluation_id in self.scored_pairings:
                 attacker_id, defender_id = self.evaluation_table[evaluation_id]
-                attacker, defender = self.get_genotype_pair(evaluation_id)
                 assert attacker_id in self.current_attackers
                 assert defender_id in self.current_defenders
+                if (attacker_id, defender_id) in observed_pairs:
+                    continue
+                else:
+                    observed_pairs.add((attacker_id, defender_id))
                 attacker_scores = self.scores_per_opponent[attacker_id][defender_id][objective]
                 attacker_payoff = self.normalize_objective(objective, sum(attacker_scores) / len(attacker_scores))
                 defender_scores = self.scores_per_opponent[defender_id][attacker_id][objective]
@@ -35,10 +48,10 @@ class AlphaRankCoevolution(SimilarStrengthCoevolution):
                 attacker_index = self.current_attackers.index(attacker_id)
                 defender_index = self.current_defenders.index(defender_id) + len(self.current_attackers)
                 # assert attacker_index != defender_index
-                payoff_matrix[0, attacker_index, defender_index] = attacker_payoff
-                payoff_matrix[1, attacker_index, defender_index] = defender_payoff
-                payoff_matrix[0, defender_index, attacker_index] = defender_payoff
-                payoff_matrix[1, defender_index, attacker_index] = attacker_payoff
+                self.payoff_matrix[0, attacker_index, defender_index] = attacker_payoff
+                self.payoff_matrix[1, attacker_index, defender_index] = defender_payoff
+                self.payoff_matrix[0, defender_index, attacker_index] = defender_payoff
+                self.payoff_matrix[1, defender_index, attacker_index] = attacker_payoff
 
             # assert numpy.array_equal(payoff_matrix[0], payoff_matrix[1].T)
             # heuristic_payoff_tables = [heuristic_payoff_table.from_matrix_game(payoff_matrix[0])]
@@ -50,7 +63,7 @@ class AlphaRankCoevolution(SimilarStrengthCoevolution):
             #assert is_symmetric
 
             (rhos, rho_m, pi, num_profiles, num_strats_per_population) =\
-                alpharank.compute(payoff_matrix[0:1], alpha=1e2)
+                alpharank.compute(self.payoff_matrix[0:1], alpha=1e2)
             # alpharank.compute_and_report_alpharank(heuristic_payoff_tables, alpha=1e2)
             print(f"Pi: {sorted(pi, reverse=True)}")
             for index, attacker_id in enumerate(self.current_attackers):

@@ -126,14 +126,14 @@ class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], meta
             if self.seed is not None and i < len(self.seed):
                 parameters = default_parameters.copy()
                 parameters.update(self.seed[i])
-                individual = self.genotype_class(**parameters)
+                individual = self.genotype_class(parameters)
                 self.population.append(individual)
                 population_set.add(hash(individual))
             else:
                 unique = False
                 individual = None
                 while not unique:
-                    individual = self.genotype_class(**default_parameters.copy())
+                    individual = self.genotype_class(default_parameters.copy())
                     if hash(individual) not in population_set:
                         unique = True
                 self.population.append(individual)

@@ -1,5 +1,5 @@
 from modularcoevolution.evolution.wrappers.coevolution import Coevolution
-from modularcoevolution.evolution.specialtypes import GenotypeID
+from modularcoevolution.evolution.specialtypes import EvaluationID, GenotypeID
 
 from abc import ABCMeta, abstractmethod
 from typing import TYPE_CHECKING
@@ -19,6 +19,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
     min_objectives: dict[str, float]
     max_objectives: dict[str, float]
     scores_per_opponent: dict[GenotypeID, dict[GenotypeID, dict[str, list[float]]]]
+    evaluation_objectives_attacker: dict[EvaluationID, dict[str, float]]
+    evaluation_objectives_defender: dict[EvaluationID, dict[str, float]]
 
 
     def __init__(self, *args, enable_pairing=True, use_rank=False, **kwargs):
@@ -32,6 +34,8 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         self.max_objectives = dict()
 
         self.scores_per_opponent = dict()  # ID -> opponent ID -> list of objective sets
+        self.evaluation_objectives_attacker = dict()
+        self.evaluation_objectives_defender = dict()
 
         self.deferred_evaluation_results = dict()
         self.ratings_to_update = list()
@@ -69,14 +73,13 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             else:
                 self.max_objectives[objective] = max(value, self.max_objectives[objective])
 
-    # TODO: Handle tournaments
-    def send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
-                        defender_average_flags=None, attacker_average_fitness=True, defender_average_fitness=True,
-                        attacker_inactive_objectives=None, defender_inactive_objectives=None):
-        # args = [evaluation_id, attacker_objectives, defender_objectives]
-        # kwargs = {"attacker_average_flags": attacker_average_flags,
-        #                "defender_average_flags": defender_average_flags, "attacker_inactive_objectives": attacker_inactive_objectives,
-        #                "defender_inactive_objectives": defender_inactive_objectives}
+    def preprocess_send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
+                                    defender_average_flags=None, attacker_average_fitness=True, defender_average_fitness=True,
+                                    attacker_inactive_objectives=None, defender_inactive_objectives=None):
+        super().preprocess_send_objectives(evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags,
+                                            defender_average_flags, attacker_average_fitness, defender_average_fitness,
+                                            attacker_inactive_objectives, defender_inactive_objectives)
+
         self.update_objective_range(attacker_objectives, attacker_objectives)
         self.update_objective_range(defender_objectives, defender_objectives)
 
@@ -113,6 +116,16 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
                 self.scores_per_opponent[attacker_id][defender_id][objective].append(0)
 
 
+    # TODO: Handle tournaments
+    def send_objectives(self, evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags=None,
+                        defender_average_flags=None, attacker_average_fitness=True, defender_average_fitness=True,
+                        attacker_inactive_objectives=None, defender_inactive_objectives=None):
+
+        self.preprocess_send_objectives(evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags,
+                                         defender_average_flags, attacker_average_fitness, defender_average_fitness,
+                                         attacker_inactive_objectives, defender_inactive_objectives)
+
+        attacker_id, defender_id = self.evaluation_table[evaluation_id]
         args = (evaluation_id, attacker_objectives, defender_objectives, attacker_average_flags, defender_average_flags,
                 attacker_inactive_objectives, defender_inactive_objectives)
         if evaluation_id in self.remaining_evolution_evaluations:
@@ -121,7 +134,7 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             self.scored_pairings.append(evaluation_id)
             self.deferred_evaluation_results[evaluation_id] = args
         else:
-            super().send_objectives(*args)
+            self.main_send_objectives(*args)
 
         if len(self.deferred_evaluation_results) == len(self.remaining_evolution_evaluations) > 0:
             self.process_deferred_objectives()
@@ -157,7 +170,7 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             attacker_average_flags.update({objective: False for objective in attacker_objective_ratings})
             defender_average_flags.update({objective: False for objective in defender_objective_ratings})
 
-            Coevolution.send_objectives(self, evaluation_id, attacker_objectives, defender_objectives,
+            self.main_send_objectives(evaluation_id, attacker_objectives, defender_objectives,
                                         attacker_average_flags, defender_average_flags, False, False,
                                         attacker_inactive_objectives, defender_inactive_objectives)
 
@@ -222,8 +235,6 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         return [(attackers.index(attacker), defenders.index(defender)) for attacker, defender in pairs]
 
     def generate_matchmaking_pairs_local_search(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
-        alternate_pairs = self.generate_matchmaking_pairs_greedy(attackers, defenders)  # TODO: REMOVE AFTER TESTING
-
         '''min_attacker_rating = 1000000
         max_attacker_rating = -1000000
         min_defender_rating = 1000000

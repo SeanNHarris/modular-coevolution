@@ -217,6 +217,8 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
         self.past_populations.append(self.population)
         self.past_fronts.append(nondominating_fronts)
         self.population = next_generation
+        for genotype in self.population:
+            self.genotypes_by_id[genotype.id] = genotype
         self.population_size = self.initial_size + self.children_size
         if self.using_hall_of_fame:
             self.hall_of_fame.extend([self.population[i] for i in self.get_representatives_from_generation(self.generation, 1)])

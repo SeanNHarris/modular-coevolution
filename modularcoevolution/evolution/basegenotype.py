@@ -28,9 +28,8 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
     creation_method: str
     """A string describing what method was used to create this genotype, such as "mutation", for logging purposes."""
 
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.id = claim_genotype_id()
 
         self.parents = list()

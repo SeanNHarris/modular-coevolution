@@ -87,7 +87,7 @@ class LinearGenotype(BaseGenotype):
         self.creation_method = "Recombination"
 
     def clone(self, copy_objectives={}):
-        parameters = {"min_value": self.min_value, "max_value": self.max_value, "gene_mutation_rate": self.gene_mutation_rate, "values": self.genes, "loop_genes": self.loop_genes}
+        parameters = self.get_parameters()
         cloned_genotype = type(self)(parameters)  # TODO: Had to change this to type(self) for inheritance, make sure this is consistent elsewhere. Maybe this function can be partly moved to the base class?
         if copy_objectives:
             for objective in self.objectives:
@@ -113,3 +113,10 @@ class LinearGenotype(BaseGenotype):
 
     def __hash__(self):
         return hash(tuple(self.genes))
+
+    def get_values(self):
+        return list(self.genes)
+
+    def get_parameters(self):
+        parameters = {"min_value": self.min_value, "max_value": self.max_value, "gene_mutation_rate": self.gene_mutation_rate, "values": self.genes, "loop_genes": self.loop_genes}
+        return parameters

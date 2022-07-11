@@ -194,6 +194,8 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         self.past_populations.append(self.population)
         self.population = next_generation
         self.population_size = self.initial_size + self.children_size
+        for genotype in self.population:
+            self.genotypes_by_id[genotype.id] = genotype
         if self.using_hall_of_fame:
             self.hall_of_fame.extend([self.population[i] for i in self.get_representatives_from_generation(self.generation, 1)])
             for individual in self.hall_of_fame:

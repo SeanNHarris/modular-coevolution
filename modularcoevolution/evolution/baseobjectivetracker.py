@@ -38,7 +38,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     """Stores the previous values of each objective, to record how it has changed over time for logging purposes."""
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.fitness = None
         self.objectives = dict()
         self.inactive_objectives = list()

@@ -10,6 +10,7 @@ import random
 
 
 class GPNode(metaclass=GPNodeTypeRegistry):
+    # TODO: Use strings or other values for id which aren't dependent on ordering, for compatibility reasons/clarity
     functions = None
     literals = None
 

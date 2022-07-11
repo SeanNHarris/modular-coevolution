@@ -28,6 +28,7 @@ class SelfAdaptiveWrapper(BaseGenotype):
         mutation_function(self.genotype, *mutation_parameters)
         self.self_adaptive_parameters["mutation rate"] = min(
             max(self.self_adaptive_parameters["mutation rate"] + random.gauss(0, 0.1), 0.1), 1)
+        # TODO: Don't modify mutation amount if it's not applicable to the current mutation type!
         self.self_adaptive_parameters["mutation amount"] = min(
             max(self.self_adaptive_parameters["mutation amount"] + random.gauss(0, 0.1), 0.1), 1)
         if random.random() < .25:
