@@ -173,7 +173,7 @@ class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], meta
         if agent_id not in self.genotypes_by_id:
             raise ValueError(f"The agent ID {agent_id} is not present in this generator."
                              f"Ensure the correct generator is being queried.")
-        agent = self.agent_class(genotype=self.genotypes_by_id[agent_id], active=active, **self.agent_parameters)
+        agent = self.agent_class(genotype=self.genotypes_by_id[agent_id], active=active, parameters=self.agent_parameters)
         return agent
     
     def get_individuals_to_test(self) -> list[GenotypeID]:
@@ -228,7 +228,7 @@ class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], meta
                                inactive_objectives)
         individual = self.get_genotype_with_id(agent_id)
         if "novelty" not in individual.metrics:
-            individual.metrics["novelty"] = self.get_diversity(agent_id)
+            individual.metrics["novelty"] = self.get_diversity(agent_id, min(100, len(self.population)))
         if individual.id not in self.evaluation_lists:
             self.evaluation_lists[individual.id] = list()
         self.evaluation_lists[individual.id].append((objectives, evaluation_id))

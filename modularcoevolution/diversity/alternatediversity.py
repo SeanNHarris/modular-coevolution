@@ -5,7 +5,8 @@ import random
 
 
 def genetic_algorithm_distance(genome_1, genome_2):
-    return math.sqrt(sum([(x-y)**2 for x, y in zip(genome_1.genes, genome_2.genes)]))
+    #return math.sqrt(sum([(x-y)**2 for x, y in zip(genome_1.genes, genome_2.genes)]))
+    return math.dist(genome_1.genes, genome_2.genes)
 
 
 # TODO: These are identical to the GP diversity one except for the distance, combine them
@@ -21,7 +22,7 @@ def genetic_algorithm_diversity(population, reference=None, samples=None):
         comparisons = random.sample(population, samples)
     for comparison in comparisons:
         distance_sum += genetic_algorithm_distance(reference, comparison)
-    return distance_sum / len(population)
+    return distance_sum / samples
 
 
 def multiple_genome_distance(multiple_1, multiple_2):
@@ -48,4 +49,4 @@ def multiple_genome_diversity(population, reference=None, samples=None):
         comparisons = random.sample(population, samples)
     for comparison in comparisons:
         distance_sum += multiple_genome_distance(reference, comparison)
-    return distance_sum / len(population)
+    return distance_sum / samples

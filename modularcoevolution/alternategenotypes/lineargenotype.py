@@ -1,6 +1,8 @@
 from modularcoevolution.diversity.alternatediversity import genetic_algorithm_diversity
 from modularcoevolution.evolution.basegenotype import BaseGenotype
 
+from typing import Iterable
+
 import random
 
 # TODO: These should probably be parameters somewhere? Either per individual (may be inconsistent), per method (may be tedious), or per class (might be problematic for multiple populations)
@@ -30,7 +32,7 @@ class LinearGenotype(BaseGenotype):
             raise TypeError("If \"values\" is not provided, a \"length\" must be.")
 
         if "min_value" in parameters:
-            if isinstance(parameters["min_value"], list):
+            if isinstance(parameters["min_value"], Iterable):
                 self.min_value = list()
                 for i in range(self.length):
                     self.min_value.append(parameters["min_value"][i % len(parameters["min_value"])])
@@ -40,7 +42,7 @@ class LinearGenotype(BaseGenotype):
             self.min_value = [MIN_VALUE_DEFAULT for _ in range(self.length)]
 
         if "max_value" in parameters:
-            if isinstance(parameters["max_value"], list):
+            if isinstance(parameters["max_value"], Iterable):
                 self.max_value = list()
                 for i in range(self.length):
                     self.max_value.append(parameters["max_value"][i % len(parameters["max_value"])])
@@ -95,6 +97,8 @@ class LinearGenotype(BaseGenotype):
                 cloned_genotype.objective_statistics[objective] = self.objective_statistics[objective]
                 cloned_genotype.objectives_counter[objective] = self.objectives_counter[objective]
                 cloned_genotype.past_objectives[objective] = self.past_objectives[objective]
+            cloned_genotype.evaluated = True
+            cloned_genotype.fitness = self.fitness
         cloned_genotype.parents.append(self)
         cloned_genotype.creation_method = "Cloning"
         return cloned_genotype

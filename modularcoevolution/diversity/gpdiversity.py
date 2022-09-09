@@ -44,4 +44,4 @@ def edit_diversity(population, reference=None, samples=0):
         comparisons = random.sample(population, samples)
     for comparison in comparisons:
         distance_sum += edit_distance(reference, comparison)
-    return distance_sum / len(population)
+    return distance_sum / samples

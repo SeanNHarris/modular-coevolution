@@ -55,7 +55,7 @@ class EvolutionWrapper:  # TODO: Merge into common superclass with CoevolutionWr
                 self.remaining_evolution_evaluations.append(evaluation_ID)
 
     def get_individual(self, evaluation_ID):
-        return self.generator[self.evaluation_table[evaluation_ID][1]]
+        return self.generator.build_agent_from_id(self.evaluation_table[evaluation_ID], active=True)
 
     def get_remaining_evaluations(self):
         remaining_evaluations = list()
@@ -83,7 +83,7 @@ class EvolutionWrapper:  # TODO: Merge into common superclass with CoevolutionWr
                                                     {individual_name: objectives})
 
         individual_ID = individual.genotype.id
-        self.generator.set_objectives(self.evaluation_table[evaluation_ID][1], objectives, average_flags=average_flags,
+        self.generator.set_objectives(self.evaluation_table[evaluation_ID], objectives, average_flags=average_flags,
                                       average_fitness=average_fitness, evaluation_id=evaluation_ID,
                                       inactive_objectives=inactive_objectives)
         self.remaining_evolution_evaluations.remove(evaluation_ID)

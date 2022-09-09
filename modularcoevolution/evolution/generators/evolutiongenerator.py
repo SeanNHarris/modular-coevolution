@@ -35,7 +35,10 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
 
     def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False)\
             -> list[GenotypeID]:
-        sorted_population = self.sorted_population(self.past_populations[generation])
+        if generation == len(self.past_populations):
+            sorted_population = self.sorted_population(self.population)
+        else:
+            sorted_population = self.sorted_population(self.past_populations[generation])
         if force:
             indices = [i % len(sorted_population) for i in range(amount)]
         else:
@@ -47,10 +50,13 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         random.shuffle(self.population)  # Python's list.sort maintains existing order between same-valued individuals, which can lead to stagnation in extreme cases such as all zero fitnesses
 
         for genotype in self.population:
-            novelty = self.get_diversity(genotype.id)
+            if "novelty" in genotype.metrics:
+                novelty = genotype.metrics["novelty"]
+            else:
+                novelty = self.get_diversity(genotype.id, min(100, len(self.population)))
+                genotype.metrics["novelty"] = novelty
             if novelty > self.max_novelty:
                 self.max_novelty = novelty
-            genotype.metrics["novelty"] = novelty
 
         if self.diverse_elites:
             best = max(self.population, key=lambda x: x.fitness)

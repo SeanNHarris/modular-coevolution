@@ -49,6 +49,7 @@ class SelfAdaptiveWrapper(BaseGenotype):
                 cloned_genotype.objective_statistics[objective] = self.objective_statistics[objective]
                 cloned_genotype.objectives_counter[objective] = self.objectives_counter[objective]
                 cloned_genotype.past_objectives[objective] = self.past_objectives[objective]
+            cloned_genotype.evaluated = True
         return cloned_genotype
 
     def __hash__(self):
