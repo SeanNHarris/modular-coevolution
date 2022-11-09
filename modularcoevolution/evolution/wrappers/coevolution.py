@@ -349,7 +349,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
                                                    evaluation_id=evaluation_id,
                                                    inactive_objectives=defender_inactive_objectives)
             self.remaining_evolution_evaluations.remove(evaluation_id)
-        else:  # tournament
+        elif evaluation_id in self.remaining_tournament_evaluations:
             attacker, defender = self.get_genotype_pair(evaluation_id)
             if len(attacker_objectives) > 0:
                 if isinstance(self.attacker_generator, BaseEvolutionaryGenerator) \
