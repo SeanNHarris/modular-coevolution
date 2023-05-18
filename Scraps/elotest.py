@@ -74,7 +74,7 @@ if __name__ == "__main__":
         game_count = 0
         while game_count < 4*10:# or abs(average_score_deviance) > 0.001:
             if len(pairings) == 0:
-                #pairings = get_pairings(attacker_ratings, defender_ratings)
+                #pairing_map = get_pairings(attacker_ratings, defender_ratings)
                 pairings = get_pairings_selective(attacker_ratings, defender_ratings, previous_pairings)
                 previous_pairings.extend(pairings.copy())
             if random.random() < 1.0:

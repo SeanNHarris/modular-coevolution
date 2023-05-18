@@ -78,14 +78,14 @@ class LinearGenotype(BaseGenotype):
         for i in range(len(self.genes)):
             if random.random() < 0.5:
                 self.genes[i] = donor.genes[i]
-        self.parents.append(donor)
+        self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"
 
     def recombine(self, donor):
         crossover_point = random.randrange(0, len(self.genes) - 0)  # Can copy whole individual, needed to prevent error on size 1 or 2
         for i in range(crossover_point):
             self.genes[i] = donor.genes[i]
-        self.parents.append(donor)
+        self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"
 
     def clone(self, copy_objectives={}):
@@ -99,7 +99,7 @@ class LinearGenotype(BaseGenotype):
                 cloned_genotype.past_objectives[objective] = self.past_objectives[objective]
             cloned_genotype.evaluated = True
             cloned_genotype.fitness = self.fitness
-        cloned_genotype.parents.append(self)
+        cloned_genotype.parent_ids.append(self.id)
         cloned_genotype.creation_method = "Cloning"
         return cloned_genotype
 

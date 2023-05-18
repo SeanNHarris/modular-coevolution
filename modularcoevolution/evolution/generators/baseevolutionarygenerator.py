@@ -244,7 +244,7 @@ class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], meta
 
             self.data_collector.set_individual_data(agent_type_name, individual.id, individual.get_raw_genotype(),
                                                     evaluations, individual.objective_statistics, individual.metrics,
-                                                    [parent.id for parent in individual.parents],
+                                                    [parent_id for parent_id in individual.parent_ids],
                                                     individual.creation_method)
 
     def get_diversity(self, reference_id: GenotypeID = None, samples: int = None) -> float:

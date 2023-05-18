@@ -5,7 +5,7 @@ Todo:
 
 from modularcoevolution.evolution.specialtypes import ObjectiveStatistics
 
-from typing import Any
+from typing import Any, Optional
 
 import abc
 import math
@@ -18,7 +18,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
 
     objectives: dict[str, float]
     """A dictionary mapping objective names to objective values."""
-    fitness: float | None
+    fitness: Optional[float]
     """*(Deprecated)* A value summarizing the quality of an individual. Set to `None` if no fitness has been calculated.
     """
     inactive_objectives: list[str]

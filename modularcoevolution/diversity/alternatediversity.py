@@ -26,13 +26,19 @@ def genetic_algorithm_diversity(population, reference=None, samples=None):
 
 
 def multiple_genome_distance(multiple_1, multiple_2):
-    from modularcoevolution.alternategenotypes import lineargenotype
+    from modularcoevolution.alternategenotypes.lineargenotype import LinearGenotype
     from modularcoevolution.geneticprogramming.gptree import GPTree
     distance_sum = 0
-    for member_1, member_2 in zip(multiple_1.members, multiple_2.members):
+    for member_name in multiple_1.members:
+        if member_name not in multiple_2.members:
+            raise ValueError("The given genotypes have incompatible structures.")
+        member_1 = multiple_1.members[member_name]
+        member_2 = multiple_2.members[member_name]
         if isinstance(member_1, GPTree):
             distance_sum += GPDiversity.edit_distance(member_1, member_2)
-        if isinstance(member_1, lineargenotype):
+        elif isinstance(member_1, LinearGenotype):
+            distance_sum += genetic_algorithm_distance(member_1, member_2)
+        else:
             distance_sum += genetic_algorithm_distance(member_1, member_2)
     return distance_sum / len(multiple_1.members)
 
@@ -45,6 +51,7 @@ def multiple_genome_diversity(population, reference=None, samples=None):
     distance_sum = 0
     if samples is None:
         comparisons = population
+        samples = len(population)
     else:
         comparisons = random.sample(population, samples)
     for comparison in comparisons:

@@ -110,10 +110,10 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
 
             for individual in self.population:
                 parent_string = "({})".format(individual.creation_method)
-                if len(individual.parents) == 1:
-                    parent_string = "{} ({})".format(individual.parents[0].id, individual.creation_method)
-                elif len(individual.parents) == 2:
-                    parent_string = "{}, {} ({})".format(individual.parents[0].id, individual.parents[0].id,
+                if len(individual.parent_ids) == 1:
+                    parent_string = "{} ({})".format(individual.parent_ids[0], individual.creation_method)
+                elif len(individual.parent_ids) == 2:
+                    parent_string = "{}, {} ({})".format(individual.parent_ids[0], individual.parent_ids[1],
                                                          individual.creation_method)
 
                 evaluation_list = self.evaluation_lists[individual.id]

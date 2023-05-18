@@ -227,7 +227,7 @@ class Coevolution(Generic[AttackerType, DefenderType]):
                 pairs.append((i, j))
                 lesser_count[i] += 1
         if max(lesser_count.values()) - min(lesser_count.values()) > 1:
-            print("Failure in pair generation: Uneven evaluation pairings.")
+            print("Failure in pair generation: Uneven evaluation pairing_map.")
             return self.generate_pairs(size_1, size_2, pairs_per_individual, None, allow_repeats)
         if reverse:
             pairs = [(j, i) for (i, j) in pairs]

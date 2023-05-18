@@ -3,7 +3,7 @@ from modularcoevolution.evolution.basegenotype import BaseGenotype
 from modularcoevolution.geneticprogramming.gpnode import GPNodeTypeRegistry
 from modularcoevolution.diversity.gpdiversity import *
 
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Union
 
 import random
 
@@ -14,7 +14,7 @@ MAXIMUM_HEIGHT = 100  # Not enforced, used for precalculation of type tables; tr
 
 
 class GPTreeParameters(TypedDict, total=False):
-    node_type: type | str
+    node_type: Union[type, str]
     return_type: int  # GPNode type
     min_height: int
     max_height: int
@@ -164,7 +164,7 @@ class GPTree(BaseGenotype):
         except:
             print("Recombination produced invalid tree!")
             raise Exception
-        self.parents.append(donor)
+        self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"
 
     # Creates a deep copy of the tree
@@ -177,7 +177,8 @@ class GPTree(BaseGenotype):
                 cloned_genotype.objectives_counter[objective] = self.objectives_counter[objective]
                 cloned_genotype.past_objectives[objective] = self.past_objectives[objective]
             cloned_genotype.evaluated = True
-        cloned_genotype.parents.append(self)
+            cloned_genotype.fitness = self.fitness
+        cloned_genotype.parent_ids.append(self.id)
         cloned_genotype.creation_method = "Cloning"
         return cloned_genotype
 
@@ -201,7 +202,7 @@ class GPTree(BaseGenotype):
     def get_fitness_modifier(self, raw_fitness):
         assert self.parsimony_weight > 0  # Check that the old parameter is not being used.
         parsimony_pressure = min(0.9, self.parsimony_weight * len(self))  # Cap penalty at 90%
-        fitness_modifier = -raw_fitness * parsimony_pressure  # Percentage penalty based on size
+        fitness_modifier = -parsimony_pressure * abs(raw_fitness)  # Percentage penalty based on size
         # print("Parsimony pressure penalty of " + str(parsimony_pressure))
         return fitness_modifier
 

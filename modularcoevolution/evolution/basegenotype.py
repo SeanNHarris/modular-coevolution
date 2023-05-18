@@ -22,7 +22,7 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
     """The ID associated with this genotype. ID values are unique across all genotypes (assuming no transfer between
     multiple python processes)."""
 
-    parents: list["BaseGenotype"]
+    parent_ids: list["GenotypeID"]
     """A list of genotypes used as parents for this one. Could be empty for random genotypes, or have a size
     of 1 for genotypes produced through mutation only."""
     creation_method: str
@@ -32,30 +32,26 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
         super().__init__(*args, **kwargs)
         self.id = claim_genotype_id()
 
-        self.parents = list()
+        self.parent_ids = list()
         self.creation_method = "Parthenogenesis"
 
     @abc.abstractmethod
-    def mutate(self) -> "BaseGenotype":
-        """An evolutionary mutation operator which returns a mutated child.
-
-        Returns:
-            A genotype of the same class which is similar to the current individual, but with random changes.
+    def mutate(self):
+        """An evolutionary mutation operator which modifies the current individual. Clone the parent first for standard
+        evolutionary mutation.
 
         """
         pass
 
     @abc.abstractmethod
-    def recombine(self, donor: "BaseGenotype") -> "BaseGenotype":
-        """An evolutionary recombinaton operator which returns a child combining elements of this genotype and the
-        ``donor`` genotype.
+    def recombine(self, donor: "BaseGenotype"):
+        """An evolutionary recombinaton operator which combines elements of this genotype and the
+        ``donor`` genotype. Clone the donor parent first for standard
+        evolutionary recombination.
 
         Args:
             donor: Another genotype of the same class which should be combined into this one. In asymmetric
                 recombination operators, this individual is treated as the secondary parent.
-
-        Returns:
-            A genotype of the same class which is similar to the current individual and the ``donor`` individual.
 
         """
         pass
@@ -75,7 +71,7 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def __hash__(self):
+    def __hash__(self) -> int:
         pass
 
     @abc.abstractmethod

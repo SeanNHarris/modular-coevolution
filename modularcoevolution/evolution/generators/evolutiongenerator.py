@@ -21,7 +21,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                  diversity_weight: float = 0, diverse_elites: bool = False, seed: Any = None,
                  fitness_function: Callable[[dict[str, float]], float] = None, data_collector: DataCollector = None,
                  copy_survivor_objectives: bool = False, reevaluate_per_generation: bool = True,
-                 using_hall_of_fame: bool = False):
+                 using_hall_of_fame: bool = False, tournament_size: int = 2):
         super().__init__(agent_class, initial_size, agent_parameters=agent_parameters,
                          genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
                          data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives,
@@ -31,6 +31,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         self.recombination_fraction = recombination_fraction
         self.diversity_weight = diversity_weight
         self.diverse_elites = diverse_elites
+        self.tournament_size = tournament_size
         self.max_novelty = 0
 
     def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False)\
@@ -53,7 +54,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             if "novelty" in genotype.metrics:
                 novelty = genotype.metrics["novelty"]
             else:
-                novelty = self.get_diversity(genotype.id, min(100, len(self.population)))
+                novelty = self.get_diversity(genotype.id, min(30, len(self.population)))
                 genotype.metrics["novelty"] = novelty
             if novelty > self.max_novelty:
                 self.max_novelty = novelty
@@ -92,10 +93,10 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
 
             for individual in self.population:
                 parent_string = "({})".format(individual.creation_method)
-                if len(individual.parents) == 1:
-                    parent_string = "{} ({})".format(individual.parents[0].id, individual.creation_method)
-                elif len(individual.parents) == 2:
-                    parent_string = "{}, {} ({})".format(individual.parents[0].id, individual.parents[0].id,
+                if len(individual.parent_ids) == 1:
+                    parent_string = "{} ({})".format(individual.parent_ids[0], individual.creation_method)
+                elif len(individual.parent_ids) == 2:
+                    parent_string = "{}, {} ({})".format(individual.parent_ids[0], individual.parent_ids[1],
                                                          individual.creation_method)
 
                 evaluation_list = self.evaluation_lists[individual.id]
@@ -226,14 +227,14 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                     best_fitness - worst_fitness):
                 return choice
 
-    def tournament_selection(self):
-        tournament = random.sample(self.population, 2)
+    def tournament_selection(self, k):
+        tournament = random.sample(self.population, k)
         tournament.sort(key=self.calculate_diversity_fitness, reverse=True)
         return tournament[0]
 
     def generate_mutation(self):
         #parent = self.fitness_proportionate_selection()
-        parent = self.tournament_selection()
+        parent = self.tournament_selection(self.tournament_size)
         child = parent.clone()
         child.mutate()
         return child
@@ -241,8 +242,8 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
     def generate_recombination(self):
         #parent = self.fitness_proportionate_selection()
         #donor = self.fitness_proportionate_selection()
-        parent = self.tournament_selection()
-        donor = self.tournament_selection()
+        parent = self.tournament_selection(self.tournament_size)
+        donor = self.tournament_selection(self.tournament_size)
         child = parent.clone()
         child.recombine(donor)
         return child

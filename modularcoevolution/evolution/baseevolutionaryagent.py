@@ -13,7 +13,7 @@ GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
 GenotypeParameters = TypeVar("GenotypeParameters", bound=dict[str, Any])
 
 
-class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
+class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCMeta):
     """The superclass of all agents to be used in evolution (through :class:`.BaseEvolutionaryGenerator`).
 
     These agents have an associated :attr:`genotype`, which is a :class:`.BaseGenotype` that handles behavior related
@@ -21,7 +21,7 @@ class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
 
     """
 
-    genotype: BaseGenotype
+    genotype: GenotypeType
     """The genotype associated with this agent. This is primarily interacted with by a
     :class:`.BaseEvolutionaryGenerator` to assign and view objective values from evaluation.
     
@@ -30,7 +30,7 @@ class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def genotype_class(cls) -> Type[BaseGenotype]:
+    def genotype_class(cls) -> Type[GenotypeType]:
         """Defines the class of this evolutionary agent's genotype.
 
         Returns: The class to be used for this agent's genotype.
@@ -101,7 +101,7 @@ class BaseEvolutionaryAgent(BaseAgent, metaclass=abc.ABCMeta):
             **kwargs: Passes extra keyword arguments to :meth:`.BaseAgent.__init__`.
 
         """
-        assert genotype is None or isinstance(genotype, self.genotype_class())
+        self.genotype = None
         if genotype is not None:
             self.genotype = genotype
         elif parameters is None and genotype is None:
