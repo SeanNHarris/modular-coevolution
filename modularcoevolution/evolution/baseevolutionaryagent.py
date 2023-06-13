@@ -105,6 +105,6 @@ class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCM
         if genotype is not None:
             self.genotype = genotype
         elif parameters is None and genotype is None:
-            self.genotype = self.genotype_class()(**self.genotype_default_parameters())
+            self.genotype = self.genotype_class()(self.genotype_default_parameters())
 
         super().__init__(parameters, *args, **kwargs)

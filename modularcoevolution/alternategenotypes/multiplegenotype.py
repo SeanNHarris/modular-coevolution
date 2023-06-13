@@ -1,48 +1,49 @@
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Union
 
 from modularcoevolution.diversity.alternatediversity import multiple_genome_diversity
 from modularcoevolution.evolution.basegenotype import BaseGenotype
 
 
-MemberType = TypeVar("MemberType", bound=BaseGenotype)
+MemberType = TypeVar('MemberType', bound=BaseGenotype)
 
 
 class MultipleGenotype(BaseGenotype, Generic[MemberType]):
-    members: dict[str | int, MemberType]
+    # TODO: This generic typing doesn't handle heterogeneous genotypes well
+    members: dict[Union[str, int], MemberType]
 
     def __init__(self, parameters):
         super().__init__(parameters)
-        if "members" in parameters:
+        if 'members' in parameters:
             self.members = dict()
-            for name, member in parameters["members"].items():
+            for name, member in parameters['members'].items():
                 self.members[name] = member.clone()
             return
 
-        if "subgenotypes" in parameters and "subparameters" in parameters:
+        if 'subgenotypes' in parameters and 'subparameters' in parameters:
             self.members = dict()
-            for name in parameters["subgenotypes"]:
-                genotype = parameters["subgenotypes"][name]
-                subparameters = parameters["subparameters"][name]
+            for name in parameters['subgenotypes']:
+                genotype = parameters['subgenotypes'][name]
+                subparameters = parameters['subparameters'][name]
                 self.members[name] = genotype(subparameters)
-        elif "subgenotypes" in parameters or "subparameters" in parameters:
-            raise TypeError("Must have both \"subgenotypes\" and \"subparameters\".")
+        elif 'subgenotypes' in parameters or 'subparameters' in parameters:
+            raise TypeError('Must have both \'subgenotypes\' and \'subparameters\'.')
         else:
-            raise TypeError("Must provide either \"members\" or both \"subgenotypes\" and \"subparameters\".")
+            raise TypeError('Must provide either \'members\' or both \'subgenotypes\' and \'subparameters\'.')
 
     def mutate(self) -> None:
         for name, member in self.members.items():
             member.mutate()
-        self.creation_method = "Mutation"
+        self.creation_method = 'Mutation'
 
-    def recombine(self, donor: "MultipleGenotype") -> None:
+    def recombine(self, donor: 'MultipleGenotype') -> None:
         for name in self.members:
             assert isinstance(self.members[name], type(donor.members[name]))
             self.members[name].recombine(donor.members[name])
         self.parent_ids.append(donor.id)
-        self.creation_method = "Recombination"
+        self.creation_method = 'Recombination'
 
-    def clone(self, copy_objectives=False) -> "MultipleGenotype":
-        parameters = {"members": self.members}
+    def clone(self, copy_objectives=False) -> 'MultipleGenotype':
+        parameters = {'members': self.members}
         cloned_genotype = MultipleGenotype(parameters)
         if copy_objectives:
             for objective in self.objectives:
@@ -53,10 +54,10 @@ class MultipleGenotype(BaseGenotype, Generic[MemberType]):
             cloned_genotype.evaluated = True
             cloned_genotype.fitness = self.fitness
         cloned_genotype.parent_ids.append(self.id)
-        cloned_genotype.creation_method = "Cloning"
+        cloned_genotype.creation_method = 'Cloning'
         for name in self.members:
             cloned_genotype.members[name].parent_ids.append(self.members[name].id)
-            cloned_genotype.members[name].creation_method = "Cloning"
+            cloned_genotype.members[name].creation_method = 'Cloning'
         return cloned_genotype
 
     def get_fitness_modifier(self, raw_fitness):
@@ -74,10 +75,13 @@ class MultipleGenotype(BaseGenotype, Generic[MemberType]):
         return multiple_genome_diversity(population, reference, samples)
 
     def __str__(self):
-        string = "(Multiple Genotype)"
+        string = '(Multiple Genotype)'
         for name in self.members:
-            string += f"\n{name}: {self.members[name]}"
+            string += f'\n{name}: {self.members[name]}'
         return string
 
     def __hash__(self) -> int:
         return hash(tuple(self.members.values()))
+    
+    def __getitem__(self, item: Union[int, str]) -> MemberType:
+        return self.members[item]
