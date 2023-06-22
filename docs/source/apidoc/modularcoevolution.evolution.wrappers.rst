@@ -6,14 +6,6 @@ modularcoevolution.evolution.wrappers package
    :undoc-members:
    :show-inheritance:
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   modularcoevolution.evolution.wrappers.benchmarks
-
 Submodules
 ----------
 

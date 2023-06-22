@@ -46,7 +46,7 @@ autodoc_default_options = {
     # 'special-members': '__init__',
 }
 
-autodoc_mock_imports = ["cma", "open_spiel", "numba"]
+autodoc_mock_imports = ["open_spiel", "numba"]
 
 add_module_names = False
 python_use_unqualified_type_names = True
@@ -57,7 +57,7 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ["setup.py"]
+exclude_patterns = []
 
 
 # -- Options for HTML output -------------------------------------------------

@@ -1,7 +1,7 @@
-modularcoevolution.utilities.Timer module
+modularcoevolution.utilities.timer module
 =========================================
 
-.. automodule:: modularcoevolution.utilities.Timer
+.. automodule:: modularcoevolution.utilities.timer
    :members:
    :undoc-members:
    :show-inheritance:
