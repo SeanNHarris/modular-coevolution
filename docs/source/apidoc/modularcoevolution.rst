@@ -17,6 +17,5 @@ Subpackages
    modularcoevolution.diversity
    modularcoevolution.evolution
    modularcoevolution.geneticprogramming
-   modularcoevolution.neuroevolution
    modularcoevolution.postprocessing
    modularcoevolution.utilities

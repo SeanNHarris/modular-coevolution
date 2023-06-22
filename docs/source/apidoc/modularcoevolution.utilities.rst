@@ -12,4 +12,4 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   modularcoevolution.utilities.Timer
+   modularcoevolution.utilities.timer
