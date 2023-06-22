@@ -1,5 +1,5 @@
 /.virtualenvs/
 /.idea/
-/documentation/build/
-/documentation/source/_static/
-/documentation/source/_templates/
+/docs/build/
+/docs/source/_static/
+/docs/source/_templates/
