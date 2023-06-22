@@ -40,8 +40,12 @@ class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCM
 
     @classmethod
     @abc.abstractmethod
-    def genotype_default_parameters(cls) -> dict[str, Any]:
+    def genotype_default_parameters(cls, agent_parameters: dict[str, Any]) -> dict[str, Any]:
         """Defines the default parameters to be sent when creating this agent's genotype.
+
+        Args:
+            agent_parameters: (Optional) The parameters passed to the agent if any, to supply context
+            (e.g. genotype length).
 
         Returns: The default parameters to be sent to this agent's genotype ``__init__``
 

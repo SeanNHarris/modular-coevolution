@@ -121,7 +121,7 @@ class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], meta
 
         population_set = set()
         for i in range(self.initial_size):
-            default_parameters = self.agent_class.genotype_default_parameters()
+            default_parameters = self.agent_class.genotype_default_parameters(agent_parameters)
             default_parameters.update(self.genotype_parameters)
             if self.seed is not None and i < len(self.seed):
                 parameters = default_parameters.copy()
