@@ -1,2 +1,6 @@
 /.virtualenvs/
 /.idea/
+/documentation/build/
+/documentation/source/apidoc/
+/documentation/source/_static/
+/documentation/source/_templates/

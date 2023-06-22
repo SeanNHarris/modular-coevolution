@@ -332,20 +332,20 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
             print(f"{attacker_id}: {self.ratings[attacker_id]} <---> {defender_id}: {self.ratings[defender_id]}")
         return pairs
 
-    def generate_matchmaking_pairs(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
-        distances = list()
-        for attacker_id in attackers:
-            distances.append(list())
-            for defender_id in defenders:
-                if (attacker_id, defender_id) in self.completed_pairings:
-                    distances[-1].append(float("inf"))
-                    continue
-                sum_of_squares = 0
-                for objective in self.ratings[attacker_id]:
-                    sum_of_squares += (self.ratings[attacker_id][objective] - self.ratings[defender_id][objective]) ** 2
-                distances[-1].append(math.sqrt(sum_of_squares))
-
-        pairs = munkres.Munkres().compute(distances)
-        distance_sum = sum([distances[attacker][defender] for attacker, defender in pairs])
-        print("Ideal distance of {}".format(distance_sum))
-        return pairs
+    # def generate_matchmaking_pairs(self, attackers: list[GenotypeID], defenders: list[GenotypeID]):
+    #     distances = list()
+    #     for attacker_id in attackers:
+    #         distances.append(list())
+    #         for defender_id in defenders:
+    #             if (attacker_id, defender_id) in self.completed_pairings:
+    #                 distances[-1].append(float("inf"))
+    #                 continue
+    #             sum_of_squares = 0
+    #             for objective in self.ratings[attacker_id]:
+    #                 sum_of_squares += (self.ratings[attacker_id][objective] - self.ratings[defender_id][objective]) ** 2
+    #             distances[-1].append(math.sqrt(sum_of_squares))
+    #
+    #     pairs = munkres.Munkres().compute(distances)
+    #     distance_sum = sum([distances[attacker][defender] for attacker, defender in pairs])
+    #     print("Ideal distance of {}".format(distance_sum))
+    #     return pairs
