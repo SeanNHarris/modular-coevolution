@@ -61,7 +61,7 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
         if truncated_front < len(nondominating_fronts):  # False on the first generation, since everyone survives
             survivors.extend(nondominating_fronts[truncated_front][0:self.initial_size - len(survivors)])
 
-        objective_names = self.population[0].get_active_objectives().keys()
+        objective_names = self.population[0].objectives.keys()
         best_objectives = dict()
         average_nondominated_objectives = dict()
         average_objectives = dict()

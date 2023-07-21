@@ -26,6 +26,11 @@ class BaseAgent(metaclass=AgentTypeRegistry):
     behaviors from running locally.
     """
 
+    agent_type_name: str
+    """The agent type name for this specific instance.
+    Uses the class-defined agent type name by default, or can be overridden by an argument to :meth:`__init__`.
+    """
+
     @abc.abstractmethod
     def get_parameters(self) -> dict[str, Any]:
         """Gets the parameters for this agent.

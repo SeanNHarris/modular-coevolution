@@ -6,4 +6,4 @@ from modularcoevolution.evolution.baseagent import BaseAgent
 from modularcoevolution.evolution.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.evolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator
-from modularcoevolution.evolution.wrappers.coevolution import Coevolution
+from modularcoevolution.evolution.wrappers.coevolution import Coevolution, EvolutionEndedException

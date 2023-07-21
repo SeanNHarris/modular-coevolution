@@ -40,6 +40,10 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def __init__(self, *args, **kwargs):
+        pass
+
+    @abc.abstractmethod
     def get_genotype_with_id(self, agent_id) -> Any:
         """Return the agent parameters associated with the given ID. The type used for storing agent parameters is not
         prescribed by this abstract base class, but is frequently a :class:`.BaseGenotype`.
@@ -93,33 +97,17 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def set_objectives(self, agent_id: GenotypeID, objectives: dict[str, float], average_flags: dict[str, bool] = None,
-                       average_fitness: bool = False, opponent: GenotypeID = None, evaluation_id: EvaluationID = None,
-                       inactive_objectives: dict[str, bool] = None) -> None:
-        """Called by a :class:`.BaseEvolutionWrapper` to record objective results from an evaluation
+    def submit_evaluation(self, agent_id: GenotypeID, evaluation_id: EvaluationID, evaluation_results: dict[str, Any]) -> None:
+        """Called by a :class:`.BaseEvolutionWrapper` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Objectives should be stored internally in some way, as the :class:`.BaseEvolutionWrapper` is not required
         to maintain them.
 
-        This function can be called multiple times for the same agent. When this occurs, consult ``average_flags``
-        to determine if the stored objective values should be overwritten, or store an average of objectives provided
-        across each function call.
-
         Args:
-            agent_id: The ID of the agent associated with the objective results.
-            objectives: A dictionary keyed by objective name holding the value for each objective.
-            average_flags: A dictionary keyed by objective name.
-                When the value for an objective is False, the previously stored objective should be overwritten with the
-                new one.
-                When the value for an objective is True, the stored objective should be an average for this objective
-                across each function call.
-                Defaults to false for every objective.
-            average_fitness: Functions as ``average_flags``, but for a fitness value.
-            opponent: The ID of the opponent that resulted in these objective values, if applicable.
-            evaluation_id: The ID of evaluation associated with these objective values, for logging purposes.
-            inactive_objectives: A dictionary keyed by objective name. Notes that an objective should be marked as
-                "inactive" and only stored for logging purposes, rather than treated as a real objective.
+            agent_id: The index of the agent associated with the evaluation results.
+            evaluation_id: The ID of the evaluation.
+            evaluation_results: The results of the evaluation.
 
         """
         pass

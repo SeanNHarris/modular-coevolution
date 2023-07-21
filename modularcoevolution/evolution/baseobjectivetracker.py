@@ -1,56 +1,178 @@
-"""
-Todo:
-    * Investigate removing fitness as a special value, and making it into an objective named "fitness".
-"""
-
-from modularcoevolution.evolution.specialtypes import ObjectiveStatistics
-
-from typing import Any, Optional
+from typing import Any, Optional, Literal, TypedDict, Type, Union
 
 import abc
 import math
 
 
+MetricTypes = Union[float, str, list, dict]
+
+
+class MetricConfiguration(TypedDict):
+    """A `TypedDict` used to configure a metric or objective and describe how it should be handled."""
+    name: str
+    """A string key for storing this metric."""
+    is_objective: bool
+    """If true, this metric is considered an objective.
+    Objectives must be numeric values.
+    Objectives are reported to generators, such as fitness for standard evolutionary algorithms.
+    Other metrics are just stored for logging and analysis purposes."""
+    repeat_mode: Literal['replace', 'average', 'min', 'max']
+    """How to handle multiple submissions of the same metric. The following modes are supported:
+    - ``'replace'``: Overwrite the previous value with the new one.
+    - ``'average'``: Record the mean of all submitted values. Must be a numeric type.
+    - ``'min'``: Record the minimum of all submitted values. Must be a numeric type.
+    - ``'max'``: Record the maximum of all submitted values. Must be a numeric type."""
+    log_history: bool
+    """If true, store a history of all submitted values for this metric. Avoid using this unnecessarily, as it can impact the size of the log file."""
+
+
+class MetricSubmission(TypedDict, MetricConfiguration):
+    """A `TypedDict` used to send metrics and objectives, and describe how they should be handled."""
+    value: MetricTypes
+    """The value to submit for this metric."""
+
+
+class MetricStatistics(TypedDict, total=False):
+    """A `TypedDict` storing running statistics about submitted metric values."""
+    count: int
+    """The number of times this metric has been submitted."""
+    mean: float
+    """The mean value of submitted metric values."""
+    std_dev_intermediate: float
+    """An intermediate value used to calculate the standard deviation as a running total via Welford's Algorithm."""
+    standard_deviation: float
+    """The standard deviation of this metric."""
+    minimum: float
+    """The minimum observed value of this metric."""
+    maximum: float
+    """The maximum observed value of this metric."""
+
+
 class BaseObjectiveTracker(metaclass=abc.ABCMeta):
-    """A base class for anything that needs to track objectives or fitness. Formerly part of :class:`.BaseGenotype`.
+    """
+    A base class for anything that needs to track objectives or fitness. Formerly part of :class:`.BaseGenotype`.
 
+    This class can store a variety of data metrics about the individual, some of which are flagged as objectives.
+    Objectives are used by :class:`.BaseObjectiveGenerator` to calculate fitness values.
+    Other metrics are only logged by the :class:`.DataCollector` or other logging tools.
     """
 
-    objectives: dict[str, float]
-    """A dictionary mapping objective names to objective values."""
-    fitness: Optional[float]
-    """*(Deprecated)* A value summarizing the quality of an individual. Set to `None` if no fitness has been calculated.
-    """
-    inactive_objectives: list[str]
-    """A list of objectives which can be recorded, but will not be used in any calculations for evolution or statistics.
-    """
-    objective_statistics: dict[str, ObjectiveStatistics]
-    """A set of statistics maintained for each objective when multiple objective updates have been performed."""
-    fitness_counter: int
-    """How many fitness values have been sent, for statistical calculations."""
-    objectives_counter: dict[str, int]
-    """How many objective values have been sent for each objective, for statistical calculations."""
-    evaluated: bool
-    """Has this genotype been evaluated at least once? If ``False``, it will not have valid objectives"""
-    metrics: dict[str, Any]
-    """Additional values to be stored by name for this agent for logging purposes. These can vary by subclass."""
-    past_objectives: dict[str, list[float]]
-    """Stores the previous values of each objective, to record how it has changed over time for logging purposes."""
+    metrics: dict[str, MetricTypes]
+    """A dictionary of metric values tracked by this individual, by name."""
+    metric_statistics: dict[str, MetricStatistics]
+    """The statistics tracked for each metric, by name."""
+    metric_histories: dict[str, list[MetricTypes]]
+    """A history of all values submitted for each metric, by name. Only stored if ``log_history=True`` was passed to :meth:`.submit_metric`."""
+    _objective_names: list[str]
+    """The names of metrics which were submitted as objectives."""
+
+    @property
+    def objectives(self) -> dict[str, float]:
+        """A dictionary of objective values, by metric name."""
+        return {name: self.metrics[name] for name in self._objective_names}
+
+    @property
+    def is_evaluated(self) -> bool:
+        """Has this individual been evaluated at least once? If ``False``, it will not have valid objectives."""
+        return len(self._objective_names) > 0
+
+    @property
+    def fitness(self) -> float:
+        """An objective named ``fitness``, given as a shortcut for single-objective evolution.
+        Use :meth:`.set_fitness` as a shortcut to set this value."""
+        if 'fitness' not in self.objectives:
+            if len(self.objectives) == 1:
+                bad_objective = next(iter(self.objectives))
+                raise KeyError(f"This individual does not have an objective named 'fitness', but a single-objective class is being used which requires it. You may need to rename the single objective {bad_objective} to 'fitness'.")
+            raise KeyError("This individual does not have an objective named 'fitness', but a single-objective class is being used which requires it.")
+
+        return self.objectives['fitness']
 
     def __init__(self, *args, **kwargs):
         super().__init__()
-        self.fitness = None
-        self.objectives = dict()
-        self.inactive_objectives = list()
-        self.objective_statistics = dict()
-        self.fitness_counter = 0
-        self.objectives_counter = dict()
-        self.evaluated = False
-        self.metrics = dict()
-        self.past_objectives = dict()
+        self.metrics = {}
+        self.metric_statistics = {}
+        self.metric_histories = {}
+        self._objective_names = []
+
+    def submit_metric(self, submission: MetricSubmission) -> None:
+        """Submit a metric value. This should typically be handled by :class:`.BaseObjectiveGenerator`.
+
+        Args:
+            submission: A :class:`.MetricSubmission` describing the metric to submit.
+
+        """
+        metric = submission['name']
+        value = submission['value']
+
+        if not isinstance(value, float) and submission['repeat_mode'] != 'replace':
+            raise ValueError(f"Metric {metric} was submitted with repeat_mode={submission['repeat_mode']}, but is not a numeric value.")
+
+        new_metric = metric not in self.metrics
+        if new_metric:
+            self.metrics[metric] = value
+            if isinstance(value, float):
+                self.metric_statistics[metric] = {
+                    "count": 0,
+                    "mean": 0,
+                    "std_dev_intermediate": 0,
+                    "standard_deviation": 0,
+                    "minimum": math.inf,
+                    "maximum": -math.inf
+                }
+            else:
+                self.metric_statistics[metric] = {
+                    "count": 0
+                }
+            if submission['is_objective']:
+                if not isinstance(value, float):
+                    raise ValueError(f"Objective {metric} must be a numeric value.")
+                self._objective_names.append(metric)
+            if submission['log_history']:
+                self.metric_histories[metric] = [value]
+        else:
+            if submission['is_objective'] != (metric in self._objective_names):
+                raise ValueError(f"Metric {metric} was submitted with is_objective={submission['is_objective']}, but was previously submitted with is_objective={metric in self._objective_names}.")
+            if submission['log_history'] != (metric in self.metric_histories):
+                raise ValueError(f"Metric {metric} was submitted with log_history={submission['log_history']}, but was previously submitted with log_history={metric in self.metric_histories}.")
+
+        # Update statistics
+        self.metric_statistics[metric]["count"] += 1
+        # Update numeric statistics when relevant
+        if isinstance(value, float):
+            previous_mean = self.metric_statistics[metric]["mean"]
+            total = self.metric_statistics[metric]["mean"] * (self.metric_statistics[metric]["count"] - 1) + value
+            self.metric_statistics[metric]["mean"] = total / self.metric_statistics[metric]["count"]
+            self.metric_statistics[metric]["std_dev_intermediate"] += (value - previous_mean) * (value - self.metric_statistics[metric]["mean"])
+            self.metric_statistics[metric]["standard_deviation"] = math.sqrt(self.metric_statistics[metric]["std_dev_intermediate"] / self.metric_statistics[metric]["count"])
+            self.metric_statistics[metric]["minimum"] = min(self.metric_statistics[metric]["minimum"], value)
+            self.metric_statistics[metric]["maximum"] = max(self.metric_statistics[metric]["maximum"], value)
+
+        # Update metric value
+        if not new_metric:
+            if submission['repeat_mode'] == 'replace':
+                self.metrics[metric] = value
+            elif submission['repeat_mode'] == 'average':
+                self.metrics[metric] = self.metric_statistics[metric]["mean"]
+            elif submission['repeat_mode'] == 'min':
+                self.metrics[metric] = self.metric_statistics[metric]["minimum"]
+            elif submission['repeat_mode'] == 'max':
+                self.metrics[metric] = self.metric_statistics[metric]["maximum"]
+
+            if submission['log_history']:
+                self.metric_histories[metric].append(value)
+
+    def set_objectives(self, objectives: dict[str, float]) -> None:
+        raise NotImplementedError("This method has been removed. Use submit_metric instead.")
+
+    def get_active_objectives(self):
+        raise NotImplementedError("This method has been removed.")
+
+    def get_fitness_modifier(self, raw_fitness):
+        return 0
 
     def set_fitness(self, fitness: float, average: bool = False) -> None:
-        """Set the ``fitness`` value, keeping an average if desired.
+        """Shortcut for single-objective evolution. Sets an objective named ``'fitness'``.
 
         Args:
             fitness: A fitness value to store.
@@ -58,56 +180,10 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
                 method. If False, the stored fitness value will be set to the given value, overwriting previous values.
 
         """
-        if self.fitness is None or not average:
-            self.fitness = fitness
-            self.fitness_counter = 1
-        else:
-            self.fitness = (self.fitness * self.fitness_counter + fitness) / (self.fitness_counter + 1)
-            self.fitness_counter += 1
-
-    def set_objectives(self, objective_list, average_flags=None, inactive_objectives=None):
-        if average_flags is None:
-            average_flags = dict()
-        for objective in objective_list:
-            if objective not in average_flags:
-                average_flags[objective] = False
-
-        self.evaluated = True
-
-        if inactive_objectives is not None:
-            self.inactive_objectives = inactive_objectives
-
-        for objective, value in objective_list.items():
-            if objective not in self.objectives or not average_flags[objective]:
-                self.objectives[objective] = value
-                self.objectives_counter[objective] = 1
-                self.objective_statistics[objective] = {"mean": value, "std_dev_intermediate": 0,
-                                                        "standard_deviation": 0,
-                                                        "minimum": value, "maximum": value}
-            else:
-                self.objectives[objective] = (self.objectives[objective] * self.objectives_counter[objective] +
-                                              objective_list[objective]) / (self.objectives_counter[objective] + 1)
-                standard_deviation_intermediate = self.objective_statistics[objective]["std_dev_intermediate"] + (
-                            value - self.objectives[objective]) * (value - self.objective_statistics[objective]["mean"])
-                # Objectives counter is already subtracting one
-                standard_deviation = math.sqrt(standard_deviation_intermediate / self.objectives_counter[objective])
-                self.objective_statistics[objective] = {"mean": self.objectives[objective],
-                                                        "std_dev_intermediate": standard_deviation_intermediate,
-                                                        "standard_deviation": standard_deviation,
-                                                        "minimum": min(value,
-                                                                       self.objective_statistics[objective]["minimum"]),
-                                                        "maximum": max(value,
-                                                                       self.objective_statistics[objective]["maximum"])}
-
-                self.objectives_counter[objective] += 1
-            if objective not in self.past_objectives:
-                self.past_objectives[objective] = list()
-            self.past_objectives[objective].append(self.objectives[objective])
-            self.metrics["past objectives"] = self.past_objectives
-
-    def get_active_objectives(self):
-        return {objective: self.objectives[objective] for objective in self.objectives if
-                objective not in self.inactive_objectives}
-
-    def get_fitness_modifier(self, raw_fitness):
-        return 0
+        self.submit_metric(MetricSubmission(
+            name='fitness',
+            value=fitness,
+            is_objective=True,
+            repeat_mode='average' if average else 'replace',
+            log_history=False
+        ))

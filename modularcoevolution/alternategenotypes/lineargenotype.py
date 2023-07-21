@@ -14,27 +14,62 @@ GENE_MUTATION_RATE_DEFAULT = 0.33
 
 
 class LinearGenotypeParameters(TypedDict, total=False):
-    values: list[float]  # Optional, explicitly set the gene values
+    """
+    A `TypedDict` of parameters for a `LinearGenotype`.
+    """
 
-    length: int  # Length of the genotype
-    min_value: Union[float, Sequence[float]]  # The min allowed value of each gene
-    max_value: Union[float, Sequence[float]]  # The max allowed value of each gene, exclusive
-    loop_genes: Union[bool, Sequence[bool]]  # Specifies genes where `max_value` loops to `min_value` such as angles
-    round_genes: Union[bool, Sequence[bool]]  # Specifies genes that should only take integer values
+    values: list[float]
+    """Optional, explicitly set the gene values."""
 
-    gene_mutation_rate: float  # Probability of mutating each gene
+    length: int
+    """Length of the genotype."""
+    min_value: Union[float, Sequence[float]]
+    """The min allowed value of each gene.
+    Passing a ``float`` uses that setting for all genes.
+    Passing a sequence will apply the settings to genes in order.
+    If the sequence is shorter than :attr:`length`, it will loop back to the beginning of the sequence."""
+    max_value: Union[float, Sequence[float]]
+    """The max allowed value of each gene, exclusive.
+    Passing a ``float`` uses that setting for all genes.
+    Passing a sequence will apply the settings to genes in order.
+    If the sequence is shorter than :attr:`length`, it will loop back to the beginning of the sequence."""
+    loop_genes: Union[bool, Sequence[bool]]
+    """Specifies genes where :attr:`max_value` loops to :attr:`min_value` such as angles.
+    Passing a ``bool`` uses that setting for all genes.
+    Passing a sequence will apply the settings to genes in order.
+    If the sequence is shorter than :attr:`length`, it will loop back to the beginning of the sequence.
+    Defaults to ``False``."""
+    round_genes: Union[bool, Sequence[bool]]
+    """Specifies genes that should only take integer values. These genes will be rounded after mutation.
+    Passing a ``bool`` uses that setting for all genes.
+    Passing a sequence will apply the settings to genes in order.
+    If the sequence is shorter than :attr:`length`, it will loop back to the beginning of the sequence.
+    Defaults to ``False``."""
+
+    gene_mutation_rate: float
+    """The probability of mutation per-gene."""
 
 
 class LinearGenotype(BaseGenotype):
+    """
+    A genotype made from a sequence of numerical values.
+    """
     genes: list[float]
+    """The values of the genotype"""
 
     length: int
+    """The number of genes in the genotype."""
     min_value: list[float]
+    """The min allowed value of each gene."""
     max_value: list[float]
+    """The max allowed value of each gene, exclusive."""
     loop_genes: list[bool]
+    """Specifies genes where :attr:`max_value` loops to :attr:`min_value` such as angles."""
     round_genes: list[bool]
+    """Specifies genes that should only take integer values. These genes will be rounded after mutation."""
 
     gene_mutation_rate: float
+    """The probability of mutation per-gene."""
 
     def __init__(self, parameters: LinearGenotypeParameters):
         super().__init__()

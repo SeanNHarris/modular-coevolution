@@ -190,7 +190,7 @@ class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], meta
 
         """
         result = [genotype.id for genotype in self.population
-                  if self.reevaluate_per_generation or not genotype.evaluated]
+                  if self.reevaluate_per_generation or not genotype.is_evaluated]
         if self.using_hall_of_fame:
             result += [genotype.id for genotype in self.hall_of_fame]
         return result
