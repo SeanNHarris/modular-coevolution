@@ -3,7 +3,7 @@ Todo:
     * Figure out a more general way to implement a hall of fame.
 
 """
-from modularcoevolution.evolution.generators.baseobjectivegenerator import BaseObjectiveGenerator
+from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.evolution.specialtypes import GenotypeID, EvaluationID
 
 from typing import Any, Callable, Generic, Type, TypeVar
@@ -22,7 +22,7 @@ GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
 GenotypeParameters = TypeVar("GenotypeParameters", bound=dict[str, Any])
 
 
-class BaseEvolutionaryGenerator(BaseObjectiveGenerator, Generic[AgentType], metaclass=abc.ABCMeta):
+class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta):
     """A base class for evolutionary algorithms (EAs) that implements many of the abstract functions from
     :class:`.BaseGenerator`.
 

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any, Sequence, TypedDict, Union, Literal
 
 from evolution.baseobjectivetracker import MetricConfiguration
-from evolution.generators.baseobjectivegenerator import MetricFunction
+from evolution.generators.basegenerator import MetricFunction
 from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.evolution.wrappers.coevolution import EvolutionEndedException
 from modularcoevolution.evolution.datacollector import DataCollector, StringDefaultJSONEncoder
