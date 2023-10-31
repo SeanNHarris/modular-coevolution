@@ -3,6 +3,7 @@ from typing import Any, Optional, Literal, TypedDict, Type, Union
 import abc
 import math
 
+from evolution.specialtypes import EvaluationID
 
 MetricTypes = Union[float, str, list, dict]
 
@@ -24,6 +25,8 @@ class MetricConfiguration(TypedDict):
     - ``'max'``: Record the maximum of all submitted values. Must be a numeric type."""
     log_history: bool
     """If true, store a history of all submitted values for this metric. Avoid using this unnecessarily, as it can impact the size of the log file."""
+    automatic: bool
+    """If true, this metric will be automatically computed by the :class:`.BaseGenerator` and does not need to be submitted manually."""
 
 
 class MetricSubmission(TypedDict, MetricConfiguration):
@@ -65,6 +68,8 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     """A history of all values submitted for each metric, by name. Only stored if ``log_history=True`` was passed to :meth:`.submit_metric`."""
     _objective_names: list[str]
     """The names of metrics which were submitted as objectives."""
+    evaluation_ids: list[EvaluationID]
+    """A list of evaluation IDs this individual participated in."""
 
     @property
     def objectives(self) -> dict[str, float]:
@@ -94,6 +99,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         self.metric_statistics = {}
         self.metric_histories = {}
         self._objective_names = []
+        self.evaluation_ids = []
 
     def submit_metric(self, submission: MetricSubmission) -> None:
         """Submit a metric value. This should typically be handled by :class:`.BaseObjectiveGenerator`.
@@ -105,6 +111,8 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         metric = submission['name']
         value = submission['value']
 
+        if isinstance(value, int):
+            value = float(value)
         if not isinstance(value, float) and submission['repeat_mode'] != 'replace':
             raise ValueError(f"Metric {metric} was submitted with repeat_mode={submission['repeat_mode']}, but is not a numeric value.")
 
@@ -187,3 +195,12 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
             repeat_mode='average' if average else 'replace',
             log_history=False
         ))
+
+    def log_evaluation_id(self, evaluation_id: EvaluationID) -> None:
+        """Log an evaluation id this individual participated in.
+
+        Args:
+            evaluation_id: The evaluation id to log.
+
+        """
+        self.evaluation_ids.append(evaluation_id)

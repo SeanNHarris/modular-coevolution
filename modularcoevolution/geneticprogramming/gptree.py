@@ -21,7 +21,7 @@ class GPTreeParameters(TypedDict, total=False):
     parsimony_weight: float
     forbidden_nodes: list[int]  # list of GPNode IDs
     fixed_context: list[str, Any]  # Also specific, can we do more typing enforcement with this?
-    idList: list[int]  # list of GPNode IDs
+    id_list: list[int]  # list of GPNode IDs
 
 
 class GPTree(BaseGenotype):
@@ -30,44 +30,44 @@ class GPTree(BaseGenotype):
         super().__init__()
 
         self.parameters = parameters
-        if "nodeType" in parameters:
-            if isinstance(parameters["nodeType"], type):
-                self.nodeType = parameters["nodeType"]
-            elif isinstance(parameters["nodeType"], str):
-                self.nodeType = GPNodeTypeRegistry.name_lookup[parameters["nodeType"]]
+        if "node_type" in parameters:
+            if isinstance(parameters["node_type"], type):
+                self.nodeType = parameters["node_type"]
+            elif isinstance(parameters["node_type"], str):
+                self.nodeType = GPNodeTypeRegistry.name_lookup[parameters["node_type"]]
             else:
                 raise TypeError("nodeType must be a type or a type name.")
         else:
             raise TypeError("A node type must be supplied as a parameter.")
 
-        if "returnType" in parameters:
-            self.returnType = parameters["returnType"]
+        if "return_type" in parameters:
+            self.returnType = parameters["return_type"]
         else:
             self.returnType = 0  # Should be void
 
-        if "minHeight" in parameters:
-            self.minHeight = parameters["minHeight"]
+        if "min_height" in parameters:
+            self.minHeight = parameters["min_height"]
         else:
             self.minHeight = 3
 
-        if "maxHeight" in parameters:
-            self.maxHeight = parameters["maxHeight"]
+        if "max_height" in parameters:
+            self.maxHeight = parameters["max_height"]
         else:
             self.maxHeight = 7
 
         # parsimonyWeight - a percentage of fitness removed per node in the tree, should be on the order of 0.01 = 1%
-        if "parsimonyWeight" in parameters:
-            self.parsimony_weight = parameters["parsimonyWeight"]
+        if "parsimony_weight" in parameters:
+            self.parsimony_weight = parameters["parsimony_weight"]
         else:
             self.parsimony_weight = 0.0025
 
-        if "forbiddenNodes" in parameters:
-            self.forbiddenNodes = parameters["forbiddenNodes"]
+        if "forbidden_nodes" in parameters:
+            self.forbiddenNodes = parameters["forbidden_nodes"]
         else:
             self.forbiddenNodes = list()
 
-        if "fixedContext" in parameters:
-            self.fixed_context = parameters["fixedContext"]
+        if "fixed_context" in parameters:
+            self.fixed_context = parameters["fixed_context"]
         else:
             self.fixed_context = dict()
 
@@ -76,8 +76,8 @@ class GPTree(BaseGenotype):
                                                                            self.forbiddenNodes)  # Todo: Cache these per node type, forbiddenNodes
         self.depthTable = self.nodeType.build_depth_table(MAXIMUM_HEIGHT, self.forbiddenNodes)
 
-        if "idList" in parameters:
-            self.root = self.generateFromList(list(parameters["idList"]))
+        if "id_list" in parameters:
+            self.root = self.generateFromList(list(parameters["id_list"]))
         else:
             height = random.randint(self.minHeight, self.maxHeight)
             self.root = self.randomSubtree(height, self.returnType)
@@ -169,7 +169,7 @@ class GPTree(BaseGenotype):
 
     # Creates a deep copy of the tree
     def clone(self, copy_objectives=False):
-        cloned_genotype = GPTree({**self.parameters, "idList": self.getNodeIDList()})
+        cloned_genotype = GPTree({**self.parameters, "id_list": self.getNodeIDList()})
         if copy_objectives:
             for objective in self.objectives:
                 cloned_genotype.objectives[objective] = self.objectives[objective]
@@ -316,7 +316,7 @@ class GPTree(BaseGenotype):
         return node
 
     def get_raw_genotype(self):
-        return {"nodeType": str(self.nodeType), "idList": self.getNodeIDList()}
+        return {"node_type": str(self.nodeType), "id_list": self.getNodeIDList()}
 
     def __hash__(self):
         return tuple(self.getNodeIDList()).__hash__()

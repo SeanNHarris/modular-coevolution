@@ -9,6 +9,7 @@ from typing.io import TextIO
 
 import abc
 
+from evolution.datacollector import DataCollector
 # if TYPE_CHECKING:
 from modularcoevolution.evolution.baseagent import BaseAgent
 from modularcoevolution.evolution.baseobjectivetracker import BaseObjectiveTracker, MetricConfiguration, MetricTypes, \
@@ -52,7 +53,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         self.metric_functions = {}
 
     @abc.abstractmethod
-    def get_genotype_with_id(self, agent_id) -> BaseObjectiveTracker:
+    def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
         """Return the agent parameters associated with the given ID.
 
         To work with the implementation of :meth:`.set_objectives` here, this must return a subclass of
@@ -120,20 +121,28 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
 
         for metric_name in self.metric_configurations:
-            self.submit_metric(agent_id, metric_name, self.compute_metric(metric_name, evaluation_results))
+            if self.metric_configurations[metric_name]['automatic']:
+                self.submit_metric(agent_id, metric_name, self.compute_metric(metric_name, evaluation_results))
 
     @abc.abstractmethod
-    def next_generation(self, result_log: TextIO = None, agent_log: TextIO = None) -> None:
+    def end_generation(self) -> None:
+        """Called by a :class:`.BaseEvolutionWrapper` to signal that the current generation has ended.
+
+        Sorting the population and any logging of the generation should be performed here.
+
+        This method should not add or remove individuals from the population.
+
+        """
+        pass
+
+    @abc.abstractmethod
+    def next_generation(self) -> None:
         """Signals the generator that a generation has completed and that the generator may modify its population.
 
         Changes to the population should only occur as a result of this method being called. However, modifying the
         population at all is optional.
 
-        Two log files may be provided for optional logging of data.
-
-        Args:
-            result_log: A log file intended to log the overall state of the population each generation.
-            agent_log: A log file intended to log the state of individual agents in the population each generation.
+        This function will only be called after :meth:`.end_generation`, so it can be assumed that the population is sorted.
 
         """
         pass
@@ -152,7 +161,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
 
     def register_metric(self,
                         metric_configuration: MetricConfiguration,
-                        metric_function: Union[MetricFunction, str]) -> None:
+                        metric_function: Union[MetricFunction, str, None]) -> None:
         """Register a metric with this generator.
 
         Args:
@@ -165,6 +174,8 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         metric_name = metric_configuration['name']
         self.metric_configurations[metric_name] = metric_configuration
         self.metric_functions[metric_name] = metric_function
+        if metric_function is None and metric_configuration['automatic']:
+            raise ValueError("A metric function must be provided for automatic metrics.")
 
     def submit_metric(self, agent_id: GenotypeID, metric_name: str, metric_value: MetricTypes) -> None:
         """Submit a metric value for an agent to store.

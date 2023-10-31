@@ -131,6 +131,8 @@ class Coevolution:
 
         # TODO: Handle debug printing better.
         print("Starting next generation----------------------------------")
+        for generator in self.agent_generators:
+            generator.end_generation()
         if self.generation >= self.num_generations:
             self.finalizing = True
         else:
@@ -293,8 +295,8 @@ class Coevolution:
             evaluation_results: A dictionary of results from the evaluation, indexed by genotype ID.
 
         """
+        agent_group = self.evaluation_table[evaluation_id]
         if evaluation_id in self.remaining_evolution_evaluations:
-            agent_group = self.evaluation_table[evaluation_id]
             for generator, agent_id in zip(self.get_generator_order(), agent_group):
                 generator.submit_evaluation(agent_id, evaluation_id, evaluation_results[agent_id])
             self.evaluated_groups[agent_group] = self.evaluated_groups.setdefault(agent_group, 0) + 1
@@ -304,6 +306,9 @@ class Coevolution:
 
             self.remaining_tournament_evaluations.remove(evaluation_id)
             self.write_tournament_data()
+
+        if self.data_collector is not None:
+            self.data_collector.set_evaluation_data(evaluation_id, agent_group, evaluation_results)
 
     def write_tournament_data(self):
         raise NotImplementedError("Tournaments are not currently supported, sorry.")

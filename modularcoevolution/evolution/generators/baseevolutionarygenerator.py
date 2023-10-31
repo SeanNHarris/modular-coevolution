@@ -3,6 +3,9 @@ Todo:
     * Figure out a more general way to implement a hall of fame.
 
 """
+import statistics
+
+from evolution.baseobjectivetracker import MetricConfiguration
 from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.evolution.specialtypes import GenotypeID, EvaluationID
 
@@ -62,16 +65,24 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
+    population_name: str
+    """The name of the population being generated. Used as a primary key for logging."""
 
-    def __init__(self, agent_class: Type[AgentType], initial_size: int,
-                 agent_parameters: dict[str, Any] = None, genotype_parameters: dict[str, Any] = None, seed: list = None,
-                 fitness_function: Callable[[dict[str, float]], float] = None, data_collector: DataCollector = None,
-                 copy_survivor_objectives: bool = False, reevaluate_per_generation: bool = True,
+    def __init__(self, agent_class: Type[AgentType],
+                 population_name: str,
+                 initial_size: int,
+                 agent_parameters: dict[str, Any] = None,
+                 genotype_parameters: dict[str, Any] = None,
+                 seed: list = None,
+                 data_collector: DataCollector = None,
+                 copy_survivor_objectives: bool = False,
+                 reevaluate_per_generation: bool = True,
                  using_hall_of_fame: bool = True):
         """
 
         Args:
             agent_class: The type of agent to be generated through evolution.
+            population_name: The name of the population being generated. Used as a primary key for logging.
             initial_size: The initial size of the population.
             agent_parameters: The parameters to be sent to the ``__init__`` function of ``agent_class``,
                 other than genotype.
@@ -79,8 +90,6 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 :meth:`.BaseEvolutionaryAgent.genotype_class`, in addition to the default parameters from
                 :meth:`.BaseEvolutionaryAgent.genotype_default_parameters`. Overwrites any default parameters.
             seed: A list of genotype parameters which will each be used to add one genotype to the initial population.
-            fitness_function: A function which takes a dictionary of named objectives, and outputs a single fitness
-                value. If omitted, fitness will be the average of all active objectives.
             data_collector: The :class:`.DataCollector` to be used for logging.
             copy_survivor_objectives: If True, genotypes which survive to the next generation will keep their existing
                 objective values. If False, objective values will be reset each generation.
@@ -95,8 +104,9 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             ``using_hall_of_fame`` currently uses a non-standard implementation of the hall of fame and is subject to
             change. It was intended for a specific application and has not been expanded.
         """
-        super().__init__(fitness_function=fitness_function)
+        super().__init__()
         self.agent_class = agent_class
+        self.population_name = population_name
         self.agent_parameters = agent_parameters
         if self.agent_parameters is None:
             self.agent_parameters = dict()
@@ -119,6 +129,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.hall_of_fame = list()
         self.genotypes_by_id = dict()
 
+        self._register_novelty_metric()
+
         population_set = set()
         for i in range(self.initial_size):
             default_parameters = self.agent_class.genotype_default_parameters(agent_parameters)
@@ -140,8 +152,6 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 population_set.add(hash(individual))
         for genotype in self.population:
             self.genotypes_by_id[genotype.id] = genotype
-
-        self.evaluation_lists = dict()
 
     def population_size(self) -> int:
         return len(self.population)
@@ -195,57 +205,35 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             result += [genotype.id for genotype in self.hall_of_fame]
         return result
 
-    def set_objectives(self, agent_id: GenotypeID, objectives: dict[str, float], average_flags: dict[str, bool] = None,
-                       average_fitness: bool = False, opponent: GenotypeID = None, evaluation_id: EvaluationID = None,
-                       inactive_objectives: dict[str, bool] = None) -> None:
-        """Called by a :class:`.BaseEvolutionWrapper` to record objective results from an evaluation
+    def submit_evaluation(self, agent_id: GenotypeID, evaluation_id: EvaluationID, evaluation_results: dict[str, Any]) -> None:
+        """Called by a :class:`.BaseEvolutionWrapper` to record objectives and metrics from evaluation results
         for the agent with given index.
 
-        This function can be called multiple times for the same agent. When this occurs, ``average_flags``
-        will determine if the stored objective values should be overwritten, or store an average of objectives provided
-        across each function call.
-
-        Objectives are stored with :meth:`.BaseObjectiveTracker.set_objectives`.
-        Fitness values are also calculated and stored in this function, as well as novelty metrics.
-
         Args:
-            agent_id: The index of the agent associated with the objective results.
-            objectives: A dictionary keyed by objective name holding the value for each objective.
-            average_flags: A dictionary keyed by objective name.
-                When the value for an objective is False, the previously stored objective will be overwritten with the
-                new one.
-                When the value for an objective is True, the stored objective will be an average for this objective
-                across each function call.
-                Defaults to false for every objective.
-            average_fitness: Functions as ``average_flags``, but for a fitness value.
-            opponent: The ID of the opponent that resulted in these objective values, if applicable.
-            evaluation_id: The ID of evaluation associated with these objective values, for logging purposes.
-            inactive_objectives: A dictionary keyed by objective name. Notes that an objective will be marked as
-                "inactive" and only stored for logging purposes, rather than treated as a real objective.
+            agent_id: The index of the agent associated with the evaluation results.
+            evaluation_id: The ID of the evaluation.
+            evaluation_results: The results of the evaluation.
 
         """
-        super().set_objectives(agent_id, objectives, average_flags, average_fitness, opponent, evaluation_id,
-                               inactive_objectives)
+
+        super().submit_evaluation(agent_id, evaluation_id, evaluation_results)
         individual = self.get_genotype_with_id(agent_id)
         if "novelty" not in individual.metrics:
-            individual.metrics["novelty"] = self.get_diversity(agent_id, min(100, len(self.population)))
-        if individual.id not in self.evaluation_lists:
-            self.evaluation_lists[individual.id] = list()
-        self.evaluation_lists[individual.id].append((objectives, evaluation_id))
+            novelty = self.get_diversity(agent_id, min(100, len(self.population)))
+            self.submit_metric(agent_id, "novelty", novelty)
 
         if self.data_collector is not None:
-            if "agent_type_name" in self.agent_parameters:
-                agent_type_name = self.agent_parameters["agent_type_name"]
-            else:
-                # Temporary while deprecating the class version of this variable
-                agent_type_name = self.agent_class.agent_type_name
-            evaluations = [evaluation_ID for fitness, evaluation_ID in
-                           self.evaluation_lists[individual.id]]
-
-            self.data_collector.set_individual_data(agent_type_name, individual.id, individual.get_raw_genotype(),
-                                                    evaluations, individual.objective_statistics, individual.metrics,
-                                                    [parent_id for parent_id in individual.parent_ids],
-                                                    individual.creation_method)
+            self.data_collector.set_individual_data(
+                self.population_name,
+                individual.id,
+                individual.get_raw_genotype(),
+                individual.evaluation_ids.copy(),
+                individual.metrics.copy(),
+                individual.metric_statistics.copy(),
+                individual.metric_histories.copy(),
+                individual.parent_ids.copy(),
+                individual.creation_method,
+            )
 
     def get_diversity(self, reference_id: GenotypeID = None, samples: int = None) -> float:
         """Calculates the diversity of the population with respect to a reference individual.
@@ -267,3 +255,52 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         else:
             reference = None
         return reference.diversity_function(self.population, reference, samples)
+
+    def log_generation(self) -> None:
+        """Log the current generation and its associated statistics to the data collector, if one is present.
+
+        This method should be called during :meth:`end_generation`."""
+        if self.data_collector is not None:
+            diversity = self.population[0].metrics["novelty"]  # Diversity measured from the best individual
+            population_IDs = [individual.id for individual in self.population]
+            metric_statistics = dict()
+            for metric, configuration in self.metric_configurations.items():
+                sample_metric = self.population[0].metrics[metric]
+                if isinstance(sample_metric, (int, float)):
+                    population_metrics = [individual.metrics[metric] for individual in self.population]
+                    metric_mean = statistics.mean(population_metrics)
+                    metric_standard_deviation = statistics.stdev(population_metrics)
+                    metric_minimum = min(population_metrics)
+                    metric_maximum = max(population_metrics)
+                    metric_statistics[metric] = {
+                        "mean": metric_mean,
+                        "standard deviation": metric_standard_deviation,
+                        "minimum": metric_minimum,
+                        "maximum": metric_maximum
+                    }
+            population_metrics = {
+                "diversity": diversity,
+            }
+            self.data_collector.set_generation_data(
+                self.population_name,
+                self.generation,
+                population_IDs,
+                metric_statistics,
+                population_metrics
+            )
+
+        print("Best individual of this generation: (fitness score of " + str(self.population[0].fitness) + ")")
+        print(self.population[0])
+
+        print(str([individual.fitness for individual in self.population]))
+
+    def _register_novelty_metric(self) -> None:
+        """Automatically register a diversity metric called ``"novelty"``."""
+        metric_configuration: MetricConfiguration = {
+            "name": "novelty",
+            "is_objective": False,
+            "repeat_mode": "replace",
+            "log_history": False,
+            "automatic": False
+        }
+        self.register_metric(metric_configuration, None)

@@ -45,9 +45,9 @@ class ParameterSchema(TypedDict):
     """A type defining the parameters of a config file."""
     experiment_name: str
     """The name of the experiment, which will be used as the name of the log folder."""
-    generators: list[tuple[type[BaseGenerator], dict[str, Any]]]
-    """A list of tuples of generator types and their parameters as a dictionary.
-    For example, ``[(EvolutionGenerator, {'population_size': 100, ...}), (NSGAIIGenerator, {'population_size': 50, ...})]``."""
+    generators: dict[str, tuple[type[BaseGenerator], dict[str, Any]]]
+    """A dict of tuples of generator types and their parameter dictionary, keyed by the population name.
+    For example, ``{'predator': (EvolutionGenerator, {'population_size': 100, ...}), 'prey':(NSGAIIGenerator, {'population_size': 50, ...})}``."""
     coevolution_type: type[Coevolution]
     """The type of coevolution to use, e.g ``Coevolution``."""
     coevolution_kwargs: dict[str, Any]
@@ -76,7 +76,7 @@ def _flatten_list_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     """
     flattened_results = {}
     for player, player_results in enumerate(results):
-        for result_name, result_value in player_results:
+        for result_name, result_value in player_results.items():
             if result_name in flattened_results:
                 result_name = f'{result_name}<{player}>'
             flattened_results[result_name] = result_value
@@ -219,6 +219,7 @@ class CoevolutionDriver:
             'is_objective': is_objective,
             'repeat_mode': repeat_mode,
             'log_history': log_history,
+            'automatic': True
         }
 
         if player_index not in self.metrics:
@@ -228,7 +229,7 @@ class CoevolutionDriver:
     def register_fitness_function(self,
                                   player_index: int,
                                   fitness_function: Union[MetricFunction, str],
-                                  repeat_mode: Literal['replace', 'average', 'min', 'max'] = 'average' ) -> None:
+                                  repeat_mode: Literal['replace', 'average', 'min', 'max'] = 'average') -> None:
         """
         Registers a fitness function with the coevolution driver.
         This is a shortcut for :meth:`register_metric` for single-objective evolution.
@@ -281,11 +282,14 @@ class CoevolutionDriver:
             evaluation_pool: The multiprocessing pool to use for evaluation.
         """
         generation = coevolution.generation - 1
-        agent_ids = [generator.get_representatives_from_generation(generation, amount) for generator in coevolution.get_generator_order()]
-        agents = [[generator.build_agent_from_id(agent_id, True) for agent_id in agent_ids[player_index]] for player_index, generator in enumerate(coevolution.get_generator_order())]
+        generator_order = coevolution.get_generator_order()
+        agent_ids = [generator.get_representatives_from_generation(generation, amount) for generator in generator_order]
+        agents = [[generator.build_agent_from_id(agent_id, True) for agent_id in agent_ids[player_index]] for player_index, generator in enumerate(generator_order)]
+        agent_names = [generator.population_name for generator in generator_order]
 
-        agent_groups = itertools.product(*agents)
-        agent_group_numbers = itertools.product([amount] * len(agents))
+        agent_groups = list(itertools.product(*agents))
+        agent_numbers = [range(amount) for _ in agents]
+        agent_group_numbers = list(itertools.product(*agent_numbers))
         results = self._evaluate_parallel(evaluation_pool, agent_groups, world_kwargs)
         for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
             flat_result = _flatten_results(result)
@@ -293,8 +297,8 @@ class CoevolutionDriver:
             statistics_filepath = f'{log_path}/exhibitionStats{number_string}.txt'
             with open(statistics_filepath, 'w+') as statistics_file:
                 statistics_file.truncate(0)
-                for agent in agent_group:
-                    statistics_file.write(f'{agent.agent_type_name} genotype:\n{agent.genotype}\n')
+                for agent, agent_name in zip(agent_group, agent_names):
+                    statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
                 for result_name, result_value in flat_result.items():
                     statistics_file.write(f'{result_name}:\n{result_value}\n')
 
@@ -325,10 +329,10 @@ class CoevolutionDriver:
             predator_kwargs['agent_class'], predator_kwargs['initial_size'], predator_kwargs['children_size'] = base_parameters['predator_args']
             prey_kwargs = base_parameters['prey_kwargs']
             prey_kwargs['agent_class'], prey_kwargs['initial_size'], prey_kwargs['children_size'] = base_parameters['prey_args']
-            base_parameters['generators'] = [
-                (base_parameters['predator_type'], base_parameters['predator_kwargs']),
-                (base_parameters['prey_type'], base_parameters['prey_kwargs'])
-            ]
+            base_parameters['generators'] = {
+                'predator': (base_parameters['predator_type'], base_parameters['predator_kwargs']),
+                'prey': (base_parameters['prey_type'], base_parameters['prey_kwargs'])
+            }
             base_parameters['coevolution_kwargs']['num_generations'] = base_parameters['coevolution_args'][2]
             base_parameters['coevolution_kwargs']['players_per_population'] = (1, 1)
 
@@ -374,9 +378,15 @@ class CoevolutionDriver:
             data_collector = None
 
         agent_generators = []
-        for generator_type, generator_kwargs in generators:
+        population_names = set()
+        for population_name, generator_parameters in generators.items():
+            generator_type, generator_kwargs = generator_parameters
+            generator_kwargs['population_name'] = population_name
             generator_kwargs['data_collector'] = data_collector
             agent_generators.append(generator_type(**generator_kwargs))
+            if population_name in population_names:
+                raise ValueError("Error: Multiple identical population names will cause logging conflicts.")
+            population_names.add(population_name)
 
         coevolution_kwargs['agent_generators'] = agent_generators
         coevolution_kwargs['data_collector'] = data_collector
@@ -392,6 +402,7 @@ class CoevolutionDriver:
         else:
             log_path = f'Logs{log_subfolder}'
 
+        os.makedirs(log_path, exist_ok=True)
         data_collector.set_experiment_parameters(run_parameters)
         with open(f'{log_path}/parameters.txt', 'a+') as parameter_file:
             parameter_file.truncate(0)

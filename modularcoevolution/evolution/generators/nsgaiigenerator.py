@@ -8,8 +8,8 @@ import random
 
 # Note: these functions assume objective maximization
 class NSGAIIGenerator(BaseEvolutionaryGenerator):
-    def __init__(self, agent_class, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25, recombination_fraction=0.75, tournament_size=2, seed=None, fitness_function=None, data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
-        super().__init__(agent_class=agent_class, initial_size=initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
+    def __init__(self, agent_class, population_name, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25, recombination_fraction=0.75, tournament_size=2, seed=None, fitness_function=None, data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
+        super().__init__(agent_class=agent_class, population_name=population_name, initial_size=initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
                          data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
@@ -134,7 +134,6 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
             agent_log.flush()
 
         if self.data_collector is not None:
-            agent_type_name = self.agent_class.agent_type_name
             population_IDs = [individual.id for individual in self.population]
             objectives = dict()
 
@@ -183,7 +182,7 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
                 objectives[name].update({"average nondominated": average_nondominated_objectives[name], "worst nondominated": worst_nondominated_objectives[name]})
             front_members = [[individual.id for individual in front] for front in nondominating_fronts]
             metrics.update({"diversity": diversity, "front sizes": [len(front) for front in nondominating_fronts], "front members": front_members})
-            self.data_collector.set_generation_data(agent_type_name, self.generation, population_IDs, objectives, metrics)
+            self.data_collector.set_generation_data(self.population_name, self.generation, population_IDs, objectives, metrics)
 
         next_generation = list()
         next_generation_set = set()

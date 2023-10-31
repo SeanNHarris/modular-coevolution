@@ -64,9 +64,9 @@ class MultipleGenotype(BaseGenotype, Generic[MemberType]):
         return sum([self.members[member].get_fitness_modifier(raw_fitness) for member in self.members])
 
     def get_raw_genotype(self):
-        raw_genotype = dict()
-        for name, member in self.members.items():
-            raw_genotype[name] = member.get_raw_genotype()
+        raw_genotype = {
+            'subparameters': {name: member.get_raw_genotype() for name, member in self.members.items()},
+        }
         return raw_genotype
 
 
