@@ -5,8 +5,8 @@ import itertools
 from collections.abc import Callable
 from typing import Any, Sequence, TypedDict, Union, Literal
 
-from evolution.baseobjectivetracker import MetricConfiguration
-from evolution.generators.basegenerator import MetricFunction
+from modularcoevolution.evolution.baseobjectivetracker import MetricConfiguration
+from modularcoevolution.evolution.generators.basegenerator import MetricFunction
 from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.evolution.wrappers.coevolution import EvolutionEndedException
 from modularcoevolution.evolution.datacollector import DataCollector, StringDefaultJSONEncoder
@@ -20,6 +20,8 @@ import numpy
 import json
 import multiprocessing
 import os
+
+from modularcoevolution.experiments.baseexperiment import BaseExperiment
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
@@ -129,8 +131,8 @@ class CoevolutionDriver:
     """A class for running coevolutionary experiments which manages a coevolution wrapper and performs evaluations.
     This class will run several coevolutionary runs in sequence, configured by the ``run_amount`` parameter.
     A configuration file must be provided, which specifies the parameters for coevolution."""
-    evaluate: EvaluateType
-    """The evaluation function to be used for the experiment."""
+    experiment: type[BaseExperiment]
+    """The :class:`.BaseExperiment` class defining the current experiment."""
 
     parallel: bool
     """Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging."""
@@ -139,17 +141,14 @@ class CoevolutionDriver:
     run_exhibition: bool
     """Whether to run and log exhibition evaluations between the best individuals of each generation."""
 
-    metrics: dict[int, dict[str, tuple[MetricConfiguration, Union[MetricFunction, str]]]]
-    """A list of metrics per player that will be registered with the generators in each run."""
-
     parameters: list[dict]
     """For each run to be performed, the parameters for that run."""
 
-    def __init__(self, evaluate: EvaluateType, config_filename: str, run_amount: int = 30, parallel: bool = True, use_data_collector: bool = True, run_exhibition: bool = True, merge_parameters: dict = None):
+    def __init__(self, experiment: type[BaseExperiment], config_filename: str, run_amount: int = 30, parallel: bool = True, use_data_collector: bool = True, run_exhibition: bool = True, merge_parameters: dict = None):
         """Create a new coevolution driver.
 
         Args:
-            evaluate: The evaluation function to be used for the experiment.
+            experiment: The :class:`.BaseExperiment` class defining the current experiment.
             config_filename: The filename of the configuration file to use.
             run_amount: The number of runs to perform.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
@@ -159,10 +158,8 @@ class CoevolutionDriver:
                 Use this for parameters generated programmatically.
 
         """
-
-        self.evaluate = evaluate
-        self.metrics = {}
-
+        self.experiment = experiment
+        
         self.parallel = parallel
         self.use_data_collector = use_data_collector
         if not self.use_data_collector:
@@ -182,71 +179,6 @@ class CoevolutionDriver:
                 multiprocessing.set_start_method('fork')
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
-
-    def register_metric(self,
-                        player_index: int,
-                        metric_name: str,
-                        metric_function: Union[MetricFunction, str],
-                        is_objective: bool = False,
-                        repeat_mode: Literal['replace', 'average', 'min', 'max'] = 'average',
-                        log_history: bool = False) -> None:
-        """
-        Registers a metric with the coevolution driver.
-        A metric is any data derived from the evaluation results which should be logged per-individual.
-        Objectives are a special type of metric which are used during evolution, denoted by the ``'is_objective'`` configuration flag.
-        In single-objective evolution, the objective corresponds to fitness.
-
-        Args:
-            player_index: The index of the player in the evaluation function which this metric applies to.
-            metric_name: A string key for storing this metric.
-            is_objective: If true, this metric is considered an objective.
-                Objectives must be numeric values.
-                Objectives are reported to generators, such as fitness for standard evolutionary algorithms.
-                Other metrics are just stored for logging and analysis purposes.
-            repeat_mode: How to handle multiple submissions of the same metric. The following modes are supported:
-                - ``'replace'``: Overwrite the previous value with the new one.
-                - ``'average'``: Record the mean of all submitted values. Must be a numeric type.
-                - ``'min'``: Record the minimum of all submitted values. Must be a numeric type.
-                - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
-            log_history: If true, store a history of all submitted values for this metric.
-                Avoid using this unnecessarily, as it can impact the size of the log file.
-            metric_function: A function which computes the metric from the dictionary of evaluation results.
-                Alternatively, a string key can be provided as a shortcut for a function which returns the result value with this key.
-
-        """
-        metric_configuration: MetricConfiguration = {
-            'name': metric_name,
-            'is_objective': is_objective,
-            'repeat_mode': repeat_mode,
-            'log_history': log_history,
-            'automatic': True
-        }
-
-        if player_index not in self.metrics:
-            self.metrics[player_index] = {}
-        self.metrics[player_index][metric_configuration['name']] = (metric_configuration, metric_function)
-
-    def register_fitness_function(self,
-                                  player_index: int,
-                                  fitness_function: Union[MetricFunction, str],
-                                  repeat_mode: Literal['replace', 'average', 'min', 'max'] = 'average') -> None:
-        """
-        Registers a fitness function with the coevolution driver.
-        This is a shortcut for :meth:`register_metric` for single-objective evolution.
-
-        Args:
-            player_index: The index of the player in the evaluation function which this fitness function applies to.
-            fitness_function: A function which computes the fitness from the dictionary of evaluation results.
-                Alternatively, a string key can be provided as a shortcut for a function which returns the result value with this key.
-            repeat_mode: How to handle multiple submissions of the same metric. The following modes are supported:
-                - ``'replace'``: Overwrite the previous value with the new one.
-                - ``'average'``: Record the mean of all submitted values. Must be a numeric type.
-                - ``'min'``: Record the minimum of all submitted values. Must be a numeric type.
-                - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
-
-        """
-
-        self.register_metric(player_index, 'fitness', fitness_function, is_objective=True, repeat_mode=repeat_mode, log_history=True)
 
     def _evaluate_parallel(self, evaluation_pool, agent_groups, world_kwargs) -> list[dict[str, Any]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
@@ -334,7 +266,7 @@ class CoevolutionDriver:
                 'prey': (base_parameters['prey_type'], base_parameters['prey_kwargs'])
             }
             base_parameters['coevolution_kwargs']['num_generations'] = base_parameters['coevolution_args'][2]
-            base_parameters['coevolution_kwargs']['players_per_population'] = (1, 1)
+            base_parameters['coevolution_kwargs']['player_generators'] = (0, 1)
 
         parameters = []
         for i in range(run_count):
@@ -366,8 +298,6 @@ class CoevolutionDriver:
             * Store random seeds, propagate to threads.
         """
 
-        generators = run_parameters['generators']
-        coevolution_type = run_parameters['coevolution_type']
         coevolution_kwargs = run_parameters['coevolution_kwargs']
         world_kwargs = run_parameters['world_kwargs']
         log_subfolder = run_parameters['log_subfolder']
@@ -377,25 +307,27 @@ class CoevolutionDriver:
         else:
             data_collector = None
 
-        agent_generators = []
-        population_names = set()
-        for population_name, generator_parameters in generators.items():
-            generator_type, generator_kwargs = generator_parameters
-            generator_kwargs['population_name'] = population_name
-            generator_kwargs['data_collector'] = data_collector
-            agent_generators.append(generator_type(**generator_kwargs))
-            if population_name in population_names:
-                raise ValueError("Error: Multiple identical population names will cause logging conflicts.")
-            population_names.add(population_name)
-
-        coevolution_kwargs['agent_generators'] = agent_generators
-        coevolution_kwargs['data_collector'] = data_collector
-        coevolution_kwargs['log_subfolder'] = log_subfolder
-        coevolution_wrapper = coevolution_type(**coevolution_kwargs)
-
-        for player_index, generator in enumerate(coevolution_wrapper.get_generator_order()):
-            for metric_configuration, metric_function in self.metrics[player_index].values():
-                generator.register_metric(metric_configuration, metric_function)
+        
+        coevolution_manager = self.experiment.create_experiment()
+        
+        
+        # for population_name, generator_parameters in generators.items():
+        #     generator_type, generator_kwargs = generator_parameters
+        #     generator_kwargs['population_name'] = population_name
+        #     generator_kwargs['data_collector'] = data_collector
+        #     agent_generators.append(generator_type(**generator_kwargs))
+        #     if population_name in population_names:
+        #         raise ValueError("Error: Multiple identical population names will cause logging conflicts.")
+        #     population_names.add(population_name)
+        # 
+        # coevolution_kwargs['agent_generators'] = agent_generators
+        # coevolution_kwargs['data_collector'] = data_collector
+        # coevolution_kwargs['log_subfolder'] = log_subfolder
+        # coevolution_manager = coevolution_type(**coevolution_kwargs)
+        # 
+        # for player_index, generator in enumerate(coevolution_manager.get_generator_order()):
+        #     for metric_configuration, metric_function in self.metrics[player_index].values():
+        #         generator.register_metric(metric_configuration, metric_function)
 
         if log_subfolder != '' and not log_subfolder.startswith('/'):
             log_path = f'Logs/{log_subfolder}'
@@ -421,9 +353,9 @@ class CoevolutionDriver:
 
         while True:
             try:
-                while len(coevolution_wrapper.get_remaining_evaluations()) > 0:
-                    evaluations = coevolution_wrapper.get_remaining_evaluations()
-                    agent_groups = [coevolution_wrapper.build_agent_group(evaluation) for evaluation in evaluations]
+                while len(coevolution_manager.get_remaining_evaluations()) > 0:
+                    evaluations = coevolution_manager.get_remaining_evaluations()
+                    agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
                     agent_args = [(*pair,) for pair in agent_groups]
 
                     end_states = self._evaluate_parallel(evaluation_pool, agent_args, world_kwargs)
@@ -431,18 +363,18 @@ class CoevolutionDriver:
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]
 
-                        agent_ids = coevolution_wrapper.evaluation_table[evaluation]
+                        agent_ids = coevolution_manager.evaluation_table[evaluation]
                         results_per_agent = {agent_id: _get_results_for_player(results, index) for index, agent_id in enumerate(agent_ids)}
 
-                        coevolution_wrapper.submit_evaluation(evaluation, results_per_agent)
+                        coevolution_manager.submit_evaluation(evaluation, results_per_agent)
 
-                coevolution_wrapper.next_generation()
-                log_filename = f'{log_path}/data/data{coevolution_wrapper.generation}'
+                coevolution_manager.next_generation()
+                log_filename = f'{log_path}/data/data{coevolution_manager.generation}'
                 data_collector.save_to_file(log_filename, True)
-                if self.run_exhibition and coevolution_wrapper.generation % 1 == 0:
-                    self._exhibition(coevolution_wrapper, 3, world_kwargs, log_path, evaluation_pool)
+                if self.run_exhibition and coevolution_manager.generation % 1 == 0:
+                    self._exhibition(coevolution_manager, 3, world_kwargs, log_path, evaluation_pool)
 
             except EvolutionEndedException:
                 if self.run_exhibition:
-                    self._exhibition(coevolution_wrapper, 5, world_kwargs, log_path, evaluation_pool)
+                    self._exhibition(coevolution_manager, 5, world_kwargs, log_path, evaluation_pool)
                 break

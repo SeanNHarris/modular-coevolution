@@ -26,9 +26,10 @@ class Coevolution:
     """The generators used in evolution, typically representing different evolving populations of agents."""
     current_agents_per_generator: dict[BaseGenerator, list[GenotypeID]]
     """The set of agents present in the current generation for each generator."""
-    players_per_population: tuple[int, ...]
-    """For each generator, the number of agents to include in each evaluation.
-    For example, a two-player game would use ``(2,)`` for one-population coevolution, and ``(1, 1)`` for two populations."""
+    player_generators: tuple[int, ...]
+    """The generator index which each player is drawn from.
+    For a two-player game, this would be either [0, 0] or [0, 1] depending on
+    whether the two players are drawn from the same population."""
 
     evaluation_table: dict[EvaluationID, tuple[GenotypeID]]
     """A table of evaluations which have been assigned, mapped to the IDs of the agents in the evaluation."""
@@ -82,7 +83,7 @@ class Coevolution:
 
     def __init__(self,
                  agent_generators: Sequence[BaseGenerator],
-                 players_per_population: Sequence[int],
+                 player_generators: Sequence[int],
                  num_generations: int,
                  evaluations_per_individual,
                  run_tournament=False,
@@ -93,7 +94,7 @@ class Coevolution:
                  **kwargs):
         self.agent_generators = list(agent_generators)
         self.current_agents_per_generator = {generator: [] for generator in self.agent_generators}
-        self.players_per_population = tuple(players_per_population)
+        self.player_generators = tuple(player_generators)
 
         self.evaluation_table = {}
         self.evaluation_results = {}
@@ -196,12 +197,11 @@ class Coevolution:
         minimum_evaluation_count = 0
         while minimum_evaluation_count < self.evaluations_per_individual:
             group = []
-            for count, agent_queue in zip(self.players_per_population, agent_queues):
-                for _ in range(count):
-                    agent_entry = heapq.heappop(agent_queue)
-                    group.append(agent_entry[2])
-                    # Add the agent back to the queue with an incremented evaluation count and a new random tiebreaker.
-                    heapq.heappush(agent_queue, (agent_entry[0] + 1, random.random(), agent_entry[2]))
+            for player, generator_index in enumerate(self.player_generators):
+                agent_entry = heapq.heappop(agent_queues[generator_index])
+                group.append(agent_entry[2])
+                # Add the agent back to the queue with an incremented evaluation count and a new random tiebreaker.
+                heapq.heappush(agent_queues[generator_index], (agent_entry[0] + 1, random.random(), agent_entry[2]))
             groups.append(tuple(group))
             minimum_evaluation_count = min(heapq.nsmallest(1, agent_queue)[0][0] for agent_queue in agent_queues)
         return groups
@@ -217,10 +217,10 @@ class Coevolution:
         return remaining_evaluations
 
     def get_generator_order(self) -> list[BaseGenerator]:
-        """Gets a list of generators that matches the schema of :prop:`players_per_population`.
+        """Gets a list of generators that matches the schema of :prop:`player_generators`.
 
-        Returns: A list of generators of length ``sum(self.players_per_population)`` corresponding to the origin of agents in a group."""
-        return [generator for generator, count in zip(self.agent_generators, self.players_per_population) for _ in range(count)]
+        Returns: A list of generators of length ``len(self.player_generators)`` corresponding to the origin of agents in a group."""
+        return [self.agent_generators[generator_index] for generator_index in self.player_generators]
 
     def get_genotype_group(self, evaluation_id: EvaluationID) -> list[BaseGenotype]:
         """Gets the genotypes used in a given evaluation.
@@ -316,7 +316,7 @@ class Coevolution:
     def validate_parameters(self) -> None:
         """Checks for potential issues with the parameters of the experiment and alerts the user."""
         total_estimated_evolution_evaluations = max(*self.agent_generators, key=lambda generator: generator.population_size) * self.num_generations * self.evaluations_per_individual
-        total_tournament_evaluations = ((self.num_generations // self.tournament_ratio) ** sum(self.players_per_population)) * self.tournament_evaluations
+        total_tournament_evaluations = ((self.num_generations // self.tournament_ratio) ** len(self.player_generators)) * self.tournament_evaluations
         if total_tournament_evaluations > total_estimated_evolution_evaluations * 4:
             raise Warning(f"The number of tournament evaluations scheduled ({total_tournament_evaluations}) is much higher than the expected number of evolution evaluations scheduled."
                           f"Check tournament_ratio, or consider disabling tournaments for problems with many populations.")

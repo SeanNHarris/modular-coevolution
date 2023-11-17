@@ -32,6 +32,9 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
 
     """
 
+    population_name: str
+    """The name of the population being generated. Used as a primary key for logging."""
+
     metric_configurations: dict[str, MetricConfiguration]
     """A dictionary of registered metric configurations, keyed by metric name."""
     metric_functions: dict[str, Union[MetricFunction, str]]
@@ -48,7 +51,12 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
         pass
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, population_name: str, *args, **kwargs):
+        """
+        Args:
+            population_name: The name of the population being generated. Used as a primary key for logging.
+        """
+        self.population_name = population_name
         self.metric_configurations = {}
         self.metric_functions = {}
 
@@ -172,6 +180,8 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
 
         metric_name = metric_configuration['name']
+        if metric_name in self.metric_configurations:
+            raise ValueError(f"Metric \"{metric_name}\" is already registered with this generator.")
         self.metric_configurations[metric_name] = metric_configuration
         self.metric_functions[metric_name] = metric_function
         if metric_function is None and metric_configuration['automatic']:

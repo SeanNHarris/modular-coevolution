@@ -65,8 +65,6 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
-    population_name: str
-    """The name of the population being generated. Used as a primary key for logging."""
 
     def __init__(self, agent_class: Type[AgentType],
                  population_name: str,
@@ -104,9 +102,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             ``using_hall_of_fame`` currently uses a non-standard implementation of the hall of fame and is subject to
             change. It was intended for a specific application and has not been expanded.
         """
-        super().__init__()
+        super().__init__(population_name)
         self.agent_class = agent_class
-        self.population_name = population_name
         self.agent_parameters = agent_parameters
         if self.agent_parameters is None:
             self.agent_parameters = dict()
