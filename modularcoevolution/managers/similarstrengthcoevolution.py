@@ -1,4 +1,4 @@
-from modularcoevolution.wrappers.coevolution import Coevolution
+from modularcoevolution.managers.coevolution import Coevolution
 from modularcoevolution.utilities.specialtypes import EvaluationID, GenotypeID
 
 from abc import ABCMeta, abstractmethod

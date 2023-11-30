@@ -1,4 +1,4 @@
-from modularcoevolution.wrappers.similarstrengthcoevolution import SimilarStrengthCoevolution
+from modularcoevolution.managers.similarstrengthcoevolution import SimilarStrengthCoevolution
 
 from open_spiel.python.egt import alpharank
 

@@ -8,7 +8,7 @@ from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguratio
 from modularcoevolution.generators import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
 from modularcoevolution.utilities.specialtypes import GenotypeID
-from modularcoevolution.wrappers.baseevolutionwrapper import BaseEvolutionWrapper
+from modularcoevolution.managers.baseevolutionwrapper import BaseEvolutionWrapper
 
 
 class BaseExperiment(metaclass=abc.ABCMeta):

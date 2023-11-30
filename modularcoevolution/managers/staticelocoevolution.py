@@ -1,4 +1,4 @@
-from modularcoevolution.wrappers.elocoevolution import EloCoevolution
+from modularcoevolution.managers.elocoevolution import EloCoevolution
 
 
 class StaticEloCoevolution(EloCoevolution):

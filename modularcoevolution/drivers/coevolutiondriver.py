@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, Sequence, TypedDict, Union
 
 from modularcoevolution.generators.basegenerator import BaseGenerator
-from modularcoevolution.wrappers.coevolution import EvolutionEndedException
+from modularcoevolution.managers.coevolution import EvolutionEndedException
 from modularcoevolution.utilities.datacollector import DataCollector, StringDefaultJSONEncoder
 from modularcoevolution.utilities.agenttyperegistry import AgentTypeRegistry
 

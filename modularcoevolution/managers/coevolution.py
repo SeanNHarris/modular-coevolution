@@ -2,7 +2,7 @@ import heapq
 import multiprocessing
 
 from modularcoevolution.agents.baseagent import BaseAgent
-from modularcoevolution.wrappers.baseevolutionwrapper import EvolutionEndedException
+from modularcoevolution.managers.baseevolutionwrapper import EvolutionEndedException
 from modularcoevolution.utilities.specialtypes import EvaluationID, GenotypeID, claim_evaluation_id
 
 from typing import Any, Optional, Sequence
