@@ -2,7 +2,7 @@ import abc
 import copy
 from typing import Sequence, Any, Union, Literal
 
-from modularcoevolution.alternategenerators.archivegenerator import ArchiveGenerator
+from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
 from modularcoevolution.generators import BaseGenerator
