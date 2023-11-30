@@ -8,7 +8,7 @@ from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguratio
 from modularcoevolution.generators import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
 from modularcoevolution.utilities.specialtypes import GenotypeID
-from modularcoevolution.managers.baseevolutionwrapper import BaseEvolutionWrapper
+from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
 
 
 class BaseExperiment(metaclass=abc.ABCMeta):
@@ -88,14 +88,14 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def _create_manager(self, generators: Sequence[BaseGenerator]) -> BaseEvolutionWrapper:
+    def _create_manager(self, generators: Sequence[BaseGenerator]) -> BaseEvolutionManager:
         """Create the evolution/coevolution manager for the experiment.
 
         Args:
             generators: A list of generators corresponding to each population in the experiment.
                 Use this and do not call :meth:`._create_generators` yourself.
         Returns:
-            A :class:`.BaseEvolutionWrapper` object built with the provided `generators`.
+            A :class:`.BaseEvolutionManager` object built with the provided `generators`.
         """
         pass
 
@@ -129,11 +129,11 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         return updated_config
 
 
-    def create_experiment(self) -> BaseEvolutionWrapper:
+    def create_experiment(self) -> BaseEvolutionManager:
         """Create and initialize the generators and manager for an experiment.
 
         Returns:
-            A :class:`.BaseEvolutionWrapper` object initialized for the experiment.
+            A :class:`.BaseEvolutionManager` object initialized for the experiment.
         """
         generators = self._create_generators()
         expected_names = self.population_names()

@@ -3,7 +3,7 @@ from modularcoevolution.generators.baseevolutionarygenerator import BaseEvolutio
 import os
 
 
-class EvolutionWrapper:  # TODO: Merge into common superclass with CoevolutionWrapper
+class EvolutionManager:  # TODO: Merge into common superclass with CoevolutionManager
     def __init__(self, generator: BaseEvolutionaryGenerator, num_generations, evaluations_per_individual=1, data_collector=None, log_subfolder=""):
         assert isinstance(generator, BaseEvolutionaryGenerator)
         self.generator = generator

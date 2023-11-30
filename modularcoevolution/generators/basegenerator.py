@@ -19,7 +19,7 @@ MetricFunction = Callable[[dict[str, Any]], MetricTypes]
 
 
 class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
-    """The superclass of all agent generators which participate in a :class:`.BaseEvolutionWrapper`, e.g.
+    """The superclass of all agent generators which participate in a :class:`.BaseEvolutionManager`, e.g.
     an :class:`.EvolutionGenerator` participating in :class:`.Coevolution`.
 
     A :class:`.BaseGenerator` must maintain a data structure representing a population of agent parameter sets
@@ -116,7 +116,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         pass
 
     def submit_evaluation(self, agent_id: GenotypeID, evaluation_id: EvaluationID, evaluation_results: dict[str, Any]) -> None:
-        """Called by a :class:`.BaseEvolutionWrapper` to record objectives and metrics from evaluation results
+        """Called by a :class:`.BaseEvolutionManager` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Args:
@@ -132,7 +132,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def end_generation(self) -> None:
-        """Called by a :class:`.BaseEvolutionWrapper` to signal that the current generation has ended.
+        """Called by a :class:`.BaseEvolutionManager` to signal that the current generation has ended.
 
         Sorting the population and any logging of the generation should be performed here.
 

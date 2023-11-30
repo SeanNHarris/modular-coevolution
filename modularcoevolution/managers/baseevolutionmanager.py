@@ -2,7 +2,7 @@ import abc
 import os
 
 
-class BaseEvolutionWrapper(metaclass=abc.ABCMeta):
+class BaseEvolutionManager(metaclass=abc.ABCMeta):
     def __init__(self, data_collector=None, log_subfolder="", log_filenames=None):
         if log_filenames is None:
             log_filenames = list()

@@ -203,7 +203,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         return result
 
     def submit_evaluation(self, agent_id: GenotypeID, evaluation_id: EvaluationID, evaluation_results: dict[str, Any]) -> None:
-        """Called by a :class:`.BaseEvolutionWrapper` to record objectives and metrics from evaluation results
+        """Called by a :class:`.BaseEvolutionManager` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Args:

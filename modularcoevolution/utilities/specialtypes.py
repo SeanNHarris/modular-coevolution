@@ -24,7 +24,7 @@ def claim_genotype_id() -> GenotypeID:
 
 
 EvaluationID = NewType("EvaluationID", int)
-"""Refers to an ``int`` used as an ID to uniquely reference evaluations as part of a :class:`.BaseEvolutionWrapper`
+"""Refers to an ``int`` used as an ID to uniquely reference evaluations as part of a :class:`.BaseEvolutionManager`
 """
 _next_evaluation_id: EvaluationID = EvaluationID(0)
 
