@@ -5,7 +5,7 @@ Todo:
 """
 import statistics
 
-from evolution.baseobjectivetracker import MetricConfiguration
+from modularcoevolution.evolution.baseobjectivetracker import MetricConfiguration
 from modularcoevolution.evolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.evolution.specialtypes import GenotypeID, EvaluationID
 

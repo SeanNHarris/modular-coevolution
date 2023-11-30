@@ -112,3 +112,6 @@ class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCM
             self.genotype = self.genotype_class()(self.genotype_default_parameters())
 
         super().__init__(parameters, *args, **kwargs)
+
+    def __str__(self):
+        return f'{self.__class__.__name__} (ID: {self.genotype.id})'

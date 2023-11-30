@@ -3,7 +3,7 @@ import json
 import os
 from typing import Sequence, Any, TypedDict, Type
 
-from evolution.specialtypes import GenotypeID, EvaluationID
+from modularcoevolution.evolution.specialtypes import GenotypeID, EvaluationID
 
 
 class ExperimentData(TypedDict):

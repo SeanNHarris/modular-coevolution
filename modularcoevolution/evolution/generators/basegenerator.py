@@ -9,7 +9,7 @@ from typing.io import TextIO
 
 import abc
 
-from evolution.datacollector import DataCollector
+from modularcoevolution.evolution.datacollector import DataCollector
 # if TYPE_CHECKING:
 from modularcoevolution.evolution.baseagent import BaseAgent
 from modularcoevolution.evolution.baseobjectivetracker import BaseObjectiveTracker, MetricConfiguration, MetricTypes, \

@@ -1,4 +1,5 @@
 import abc
+import copy
 from typing import Sequence, Any, Union, Literal
 
 from modularcoevolution.alternategenerators.archivegenerator import ArchiveGenerator
@@ -31,7 +32,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 The configuration file should only contain parameters that can not be fixed
                 in the implementation of this class.
         """
-        self.config = config
+        self.config = self._apply_config_defaults(config)
 
     @abc.abstractmethod
     def evaluate(self, agents: Sequence[BaseAgent], **kwargs) -> Sequence[dict[str, Any]]:
@@ -97,6 +98,36 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             A :class:`.BaseEvolutionWrapper` object built with the provided `generators`.
         """
         pass
+
+    def _apply_config_defaults(self, config: dict[str, Any]):
+        """Update the config for each population with any missing default values.
+
+        Args:
+            config: A dictionary of configuration parameters containing a `defaults` key.
+
+        Returns:
+            The config dictionary, where each population configuration uses the corresponding values from `defaults`
+            for parameters that were not explicitly specified.
+        """
+        updated_config = copy.deepcopy(config)
+        if 'default' not in config:
+            return updated_config
+
+        if 'populations' not in config:
+            updated_config['populations'] = {}
+        for population in self.population_names():
+            population_config: dict = copy.deepcopy(updated_config['default'])
+            sub_configs = ('generator', 'genotype', 'agent')
+            if population in updated_config['populations']:
+                override_config = updated_config['populations'][population]
+                for sub_config in sub_configs:
+                    if sub_config not in population_config:
+                        population_config[sub_config] = {}
+                    if sub_config in override_config:
+                        population_config.update(override_config[sub_config])
+            updated_config['populations'][population] = population_config
+        return updated_config
+
 
     def create_experiment(self) -> BaseEvolutionWrapper:
         """Create and initialize the generators and manager for an experiment.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import itertools
+import tomllib
 from collections.abc import Callable
 from typing import Any, Sequence, TypedDict, Union, Literal
 
@@ -131,7 +132,7 @@ class CoevolutionDriver:
     """A class for running coevolutionary experiments which manages a coevolution wrapper and performs evaluations.
     This class will run several coevolutionary runs in sequence, configured by the ``run_amount`` parameter.
     A configuration file must be provided, which specifies the parameters for coevolution."""
-    experiment: type[BaseExperiment]
+    experiment_type: type[BaseExperiment]
     """The :class:`.BaseExperiment` class defining the current experiment."""
 
     parallel: bool
@@ -144,11 +145,11 @@ class CoevolutionDriver:
     parameters: list[dict]
     """For each run to be performed, the parameters for that run."""
 
-    def __init__(self, experiment: type[BaseExperiment], config_filename: str, run_amount: int = 30, parallel: bool = True, use_data_collector: bool = True, run_exhibition: bool = True, merge_parameters: dict = None):
+    def __init__(self, experiment_type: type[BaseExperiment], config_filename: str, run_amount: int = 30, parallel: bool = True, use_data_collector: bool = True, run_exhibition: bool = True, merge_parameters: dict = None):
         """Create a new coevolution driver.
 
         Args:
-            experiment: The :class:`.BaseExperiment` class defining the current experiment.
+            experiment_type: The :class:`.BaseExperiment` class defining the current experiment.
             config_filename: The filename of the configuration file to use.
             run_amount: The number of runs to perform.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
@@ -158,7 +159,7 @@ class CoevolutionDriver:
                 Use this for parameters generated programmatically.
 
         """
-        self.experiment = experiment
+        self.experiment_type = experiment_type
         
         self.parallel = parallel
         self.use_data_collector = use_data_collector
@@ -180,11 +181,12 @@ class CoevolutionDriver:
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
 
-    def _evaluate_parallel(self, evaluation_pool, agent_groups, world_kwargs) -> list[dict[str, Any]]:
+    def _evaluate_parallel(self, evaluate, evaluation_pool, agent_groups, world_kwargs=None) -> list[dict[str, Any]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
         Args:
+            evaluate: The evaluation function to use.
             evaluation_pool: The multiprocessing pool to use for evaluation.
             agent_groups: A list of agent groups to evaluate.
             world_kwargs: The keyword arguments to pass to the evaluation function.
@@ -193,14 +195,17 @@ class CoevolutionDriver:
             A list of results from the evaluation function, in the order of the agent groups passed in.
 
         """
-        parameters = [(self.evaluate, [agents], world_kwargs) for agents in agent_groups]
+        if world_kwargs is None:
+            world_kwargs = {}
+
+        parameters = [(evaluate, [agents], world_kwargs) for agents in agent_groups]
 
         if self.parallel:
             end_states = evaluation_pool.starmap(_apply_args_and_kwargs, parameters)
         else:
             end_states = list()
             for agents in agent_groups:
-                end_states.append(self.evaluate(agents, **world_kwargs))
+                end_states.append(evaluate(agents, **world_kwargs))
         return end_states
 
     def _exhibition(self, coevolution, amount, world_kwargs, log_path, evaluation_pool) -> None:
@@ -235,6 +240,36 @@ class CoevolutionDriver:
                     statistics_file.write(f'{result_name}:\n{result_value}\n')
 
     def _parse_config(self, config_filename: str, run_count: int, merge_parameters: dict) -> list[dict[str, Any]]:
+        """Parse a configuration file and return a dictionary of parameters for each run.
+
+        Args:
+            config_filename: The filename of the configuration file to parse.
+            run_count: The number of runs to perform.
+            merge_parameters: A dictionary of parameters to merge into the configuration file's parameters.
+
+        Returns:
+
+
+        """
+
+        with open(config_filename, 'rb') as config_file:
+            base_parameters = tomllib.load(config_file)
+
+        parameters = []
+        for i in range(run_count):
+            run_parameters = copy.deepcopy(base_parameters)
+            run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
+            for parameter_name, parameter in merge_parameters.items():
+                if isinstance(parameter, dict):
+                    run_parameters[parameter_name].update(parameter)
+                else:
+                    run_parameters[parameter_name] = parameter
+
+            # TODO: Allow merge parameters to vary per run, e.g. a list indexed by i
+            parameters.append(run_parameters)
+        return parameters
+
+    def _parse_config_old(self, config_filename: str, run_count: int, merge_parameters: dict) -> list[dict[str, Any]]:
         """Parse a configuration file and return a dictionary of parameters for each run.
 
         Args:
@@ -297,9 +332,6 @@ class CoevolutionDriver:
         Todo:
             * Store random seeds, propagate to threads.
         """
-
-        coevolution_kwargs = run_parameters['coevolution_kwargs']
-        world_kwargs = run_parameters['world_kwargs']
         log_subfolder = run_parameters['log_subfolder']
 
         if self.use_data_collector:
@@ -307,9 +339,9 @@ class CoevolutionDriver:
         else:
             data_collector = None
 
-        
-        coevolution_manager = self.experiment.create_experiment()
-        
+        experiment = self.experiment_type(run_parameters)
+        coevolution_manager: Coevolution = experiment.create_experiment()
+        world_kwargs = {}  # TODO: Determine if this is still needed.
         
         # for population_name, generator_parameters in generators.items():
         #     generator_type, generator_kwargs = generator_parameters
@@ -358,7 +390,7 @@ class CoevolutionDriver:
                     agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
                     agent_args = [(*pair,) for pair in agent_groups]
 
-                    end_states = self._evaluate_parallel(evaluation_pool, agent_args, world_kwargs)
+                    end_states = self._evaluate_parallel(experiment.evaluate, evaluation_pool, agent_args, world_kwargs)
 
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]

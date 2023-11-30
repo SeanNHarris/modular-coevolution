@@ -3,7 +3,7 @@ from typing import Any, Optional, Literal, TypedDict, Type, Union
 import abc
 import math
 
-from evolution.specialtypes import EvaluationID
+from modularcoevolution.evolution.specialtypes import EvaluationID
 
 MetricTypes = Union[float, str, list, dict]
 

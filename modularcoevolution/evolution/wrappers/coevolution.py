@@ -1,8 +1,6 @@
 import heapq
 import multiprocessing
 
-from typing_extensions import TypeVarTuple, Unpack
-
 from modularcoevolution.evolution.baseagent import BaseAgent
 from modularcoevolution.evolution.wrappers.baseevolutionwrapper import EvolutionEndedException
 from modularcoevolution.evolution.specialtypes import EvaluationID, GenotypeID, claim_evaluation_id
