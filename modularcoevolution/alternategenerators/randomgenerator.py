@@ -1,5 +1,3 @@
-from modularcoevolution.evolution.generators.basegenerator import *
-
 class RandomGenerator(BaseGenerator):
 	def __init__(self, agentClass, totalAgents = 900, parallelEvaluations = 1):
 		super().__init__()

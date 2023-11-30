@@ -1,6 +1,3 @@
-from modularcoevolution.evolution.generators.basegenerator import *
-
-
 class FixedGenerator(BaseGenerator):
     def __init__(self, agentClass, agentParameters):
         super().__init__()

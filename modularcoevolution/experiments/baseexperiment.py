@@ -3,12 +3,12 @@ import copy
 from typing import Sequence, Any, Union, Literal
 
 from modularcoevolution.alternategenerators.archivegenerator import ArchiveGenerator
-from modularcoevolution.evolution.baseagent import BaseAgent
-from modularcoevolution.evolution.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
-from modularcoevolution.evolution.generators import BaseGenerator
-from modularcoevolution.evolution.generators.basegenerator import MetricFunction
-from modularcoevolution.evolution.specialtypes import GenotypeID
-from modularcoevolution.evolution.wrappers.baseevolutionwrapper import BaseEvolutionWrapper
+from modularcoevolution.agents.baseagent import BaseAgent
+from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
+from modularcoevolution.generators import BaseGenerator
+from modularcoevolution.generators.basegenerator import MetricFunction
+from modularcoevolution.utilities.specialtypes import GenotypeID
+from modularcoevolution.wrappers.baseevolutionwrapper import BaseEvolutionWrapper
 
 
 class BaseExperiment(metaclass=abc.ABCMeta):

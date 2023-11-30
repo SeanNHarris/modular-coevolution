@@ -1,8 +1,8 @@
 from typing import Any
 
-from modularcoevolution.evolution.baseobjectivetracker import BaseObjectiveTracker
-from modularcoevolution.evolution.generators.basegenerator import BaseGenerator, AgentType
-from modularcoevolution.evolution.specialtypes import GenotypeID
+from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
+from modularcoevolution.generators.basegenerator import BaseGenerator, AgentType
+from modularcoevolution.utilities.specialtypes import GenotypeID
 
 
 class ArchiveGenerator(BaseGenerator):

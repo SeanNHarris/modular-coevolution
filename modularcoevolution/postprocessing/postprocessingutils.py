@@ -3,21 +3,14 @@ from functools import partial
 from typing import Type
 
 from evolution import datacollector
-from evolution.baseagent import BaseAgent
 from evolution.baseevolutionaryagent import BaseEvolutionaryAgent
 from evolution.drivers import coevolutiondriver
 from evolution.drivers.coevolutiondriver import EvaluateType, ResultsType
-from modularcoevolution.evolution.basegenotype import BaseGenotype
-from modularcoevolution.evolution.generators.nsgaiigenerator import nondominated_sort
-from modularcoevolution.evolution.datacollector import DataCollector
-from modularcoevolution.geneticprogramming.gptree import GPTree
+from modularcoevolution.utilities.datacollector import DataCollector
 
-import json
 import multiprocessing
 import os
 import random
-import sys
-import time
 
 TRUNCATE = True
 world_kwargs = {}
