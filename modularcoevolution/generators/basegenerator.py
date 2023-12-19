@@ -115,13 +115,12 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
         pass
 
-    def submit_evaluation(self, agent_id: GenotypeID, evaluation_id: EvaluationID, evaluation_results: dict[str, Any]) -> None:
+    def submit_evaluation(self, agent_id: GenotypeID, evaluation_results: dict[str, Any]) -> None:
         """Called by a :class:`.BaseEvolutionManager` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Args:
             agent_id: The index of the agent associated with the evaluation results.
-            evaluation_id: The ID of the evaluation.
             evaluation_results: The results of the evaluation.
 
         """

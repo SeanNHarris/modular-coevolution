@@ -1,12 +1,14 @@
 import abc
 import copy
+import multiprocessing
 from typing import Sequence, Any, Union, Literal
 
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
-from modularcoevolution.generators import BaseGenerator
+from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
+from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
 
@@ -23,9 +25,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
     config: dict[str, Any]
     """A dictionary of configuration parameters for the experiment from a configuration file."""
+    agent_types_by_population_name: dict[str, type[BaseAgent]]
+    """A dictionary of agent types, indexed by population name."""
 
     def __init__(self, config: dict[str, Any]):
         """This method creates the experiment object and fixes its parameters, but does not create any generators.
+        This function should be called at the *end* of the inheriting class' ``__init__`` function.
 
         Args:
             config: A dictionary of configuration parameters for the experiment from a configuration file.
@@ -33,6 +38,9 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 in the implementation of this class.
         """
         self.config = self._apply_config_defaults(config)
+        self.agent_types_by_population_name = {}
+        for population_name, agent_type in zip(self.population_names(), self.population_agent_types()):
+            self.agent_types_by_population_name[population_name] = agent_type
 
     @abc.abstractmethod
     def evaluate(self, agents: Sequence[BaseAgent], **kwargs) -> Sequence[dict[str, Any]]:
@@ -149,25 +157,58 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         manager = self._create_manager(generators)
         return manager
 
-    def create_archive_generators(self, genotypes: list[dict[GenotypeID, BaseObjectiveTracker]]) -> list[ArchiveGenerator]:
+    def create_archive_generators(self, genotypes: dict[str, dict[GenotypeID, BaseObjectiveTracker]]) -> dict[str, ArchiveGenerator]:
         """Create a list of :class:`.ArchiveGenerator` objects from a list of genotypes.
         This is used to load archived agents from a log to be evaluated during post-experiment analysis.
 
         Args:
-            genotypes: A list of dictionaries of genotypes keyed by genotype ID (from the log), one for each population.
+            genotypes: A nested dictionary, mapping population names to an associated dictionary of genotypes
+                keyed by genotype ID (from the log).
+                Generators will only be created for populations in this dictionary,
+                not for all populations in the experiment (in case agents from multiple log files are being mixed).
 
         Returns:
-            A list of :class:`.ArchiveGenerator` objects, one for each population.
+            A dictionary of :class:`.ArchiveGenerator` objects keyed by population name.
         """
-        generators = []
-        population_names = self.population_names()
-        for population_index, population in enumerate(genotypes):
-            agent_types = self.population_agent_types()
-            generators.append(ArchiveGenerator(population_name=population_names[population_index],
-                                               population=population,
-                                               agent_class=agent_types[population_index],
-                                               agent_parameters=self.config[population_index]['agent_parameters']))
+        generators = {}
+        for population_name in genotypes:
+            if population_name not in self.agent_types_by_population_name:
+                raise ValueError(f"Genotypes submitted for {population_name}, which does not exist in this experiment.")
+
+            generators[population_name] = ArchiveGenerator(
+                population_name=population_name,
+                population=genotypes[population_name],
+                agent_class=self.agent_types_by_population_name[population_name],
+                agent_parameters=self.config['populations'][population_name]['agent']
+            )
         return generators
+
+    def evaluate_all(self, agent_groups, parallel=False, evaluation_pool: multiprocessing.Pool = None) -> list[dict[str, Any]]:
+        """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
+        If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
+
+        Args:
+            agent_groups: A list of agent groups to evaluate.
+            parallel: Whether to evaluate the agents using a multiprocessing pool.
+            evaluation_pool: The multiprocessing pool to use for evaluation if ``parallel`` is True.
+                If None, a new pool will be created.
+
+        Returns:
+            A list of results from the evaluation function, in the order of the agent groups passed in.
+
+        """
+
+        parameters = [(self.evaluate, [agents]) for agents in agent_groups]
+
+        if parallel:
+            if evaluation_pool is None:
+                evaluation_pool = parallelutils.create_pool()
+            end_states = evaluation_pool.map(self.evaluate, parameters)
+        else:
+            end_states = list()
+            for agents in agent_groups:
+                end_states.append(self.evaluate(agents))
+        return end_states
 
 
 class PopulationMetrics:

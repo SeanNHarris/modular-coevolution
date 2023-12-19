@@ -1,6 +1,8 @@
 import math
 import random
 
+from modularcoevolution.genotypes.diversity import gpdiversity
+
 
 def genetic_algorithm_distance(genome_1, genome_2):
     #return math.sqrt(sum([(x-y)**2 for x, y in zip(genome_1.genes, genome_2.genes)]))
@@ -25,7 +27,7 @@ def genetic_algorithm_diversity(population, reference=None, samples=None):
 
 def multiple_genome_distance(multiple_1, multiple_2):
     from modularcoevolution.genotypes.lineargenotype import LinearGenotype
-    from modularcoevolution.genotypes.geneticprogramming import GPTree
+    from modularcoevolution.genotypes.geneticprogramming.gptree import GPTree
     distance_sum = 0
     for member_name in multiple_1.members:
         if member_name not in multiple_2.members:

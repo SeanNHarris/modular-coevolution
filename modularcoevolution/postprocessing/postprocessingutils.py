@@ -1,12 +1,15 @@
 import itertools
+import json
 from functools import partial
 from typing import Type
 
-from evolution import datacollector
-from evolution.baseevolutionaryagent import BaseEvolutionaryAgent
-from evolution.drivers import coevolutiondriver
-from evolution.drivers.coevolutiondriver import EvaluateType, ResultsType
-from modularcoevolution.utilities.datacollector import DataCollector
+from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
+from modularcoevolution.drivers import coevolutiondriver
+from modularcoevolution.drivers.coevolutiondriver import EvaluateType, ResultsType
+from modularcoevolution.experiments.baseexperiment import BaseExperiment
+from modularcoevolution.generators.archivegenerator import ArchiveGenerator
+from modularcoevolution.utilities import parallelutils
+from modularcoevolution.utilities.datacollector import DataCollector, DataSchema
 
 import multiprocessing
 import os
@@ -16,9 +19,37 @@ TRUNCATE = True
 world_kwargs = {}
 
 
-def load_run_data(run_folder, last_generation = False):
-    data_path = f"{run_folder}/data"
-    print(f"Reading experiment run data from {data_path}")
+def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseExperiment]) -> BaseExperiment:
+    '''
+    Initialize an experiment definition object based on the parameters logged for a given run.
+
+    Args:
+        run_folder: The path to the folder for the run.
+        experiment_type: The type of experiment used in the run.
+            This should match the type logged in the parameters.json file.
+
+    Returns:
+        BaseExperiment: The experiment definition object.
+
+    Raises:
+        FileNotFoundError: If the configuration file is not found.
+
+    '''
+    config_path = f'{run_folder}/parameters.json'
+    with open(config_path) as config_file:
+        config = json.load(config_file)
+
+    if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
+        raise ValueError(f'Experiment type in parameters.json ({config['experiment']['experiment_type']}) does not '
+                         f'match specified experiment_type ({experiment_type.__name__})')
+
+    experiment = experiment_type(config)
+    return experiment
+
+
+def load_run_data(run_folder, last_generation=False):
+    data_path = f'{run_folder}/data'
+    print(f'Reading experiment run data from {data_path}')
     data_collector = DataCollector()
     if last_generation:
         data_collector.load_last_generation(data_path)
@@ -27,17 +58,11 @@ def load_run_data(run_folder, last_generation = False):
     return data_collector.data
 
 
-def load_experiment_data(experiment_folder, last_generation = False, parallel = True):
-    run_folders = [folder.path for folder in os.scandir(f"Logs/{experiment_folder}") if folder.is_dir()]
+def load_experiment_data(experiment_folder, last_generation=False, parallel=True) -> dict[str, DataSchema]:
+    run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
 
     if parallel:
-        try:
-            num_processes = int(os.environ["SLURM_JOB_CPUS_PER_NODE"])
-        except KeyError:
-            print("Not a Slurm job, using all CPU cores.")
-            num_processes = multiprocessing.cpu_count()
-        print(f"Running with {num_processes} processes.")
-        pool = multiprocessing.Pool(num_processes)
+        pool = parallelutils.create_pool()
         load_run_data_partial = partial(load_run_data, last_generation=last_generation)
         data_files = pool.map(load_run_data_partial, run_folders)
         pool.close()
@@ -48,47 +73,76 @@ def load_experiment_data(experiment_folder, last_generation = False, parallel = 
         run_data_files = {_get_run_name(run_folder): load_run_data(run_folder, last_generation) for run_folder in run_folders}
     return run_data_files
 
+
+def load_experiment_definition(experiment_folder: str, experiment_type: type[BaseExperiment]) -> BaseExperiment:
+    run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
+    return load_run_experiment_definition(run_folders[0], experiment_type)
+
+
 def _get_run_name(run_folder):
-    return str(run_folder).split("/")[-1]
+    return str(run_folder).split('/')[-1]
 
 
-def create_best_individuals(run_data: datacollector.DataSchema,
-                            agent_type_dictionary: dict[str, Type[BaseEvolutionaryAgent]],
-                            limit_populations = None,
-                            representative_size= -1) -> dict[str, list[BaseEvolutionaryAgent]]:
-    experiment_agents = {}
+def load_best_run_individuals(
+    run_data: DataSchema,
+    experiment_definition: BaseExperiment,
+    limit_populations=None,
+    representative_size=-1
+) -> dict[str, ArchiveGenerator]:
+    """
+    Load the best individuals from a run into :class:`.ArchiveGenerator` objects.
+
+    Parameters:
+    - run_data: The run data containing information about the generations.
+    - experiment_definition: The experiment definition used for this run.
+    - limit_populations: If provided, only the specified populations will be loaded.
+    - representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+
+    Returns:
+    - dict[str, ArchiveGenerator]: A dictionary mapping population names to archive generators.
+
+    Raises:
+    - ValueError: If a population name is not found in the experiment definition.
+    """
+
     if limit_populations:
-        populations = limit_populations
+        populations_to_load = limit_populations
     else:
-        populations = run_data["generations"].keys()
-    for population in populations:
-        print(f"Processing population \"{population}\"...")
-        if population not in experiment_agents:
-            experiment_agents[population] = {}
+        populations_to_load = run_data['generations'].keys()
 
-        parameters: coevolutiondriver.ParameterSchema = run_data['experiment']['parameters']
-        run_agent_parameters = parameters['generators'][population][1]['agent_parameters']
-        run_genotype_parameters = parameters['generators'][population][1]['genotype_parameters']
+    experiment_genotypes = {}
+    for population_name in populations_to_load:
+        if population_name not in experiment_definition.population_names():
+            raise ValueError(f'Population name {population_name} not found in experiment definition.')
+        agent_type = experiment_definition.agent_types_by_population_name[population_name]
+
+        print(f'Processing population \'{population_name}\'...')
+
+        #parameters: coevolutiondriver.ParameterSchema = run_data['experiment']['parameters']
+        #run_agent_parameters = parameters['generators'][population_name][1]['agent_parameters']
+        #run_genotype_parameters = parameters['generators'][population_name][1]['genotype_parameters']
+
+        run_agent_parameters = experiment_definition.config['populations'][population_name]['agent']
+        run_genotype_parameters = experiment_definition.config['populations'][population_name]['genotype']
 
         last_generation = max(
-            int(key) for key in run_data["generations"][population].keys()
+            int(key) for key in run_data['generations'][population_name].keys()
         )
 
-        experiment_agents[population] = {}
-        population_size = len(run_data["generations"][population][str(last_generation)]["individual_ids"])
+        experiment_genotypes[population_name] = {}
+        population_size = len(run_data['generations'][population_name][str(last_generation)]['individual_ids'])
         if representative_size < 0:
             population_representative_size = population_size
         else:
             population_representative_size = min(representative_size, population_size)
 
         elites = []
-        if "front members" in run_data["generations"][population][str(last_generation)]["metric_statistics"]:
+        if 'front members' in run_data['generations'][population_name][str(last_generation)]['metric_statistics']:
             # Multiobjective
             front = 0
 
             while len(elites) < population_representative_size:
-                front_elites = \
-                run_data["generations"][population][str(last_generation)]["metric_statistics"]["front members"][front]
+                front_elites = run_data['generations'][population_name][str(last_generation)]['metric_statistics']['front members'][front]
                 amount_needed = population_representative_size - len(elites)
                 if amount_needed >= len(front_elites):
                     elites.extend(front_elites)
@@ -98,24 +152,19 @@ def create_best_individuals(run_data: datacollector.DataSchema,
         else:
             # Single objective
             # The member list is sorted the same way it's sorted in evolution's next generation function, which is more or less fitness
-            generation_members = run_data["generations"][population][str(last_generation)]["individual_ids"]
+            generation_members = run_data['generations'][population_name][str(last_generation)]['individual_ids']
             elites.extend(generation_members[:min(population_representative_size, len(generation_members))])
 
-        population_agents = []
+        population_genotypes = {}
         for individual_id in elites:
-            agent_type = agent_type_dictionary[population]
-            data_genotype_parameters = run_data["individuals"][population][str(individual_id)]["genotype"]
-            if "genotype" in data_genotype_parameters:
-                data_genotype_parameters.update(data_genotype_parameters["genotype"])
-            if "nodeType" in data_genotype_parameters:
-                del data_genotype_parameters["nodeType"]
             genotype_parameters = agent_type.genotype_default_parameters(run_agent_parameters)
             deep_update_dictionary(genotype_parameters, run_genotype_parameters)
-            deep_update_dictionary(genotype_parameters, data_genotype_parameters)
-            agent = agent_type(run_agent_parameters, genotype=agent_type.genotype_class()(genotype_parameters))
-            population_agents.append(agent)
-        experiment_agents[population] = population_agents
-    return experiment_agents
+            genotype = agent_type.genotype_class()(genotype_parameters)
+            population_genotypes[individual_id] = genotype
+        experiment_genotypes[population_name] = population_genotypes
+    archive_generators = experiment_definition.create_archive_generators(experiment_genotypes)
+    return archive_generators
+
 
 def deep_update_dictionary(dictionary: dict, update: dict) -> None:
     for key, value in update.items():
@@ -126,105 +175,44 @@ def deep_update_dictionary(dictionary: dict, update: dict) -> None:
         else:
             dictionary[key] = value
 
-def compare_populations(representatives: list[list[BaseEvolutionaryAgent]], player_sources: list[int], evaluate: EvaluateType, world_kwargs: dict) -> list[float]:
+
+def round_robin_evaluation(
+    populations: list[ArchiveGenerator],
+    experiment_definition: BaseExperiment,
+    repeat_evaluations: int = 1,
+    parallel: bool = False
+):
+    """
+    Evaluate the populations through round-robin evaluations.
+    The resulting objective scores are managed within the archive generators.
+    Args:
+        populations: A list containing the :class:`.ArchiveGenerator` for each population.
+        experiment_definition: The experiment definition to use for evaluation.
+        repeat_evaluations: The number of times to repeat each pairing.
+        parallel: Whether to evaluate the populations in parallel.
+    """
+    individuals = [population.get_individuals_to_test() for population in populations]
+    agent_groups = []
+    for player_ids in itertools.product(*individuals):
+        for _ in range(repeat_evaluations):
+            agents = []
+            for player_id, population in zip(player_ids, populations):
+                agents.append(population.build_agent_from_id(player_id))
+            agent_groups.append(agents)
+    results = experiment_definition.evaluate_all(agent_groups, parallel)
+    for agents, result in zip(agent_groups, results):
+        for agent, generator in zip(agents, populations):
+            generator.submit_evaluation(agent.genotype.id, result)
+
+
+def compare_populations(populations: dict[str, ArchiveGenerator], experiment_definition: BaseExperiment) -> list[float]:
     """
     Compute the relative fitness between population representatives through round-robin evaluations.
     Args:
-        representatives: A list of lists of agents, where each list of agents are the representatives from a population.
-        player_sources: Which population to draw each player in the game from.
-        evaluate: The evaluation function to be used.
-        world_kwargs: The keyword arguments to be passed to the evaluation function.
+        populations: A dictionary mapping population names to :class:`.ArchiveGenerator` objects for each population.
+        experiment_definition: The experiment definition to use for comparison.
 
     Returns:
         The average fitness for each population, as a list.
     """
-    players = [representatives[source] for source in player_sources]
-    agent_groups = list(itertools.product(*representatives))
-    for agent_group in agent_groups:
-        results: ResultsType = evaluate(agent_group, **world_kwargs)
-
-
-
-def process_experiment(experiment, limit_types=None, all_generations=False, parallel=True, representative_size=0):
-    experiment_agents = dict()
-    run_folders = [folder.path for folder in os.scandir(f"Logs/{experiment}") if folder.is_dir()]
-
-    if parallel:
-        try:
-            num_processes = int(os.environ["SLURM_JOB_CPUS_PER_NODE"])
-        except KeyError:
-            print("Not a Slurm job, using all CPU cores.")
-            num_processes = multiprocessing.cpu_count()
-        print(f"Running with {num_processes} processes.")
-        pool = multiprocessing.Pool(num_processes)
-        data_files = pool.map(load_run_data, run_folders)
-        pool.close()
-        pool.join()
-        run_data_files = {_get_run_name(run_folder): data_file for run_folder, data_file in zip(run_folders, data_files)}
-    else:
-        run_data_files = dict()
-        for run_folder in run_folders:
-            run_data_files[_get_run_name(run_folder)] = (load_run_data(run_folder))
-
-    # Main loop
-    for run_folder in run_folders:
-        run_name = _get_run_name(run_folder)
-        print(f"Processing {run_name}...")
-        data = run_data_files[run_name]
-
-        if limit_types:
-            populations = limit_types
-        else:
-            populations = data["generations"]
-        for population in populations:
-            print(f"Processing population \"{population}\"...")
-            if population not in experiment_agents:
-                experiment_agents[population] = dict()
-
-            last_generation = max([int(key) for key in data["generations"][population].keys()])
-            if all_generations:
-                generations = range(last_generation + 1)
-            else:
-                generations = [last_generation]
-
-            experiment_agents[population][run_name] = dict()
-            for generation in generations:
-                population_size = len(data["generations"][population][str(generation)]["individual_ids"])
-                if representative_size == 0:
-                    population_representative_size = population_size
-                else:
-                    population_representative_size = min(representative_size, population_size)
-
-                elites = list()
-                if "front members" in data["generations"][population][str(generation)]["metric_statistics"]:
-                    # Multiobjective
-                    front = 0
-
-                    while len(elites) < population_representative_size:
-                        front_elites = data["generations"][population][str(generation)]["metric_statistics"]["front members"][front]
-                        amount_needed = population_representative_size - len(elites)
-                        if amount_needed >= len(front_elites):
-                            elites.extend(front_elites)
-                        else:
-                            elites.extend(random.sample(front_elites, amount_needed))
-                        front += 1
-                else:
-                    # Single objective
-                    # The member list is sorted the same way it's sorted in evolution's next generation function, which is more or less fitness
-                    generation_members = data["generations"][population][str(generation)]["individual_ids"]
-                    elites.extend(generation_members[:min(population_representative_size, len(generation_members))])
-
-                run_agents = list()
-                for individual_id in elites:
-                    agent_type = agent_type_dictionary[population]
-                    data_parameters = data["individuals"][population][str(individual_id)]["genotype"]
-                    if "genotype" in data_parameters:
-                        data_parameters.update(data_parameters["genotype"])
-                    if "nodeType" in data_parameters:
-                        del data_parameters["nodeType"]
-                    parameters = agent_type.genotype_default_parameters()
-                    parameters.update(data_parameters)
-                    agent = agent_type(genotype=agent_type.genotype_class()(parameters))
-                    run_agents.append(agent)
-                experiment_agents[population][run_name][generation] = run_agents
-    return experiment_agents, run_data_files
+    pass

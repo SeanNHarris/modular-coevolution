@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, Sequence, TypedDict, Union
 
 from modularcoevolution.generators.basegenerator import BaseGenerator
-from modularcoevolution.managers.coevolution import EvolutionEndedException
+from modularcoevolution.managers.coevolution import EvolutionEndedException, Coevolution
 from modularcoevolution.utilities.datacollector import DataCollector, StringDefaultJSONEncoder
 from modularcoevolution.utilities.agenttyperegistry import AgentTypeRegistry
 
@@ -174,32 +174,6 @@ class CoevolutionDriver:
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
 
-    def _evaluate_parallel(self, evaluate, evaluation_pool, agent_groups, world_kwargs=None) -> list[dict[str, Any]]:
-        """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
-        If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
-
-        Args:
-            evaluate: The evaluation function to use.
-            evaluation_pool: The multiprocessing pool to use for evaluation.
-            agent_groups: A list of agent groups to evaluate.
-            world_kwargs: The keyword arguments to pass to the evaluation function.
-
-        Returns:
-            A list of results from the evaluation function, in the order of the agent groups passed in.
-
-        """
-        if world_kwargs is None:
-            world_kwargs = {}
-
-        parameters = [(evaluate, [agents], world_kwargs) for agents in agent_groups]
-
-        if self.parallel:
-            end_states = evaluation_pool.starmap(_apply_args_and_kwargs, parameters)
-        else:
-            end_states = list()
-            for agents in agent_groups:
-                end_states.append(evaluate(agents, **world_kwargs))
-        return end_states
 
     def _exhibition(self, coevolution, amount, world_kwargs, log_path, evaluation_pool) -> None:
         """Run exhibition evaluations between the best individuals of the current generation.
@@ -248,6 +222,8 @@ class CoevolutionDriver:
         with open(config_filename, 'rb') as config_file:
             base_parameters = tomllib.load(config_file)
 
+        base_parameters['experiment']['experiment_type'] = self.experiment_type.__name__
+
         parameters = []
         for i in range(run_count):
             run_parameters = copy.deepcopy(base_parameters)
@@ -262,53 +238,6 @@ class CoevolutionDriver:
             parameters.append(run_parameters)
         return parameters
 
-    def _parse_config_old(self, config_filename: str, run_count: int, merge_parameters: dict) -> list[dict[str, Any]]:
-        """Parse a configuration file and return a dictionary of parameters for each run.
-
-        Args:
-            config_filename: The filename of the configuration file to parse.
-            run_count: The number of runs to perform.
-            merge_parameters: A dictionary of parameters to merge into the configuration file's parameters.
-
-        Returns:
-            A list containing the parameters for each run.
-
-        """
-
-        with open(config_filename, 'r') as config_file:
-            lines = config_file.read()
-            extended_globals = globals()
-            extended_globals.update(AgentTypeRegistry.name_lookup)
-            config_locals = {}
-            exec(lines, globals(), config_locals)  # TODO: Better way of parsing config files
-        base_parameters = config_locals
-
-        if 'predator_type' in base_parameters and 'generators' not in base_parameters:
-            print("Old-style config file detected. Assuming two-population coevolution with predator and prey populations.")
-            predator_kwargs = base_parameters['predator_kwargs']
-            predator_kwargs['agent_class'], predator_kwargs['initial_size'], predator_kwargs['children_size'] = base_parameters['predator_args']
-            prey_kwargs = base_parameters['prey_kwargs']
-            prey_kwargs['agent_class'], prey_kwargs['initial_size'], prey_kwargs['children_size'] = base_parameters['prey_args']
-            base_parameters['generators'] = {
-                'predator': (base_parameters['predator_type'], base_parameters['predator_kwargs']),
-                'prey': (base_parameters['prey_type'], base_parameters['prey_kwargs'])
-            }
-            base_parameters['coevolution_kwargs']['num_generations'] = base_parameters['coevolution_args'][2]
-            base_parameters['coevolution_kwargs']['player_generators'] = (0, 1)
-
-        parameters = []
-        for i in range(run_count):
-            run_parameters = copy.deepcopy(base_parameters)
-            run_parameters['log_subfolder'] = f"{base_parameters['experiment_name']}/Run {i}"
-            for parameter_name, parameter in merge_parameters.items():
-                if isinstance(parameter, dict):
-                    run_parameters[parameter_name].update(parameter)
-                else:
-                    run_parameters[parameter_name] = parameter
-
-            # TODO: Allow merge parameters to vary per run, e.g. a list indexed by i
-            parameters.append(run_parameters)
-        return parameters
 
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
@@ -361,14 +290,14 @@ class CoevolutionDriver:
 
         os.makedirs(log_path, exist_ok=True)
         data_collector.set_experiment_parameters(run_parameters)
-        with open(f'{log_path}/parameters.txt', 'a+') as parameter_file:
+        with open(f'{log_path}/parameters.json', 'a+') as parameter_file:
             parameter_file.truncate(0)
-            json.dump(data_collector.data, parameter_file, cls=StringDefaultJSONEncoder)
+            json.dump(run_parameters, parameter_file)
 
         if self.parallel:
-            try:
-                num_processes = int(os.environ['SLURM_JOB_CPUS_PER_NODE'])
-            except KeyError:
+            if 'SLURM_JOB_CPUS_PER_NODE' in os.environ:
+                num_processes = int(os.environ["SLURM_JOB_CPUS_PER_NODE"])
+            else:
                 print("Not a Slurm job, using all CPU cores.")
                 num_processes = multiprocessing.cpu_count()
             print(f"Running with {num_processes} processes.")
@@ -383,7 +312,7 @@ class CoevolutionDriver:
                     agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
                     agent_args = [(*pair,) for pair in agent_groups]
 
-                    end_states = self._evaluate_parallel(experiment.evaluate, evaluation_pool, agent_args, world_kwargs)
+                    end_states = experiment.evaluate_all(agent_args, self.parallel, evaluation_pool)
 
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]

@@ -296,7 +296,7 @@ class Coevolution:
         agent_group = self.evaluation_table[evaluation_id]
         if evaluation_id in self.remaining_evolution_evaluations:
             for generator, agent_id in zip(self.get_generator_order(), agent_group):
-                generator.submit_evaluation(agent_id, evaluation_id, evaluation_results[agent_id])
+                generator.submit_evaluation(agent_id, evaluation_results[agent_id])
             self.evaluated_groups[agent_group] = self.evaluated_groups.setdefault(agent_group, 0) + 1
             self.remaining_evolution_evaluations.remove(evaluation_id)
         elif evaluation_id in self.remaining_tournament_evaluations:

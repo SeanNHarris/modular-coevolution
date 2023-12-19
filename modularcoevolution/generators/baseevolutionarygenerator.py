@@ -202,18 +202,17 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             result += [genotype.id for genotype in self.hall_of_fame]
         return result
 
-    def submit_evaluation(self, agent_id: GenotypeID, evaluation_id: EvaluationID, evaluation_results: dict[str, Any]) -> None:
+    def submit_evaluation(self, agent_id: GenotypeID, evaluation_results: dict[str, Any]) -> None:
         """Called by a :class:`.BaseEvolutionManager` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Args:
             agent_id: The index of the agent associated with the evaluation results.
-            evaluation_id: The ID of the evaluation.
             evaluation_results: The results of the evaluation.
 
         """
 
-        super().submit_evaluation(agent_id, evaluation_id, evaluation_results)
+        super().submit_evaluation(agent_id, evaluation_results)
         individual = self.get_genotype_with_id(agent_id)
         if "novelty" not in individual.metrics:
             novelty = self.get_diversity(agent_id, min(100, len(self.population)))
