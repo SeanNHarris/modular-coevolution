@@ -1,7 +1,8 @@
 import abc
 import copy
+import itertools
 import multiprocessing
-from typing import Sequence, Any, Union, Literal
+from typing import Sequence, Any, Union, Literal, Callable
 
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
@@ -9,6 +10,7 @@ from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguratio
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
 from modularcoevolution.utilities import parallelutils
+from modularcoevolution.utilities.dictutils import deep_copy_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
 
@@ -117,14 +119,14 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             The config dictionary, where each population configuration uses the corresponding values from `defaults`
             for parameters that were not explicitly specified.
         """
-        updated_config = copy.deepcopy(config)
+        updated_config = deep_copy_dictionary(config)
         if 'default' not in config:
             return updated_config
 
         if 'populations' not in config:
             updated_config['populations'] = {}
         for population in self.population_names():
-            population_config: dict = copy.deepcopy(updated_config['default'])
+            population_config: dict = deep_copy_dictionary(updated_config['default'])
             sub_configs = ('generator', 'genotype', 'agent')
             if population in updated_config['populations']:
                 override_config = updated_config['populations'][population]
@@ -157,15 +159,17 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         manager = self._create_manager(generators)
         return manager
 
-    def create_archive_generators(self, genotypes: dict[str, dict[GenotypeID, BaseObjectiveTracker]]) -> dict[str, ArchiveGenerator]:
+    def create_archive_generators(self,
+                                  genotypes: dict[str, Sequence[BaseObjectiveTracker]],
+                                  original_ids: dict[str, dict[GenotypeID, int]]) -> dict[str, ArchiveGenerator]:
         """Create a list of :class:`.ArchiveGenerator` objects from a list of genotypes.
         This is used to load archived agents from a log to be evaluated during post-experiment analysis.
 
         Args:
-            genotypes: A nested dictionary, mapping population names to an associated dictionary of genotypes
-                keyed by genotype ID (from the log).
+            genotypes: A nested dictionary, mapping population names to genotypes.
                 Generators will only be created for populations in this dictionary,
                 not for all populations in the experiment (in case agents from multiple log files are being mixed).
+            original_ids: A nested dictionary, mapping population names to mappings from current `GenotypeID` values to original logged IDs.
 
         Returns:
             A dictionary of :class:`.ArchiveGenerator` objects keyed by population name.
@@ -177,13 +181,24 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
             generators[population_name] = ArchiveGenerator(
                 population_name=population_name,
-                population=genotypes[population_name],
+                genotypes=genotypes[population_name],
+                original_ids=original_ids[population_name],
                 agent_class=self.agent_types_by_population_name[population_name],
                 agent_parameters=self.config['populations'][population_name]['agent']
             )
+
+        metrics = self._build_metrics()
+        for population_index, population_name in enumerate(self.population_names()):
+            if population_name not in generators:
+                continue
+            generator = generators[population_name]
+            population_metrics = metrics[population_index]
+            for metric_configuration, metric_function in population_metrics.metrics:
+                generator.register_metric(metric_configuration, metric_function)
+
         return generators
 
-    def evaluate_all(self, agent_groups, parallel=False, evaluation_pool: multiprocessing.Pool = None) -> list[dict[str, Any]]:
+    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
@@ -198,17 +213,55 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
         """
 
-        parameters = [(self.evaluate, [agents]) for agents in agent_groups]
-
         if parallel:
             if evaluation_pool is None:
                 evaluation_pool = parallelutils.create_pool()
-            end_states = evaluation_pool.map(self.evaluate, parameters)
+            end_states = evaluation_pool.map(self.evaluate, agent_groups)
         else:
             end_states = list()
             for agents in agent_groups:
                 end_states.append(self.evaluate(agents))
         return end_states
+
+
+    def exhibition(self,
+                    populations: Sequence[BaseGenerator],
+                    amount: int,
+                    log_path: str,
+                    parallel: bool = False,
+                    evaluation_pool: multiprocessing.Pool = None) -> None:
+        """Run exhibition evaluations between the best individuals of the current generation.
+
+        Args:
+            populations: The list of generators to pull individuals from.
+            amount: The number of agents to evaluate from each population.
+            log_path: The path to the current log folder.
+            parallel: Whether to evaluate the agents using a multiprocessing pool.
+            evaluation_pool: The multiprocessing pool to use for evaluation.
+        """
+        agent_ids = [generator.get_representatives_from_generation(-1, amount) for generator in populations]
+        population_agents = [[population.build_agent_from_id(agent_id, True) for agent_id in agent_ids[population_index]] for population_index, population in enumerate(populations)]
+        agents = [population_agents[population_index] for population_index in self.player_populations()]
+        agent_names = [populations[population_index].population_name for population_index in self.player_populations()]
+
+        agent_groups = list(itertools.product(*agents))
+        # Don't evaluate games with duplicate agents.
+        # The same pair of agents can still be evaluated multiple times in different player orders.
+        agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
+        agent_numbers = [range(amount) for _ in agents]
+        agent_group_numbers = list(itertools.product(*agent_numbers))
+        results = self.evaluate_all(agent_groups, parallel, evaluation_pool)
+        for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
+            number_string = '-'.join([str(number) for number in agent_numbers])
+            statistics_filepath = f'{log_path}/exhibitionStats{number_string}.txt'
+            with open(statistics_filepath, 'w+') as statistics_file:
+                statistics_file.truncate(0)
+                for player_index, agent in enumerate(agent_group):
+                    agent_name = agent_names[player_index]
+                    statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
+                    for metric_name, metric_value in result[player_index].items():
+                        statistics_file.write(f'{metric_name}:\n{metric_value}\n')
+                    statistics_file.write('\n')
 
 
 class PopulationMetrics:
@@ -224,7 +277,7 @@ class PopulationMetrics:
                         metric_name: str,
                         metric_function: Union[MetricFunction, str],
                         is_objective: bool = False,
-                        repeat_mode: Literal['replace', 'average', 'min', 'max'] = 'average',
+                        repeat_mode: Literal['replace', 'average', 'min', 'max', 'sum'] = 'average',
                         log_history: bool = False) -> None:
         """
         Registers a metric.
@@ -243,6 +296,7 @@ class PopulationMetrics:
                 - ``'average'``: Record the mean of all submitted values. Must be a numeric type.
                 - ``'min'``: Record the minimum of all submitted values. Must be a numeric type.
                 - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
+                - ``'sum'``: Record the sum of all submitted values. Must be a numeric type.
             log_history: If true, store a history of all submitted values for this metric.
                 Avoid using this unnecessarily, as it can impact the size of the log file.
             metric_function: A function which computes the metric from the dictionary of evaluation results.

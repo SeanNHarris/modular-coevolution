@@ -1,11 +1,10 @@
 import itertools
 import json
 from functools import partial
-from typing import Type
+from typing import Type, Sequence
 
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.drivers import coevolutiondriver
-from modularcoevolution.drivers.coevolutiondriver import EvaluateType, ResultsType
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.utilities import parallelutils
@@ -14,6 +13,8 @@ from modularcoevolution.utilities.datacollector import DataCollector, DataSchema
 import multiprocessing
 import os
 import random
+
+from modularcoevolution.utilities.dictutils import deep_update_dictionary
 
 TRUNCATE = True
 world_kwargs = {}
@@ -40,7 +41,7 @@ def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseEx
         config = json.load(config_file)
 
     if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
-        raise ValueError(f'Experiment type in parameters.json ({config['experiment']['experiment_type']}) does not '
+        raise ValueError(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
                          f'match specified experiment_type ({experiment_type.__name__})')
 
     experiment = experiment_type(config)
@@ -111,6 +112,7 @@ def load_best_run_individuals(
         populations_to_load = run_data['generations'].keys()
 
     experiment_genotypes = {}
+    original_ids = {}
     for population_name in populations_to_load:
         if population_name not in experiment_definition.population_names():
             raise ValueError(f'Population name {population_name} not found in experiment definition.')
@@ -155,25 +157,18 @@ def load_best_run_individuals(
             generation_members = run_data['generations'][population_name][str(last_generation)]['individual_ids']
             elites.extend(generation_members[:min(population_representative_size, len(generation_members))])
 
-        population_genotypes = {}
+        population_genotypes = []
+        population_original_ids = {}
         for individual_id in elites:
             genotype_parameters = agent_type.genotype_default_parameters(run_agent_parameters)
             deep_update_dictionary(genotype_parameters, run_genotype_parameters)
             genotype = agent_type.genotype_class()(genotype_parameters)
-            population_genotypes[individual_id] = genotype
+            population_genotypes.append(genotype)
+            population_original_ids[genotype.id] = individual_id
         experiment_genotypes[population_name] = population_genotypes
-    archive_generators = experiment_definition.create_archive_generators(experiment_genotypes)
+        original_ids[population_name] = population_original_ids
+    archive_generators = experiment_definition.create_archive_generators(experiment_genotypes, original_ids)
     return archive_generators
-
-
-def deep_update_dictionary(dictionary: dict, update: dict) -> None:
-    for key, value in update.items():
-        if isinstance(value, dict):
-            if key not in dictionary:
-                dictionary[key] = {}
-            deep_update_dictionary(dictionary[key], value)
-        else:
-            dictionary[key] = value
 
 
 def round_robin_evaluation(
@@ -191,18 +186,24 @@ def round_robin_evaluation(
         repeat_evaluations: The number of times to repeat each pairing.
         parallel: Whether to evaluate the populations in parallel.
     """
-    individuals = [population.get_individuals_to_test() for population in populations]
-    agent_groups = []
-    for player_ids in itertools.product(*individuals):
-        for _ in range(repeat_evaluations):
-            agents = []
-            for player_id, population in zip(player_ids, populations):
-                agents.append(population.build_agent_from_id(player_id))
-            agent_groups.append(agents)
+    player_populations = experiment_definition.player_populations()
+    individual_ids = [population.get_individuals_to_test() for population in populations]
+    # TODO: Build a new agent for each evaluation in case the agent has state.
+    population_agents = [[population.build_agent_from_id(individual_id, True)
+                          for individual_id in individual_ids[population_index]]
+                         for population_index, population in enumerate(populations)]
+    agents = [population_agents[population_index] for population_index in player_populations]
+
+    agent_groups = list(itertools.product(*agents))
+    # Don't evaluate games with duplicate agents.
+    # The same pair of agents can still be evaluated multiple times in different player orders.
+    agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
+    agent_groups = agent_groups * repeat_evaluations
     results = experiment_definition.evaluate_all(agent_groups, parallel)
     for agents, result in zip(agent_groups, results):
-        for agent, generator in zip(agents, populations):
-            generator.submit_evaluation(agent.genotype.id, result)
+        for player_index, agent in enumerate(agents):
+            generator = populations[player_populations[player_index]]
+            generator.submit_evaluation(agent.genotype.id, result[player_index])
 
 
 def compare_populations(populations: dict[str, ArchiveGenerator], experiment_definition: BaseExperiment) -> list[float]:
@@ -216,3 +217,38 @@ def compare_populations(populations: dict[str, ArchiveGenerator], experiment_def
         The average fitness for each population, as a list.
     """
     pass
+
+
+def compare_experiments_symmetric(experiment_1_populations: list[ArchiveGenerator],
+                                  experiment_2_populations: list[ArchiveGenerator],
+                                  experiment_definition: BaseExperiment,
+                                  repeat_evaluations: int = 1,
+                                  parallel: bool = False) -> list[list[float]]:
+    """
+    Compare two experiments for a symmetric game by playing the representatives from all their runs against each other
+    in a round-robin tournament.
+
+    Args:
+        experiment_1_populations: The populations from the first experiment.
+        experiment_2_populations: The populations from the second experiment.
+        experiment_definition: The experiment definition to use for comparison.
+        repeat_evaluations: The number of times to repeat each pairing.
+        parallel: Whether to evaluate the populations in parallel.
+
+    Returns:
+        A tuple containing the fitnesses per run for each experiment.
+    """
+
+    if len(experiment_definition.population_names()) > 1:
+        raise ValueError('This function only supports experiments configured with a single population.')
+    combined_archive = ArchiveGenerator.merge_archives(experiment_1_populations + experiment_2_populations)
+    round_robin_evaluation([combined_archive], experiment_definition, repeat_evaluations, parallel=parallel)
+
+    experiment_metrics = []
+    for experiment in [experiment_1_populations, experiment_2_populations]:
+        run_metrics = []
+        for run in experiment:
+            metrics = run.aggregate_metrics()
+            run_metrics.append(metrics)
+        experiment_metrics.append(run_metrics)
+    return experiment_metrics

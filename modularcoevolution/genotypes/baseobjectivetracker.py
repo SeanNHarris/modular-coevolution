@@ -3,9 +3,11 @@ from typing import Literal, TypedDict, Union
 import abc
 import math
 
+import numpy
+
 from modularcoevolution.utilities.specialtypes import EvaluationID
 
-MetricTypes = Union[float, str, list, dict]
+MetricTypes = Union[float, str, list, dict, numpy.ndarray]
 
 
 class MetricConfiguration(TypedDict):
@@ -17,12 +19,13 @@ class MetricConfiguration(TypedDict):
     Objectives must be numeric values.
     Objectives are reported to generators, such as fitness for standard evolutionary algorithms.
     Other metrics are just stored for logging and analysis purposes."""
-    repeat_mode: Literal['replace', 'average', 'min', 'max']
+    repeat_mode: Literal['replace', 'average', 'min', 'max', 'sum']
     """How to handle multiple submissions of the same metric. The following modes are supported:
     - ``'replace'``: Overwrite the previous value with the new one.
     - ``'average'``: Record the mean of all submitted values. Must be a numeric type.
     - ``'min'``: Record the minimum of all submitted values. Must be a numeric type.
-    - ``'max'``: Record the maximum of all submitted values. Must be a numeric type."""
+    - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
+    - ``'sum'``: Record the sum of all submitted values. Must be a numeric type."""
     log_history: bool
     """If true, store a history of all submitted values for this metric. Avoid using this unnecessarily, as it can impact the size of the log file."""
     automatic: bool
@@ -113,7 +116,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
 
         if isinstance(value, int):
             value = float(value)
-        if not isinstance(value, float) and submission['repeat_mode'] != 'replace':
+        if not (isinstance(value, float) or isinstance(value, numpy.ndarray)) and submission['repeat_mode'] != 'replace':
             raise ValueError(f"Metric {metric} was submitted with repeat_mode={submission['repeat_mode']}, but is not a numeric value.")
 
         new_metric = metric not in self.metrics
@@ -166,6 +169,8 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
                 self.metrics[metric] = self.metric_statistics[metric]["minimum"]
             elif submission['repeat_mode'] == 'max':
                 self.metrics[metric] = self.metric_statistics[metric]["maximum"]
+            elif submission['repeat_mode'] == 'sum':
+                self.metrics[metric] += value
 
             if submission['log_history']:
                 self.metric_histories[metric].append(value)

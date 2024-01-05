@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import copy
 import itertools
 import tomllib
@@ -16,26 +17,11 @@ import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
+from modularcoevolution.utilities.dictutils import deep_copy_dictionary
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
     return function(*args, **kwargs)
-
-
-ResultsType = Union[dict[str, Any], list[dict[str, Any]]], tuple[list[dict[str, Any]], dict[str, Any]]
-EvaluateType = Callable[[Sequence, Any, ...], ResultsType]
-"""
-    Args:
-        agents: An ordered list of agents, e.g. [attacker, defender]
-        **kwargs: Any number of keyword arguments that will be passed by ``world_kwargs``.
-    Returns:
-        One of three result formats:
-        #. A dictionary of results, e.g. {'attacker_score': 0.5, 'defender_cost': 0.3}
-        #. A list of dictionaries of results, one for each player in the order of ``agents``.
-        #. Two values: a list of dictionaries of agent-specific results, and a dictionary of shared additional results.
-        The alternative formats are useful when drawing multiple agents from the same population.
-"""
-
 
 class ParameterSchema(TypedDict):
     """A type defining the parameters of a config file."""
@@ -59,68 +45,6 @@ class AugmentedParameterSchema(ParameterSchema):
     """Where to store log files within the logs folder. Includes the name of the experiment and the run number."""
 
 
-def _flatten_list_results(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Flatten a list of per-agent results into a disambiguated results dictionary, for logging purposes.
-
-    Args:
-        results: A list of per-agent results from an evaluation function.
-
-    Returns:
-        A dictionary of results, where entries with duplicate names are disambiguated with the player number.
-        For example, ``[{ 'score': 1, 'score': 2 }]`` will become ``{ 'score<0>': 1, 'score<1>': 2 }``.
-
-    """
-    flattened_results = {}
-    for player, player_results in enumerate(results):
-        for result_name, result_value in player_results.items():
-            if result_name in flattened_results:
-                result_name = f'{result_name}<{player}>'
-            flattened_results[result_name] = result_value
-    return flattened_results
-
-
-def _flatten_results(results: ResultsType) -> dict[str, Any]:
-    """Flatten the results from an evaluation function into a disambiguated results dictionary, for logging purposes.
-    This works for any of the types of results that can be returned by an evaluation function.
-
-    Args:
-        results: The results from an evaluation function.
-
-    Returns:
-        A dictionary of results, where entries with duplicate names are disambiguated with the player number.
-        See ``_flatten_list_results`` for an example.
-    """
-    if isinstance(results, dict):
-        return results
-    elif isinstance(results, list):
-        return _flatten_list_results(results)
-    elif isinstance(results, tuple):
-        return _flatten_list_results(results[0]) | results[1]
-    else:
-        raise TypeError(f'Unexpected results type {type(results)}')
-
-
-def _get_results_for_player(results: ResultsType, player: int) -> dict[str, Any]:
-    """Get the results for a specific player from the results of an evaluation function.
-    This works for any of the types of results that can be returned by an evaluation function.
-
-    Args:
-        results: The results from an evaluation function.
-        player: The index of the player to get results for.
-
-    Returns:
-        A dictionary of results for the specified player.
-    """
-    if isinstance(results, dict):
-        return results
-    elif isinstance(results, list):
-        return results[player]
-    elif isinstance(results, tuple):
-        return results[0][player] | results[1]
-    else:
-        raise TypeError(f'Unexpected results type {type(results)}')
-
-
 class CoevolutionDriver:
     """A class for running coevolutionary experiments which manages a coevolution wrapper and performs evaluations.
     This class will run several coevolutionary runs in sequence, configured by the ``run_amount`` parameter.
@@ -130,15 +54,32 @@ class CoevolutionDriver:
 
     parallel: bool
     """Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging."""
-    use_data_collector: bool
-    """Whether to use a data collector to store results. This will result in a lot of logged data."""
     run_exhibition: bool
     """Whether to run and log exhibition evaluations between the best individuals of each generation."""
+
+    use_data_collector: bool
+    """Whether to use a data collector to store results. This will result in a lot of logged data."""
+    data_collector_split_generations: bool
+    """If True, each generation will be stored in a separate file. See :attr:`.DataCollector.split_generations`."""
+    data_collector_compress: bool
+    """If True, the data collector will compress the saved files with gzip. See :attr:`.DataCollector.compress`."""
+    data_collector_evaluation_logging: bool
+    """If True, the data collector will log the results of each evaluation. See :attr:`.DataCollector.evaluation_logging`."""
 
     parameters: list[dict]
     """For each run to be performed, the parameters for that run."""
 
-    def __init__(self, experiment_type: type[BaseExperiment], config_filename: str, run_amount: int = 30, parallel: bool = True, use_data_collector: bool = True, run_exhibition: bool = True, merge_parameters: dict = None):
+    def __init__(self,
+                 experiment_type: type[BaseExperiment],
+                 config_filename: str,
+                 run_amount: int = 30,
+                 parallel: bool = True,
+                 use_data_collector: bool = True,
+                 data_collector_split_generations: bool = True,
+                 data_collector_compress: bool = True,
+                 data_collector_evaluation_logging: bool = True,
+                 run_exhibition: bool = True,
+                 merge_parameters: dict = None):
         """Create a new coevolution driver.
 
         Args:
@@ -147,6 +88,9 @@ class CoevolutionDriver:
             run_amount: The number of runs to perform.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
             use_data_collector: Whether to use a data collector to store results. This will result in a lot of logged data.
+            data_collector_split_generations: If True, each generation will be stored in a separate file. See :attr:`.DataCollector.split_generations`.
+            data_collector_compress: If True, the data collector will compress the saved files with gzip. See :attr:`.DataCollector.compress`.
+            data_collector_evaluation_logging: If True, the data collector will log the results of each evaluation. See :attr:`.DataCollector.evaluation_logging`.
             run_exhibition: Whether to run and log exhibition evaluations between the best individuals of each generation.
             merge_parameters: A dictionary of parameters to merge into the configuration file.
                 Use this for parameters generated programmatically.
@@ -156,6 +100,9 @@ class CoevolutionDriver:
         
         self.parallel = parallel
         self.use_data_collector = use_data_collector
+        self.data_collector_split_generations = data_collector_split_generations
+        self.data_collector_compress = data_collector_compress
+        self.data_collector_evaluation_logging = data_collector_evaluation_logging
         if not self.use_data_collector:
             # TODO: Support disabling the data collector again
             raise Warning("Disabling the data collector is not currently supported.")
@@ -173,38 +120,6 @@ class CoevolutionDriver:
                 multiprocessing.set_start_method('fork')
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
-
-
-    def _exhibition(self, coevolution, amount, world_kwargs, log_path, evaluation_pool) -> None:
-        """Run exhibition evaluations between the best individuals of the current generation.
-
-        Args:
-            coevolution: The coevolution wrapper to get agents from.
-            amount: The number of agents to evaluate from each population.
-            world_kwargs: The keyword arguments to pass to the evaluation function.
-            log_path: The path to the current log folder.
-            evaluation_pool: The multiprocessing pool to use for evaluation.
-        """
-        generation = coevolution.generation - 1
-        generator_order = coevolution.get_generator_order()
-        agent_ids = [generator.get_representatives_from_generation(generation, amount) for generator in generator_order]
-        agents = [[generator.build_agent_from_id(agent_id, True) for agent_id in agent_ids[player_index]] for player_index, generator in enumerate(generator_order)]
-        agent_names = [generator.population_name for generator in generator_order]
-
-        agent_groups = list(itertools.product(*agents))
-        agent_numbers = [range(amount) for _ in agents]
-        agent_group_numbers = list(itertools.product(*agent_numbers))
-        results = self._evaluate_parallel(evaluation_pool, agent_groups, world_kwargs)
-        for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
-            flat_result = _flatten_results(result)
-            number_string = '-'.join([str(number) for number in agent_numbers])
-            statistics_filepath = f'{log_path}/exhibitionStats{number_string}.txt'
-            with open(statistics_filepath, 'w+') as statistics_file:
-                statistics_file.truncate(0)
-                for agent, agent_name in zip(agent_group, agent_names):
-                    statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
-                for result_name, result_value in flat_result.items():
-                    statistics_file.write(f'{result_name}:\n{result_value}\n')
 
     def _parse_config(self, config_filename: str, run_count: int, merge_parameters: dict) -> list[dict[str, Any]]:
         """Parse a configuration file and return a dictionary of parameters for each run.
@@ -226,7 +141,7 @@ class CoevolutionDriver:
 
         parameters = []
         for i in range(run_count):
-            run_parameters = copy.deepcopy(base_parameters)
+            run_parameters = deep_copy_dictionary(base_parameters)
             run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
             for parameter_name, parameter in merge_parameters.items():
                 if isinstance(parameter, dict):
@@ -257,11 +172,14 @@ class CoevolutionDriver:
         log_subfolder = run_parameters['log_subfolder']
 
         if self.use_data_collector:
-            data_collector = DataCollector()
+            data_collector = DataCollector(self.data_collector_split_generations, self.data_collector_compress, self.data_collector_evaluation_logging)
         else:
             data_collector = None
 
-        experiment = self.experiment_type(run_parameters)
+        config = deep_copy_dictionary(run_parameters)
+        config['manager']['data_collector'] = data_collector
+        config['default']['generator']['data_collector'] = data_collector
+        experiment = self.experiment_type(config)
         coevolution_manager: Coevolution = experiment.create_experiment()
         world_kwargs = {}  # TODO: Determine if this is still needed.
         
@@ -310,25 +228,49 @@ class CoevolutionDriver:
                 while len(coevolution_manager.get_remaining_evaluations()) > 0:
                     evaluations = coevolution_manager.get_remaining_evaluations()
                     agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
-                    agent_args = [(*pair,) for pair in agent_groups]
 
-                    end_states = experiment.evaluate_all(agent_args, self.parallel, evaluation_pool)
+                    end_states = experiment.evaluate_all(agent_groups, self.parallel, evaluation_pool)
 
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]
 
                         agent_ids = coevolution_manager.evaluation_table[evaluation]
-                        results_per_agent = {agent_id: _get_results_for_player(results, index) for index, agent_id in enumerate(agent_ids)}
+                        results_per_agent = {agent_id: results[index] for index, agent_id in enumerate(agent_ids)}
 
                         coevolution_manager.submit_evaluation(evaluation, results_per_agent)
 
                 coevolution_manager.next_generation()
-                log_filename = f'{log_path}/data/data{coevolution_manager.generation}'
-                data_collector.save_to_file(log_filename, True)
+                if self.use_data_collector and self.data_collector_split_generations:
+                    log_filename = f'{log_path}/data/data'
+                    data_collector.save_to_file(log_filename)
                 if self.run_exhibition and coevolution_manager.generation % 1 == 0:
-                    self._exhibition(coevolution_manager, 3, world_kwargs, log_path, evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, self.parallel, evaluation_pool)
 
             except EvolutionEndedException:
+                print("Run complete.")
                 if self.run_exhibition:
-                    self._exhibition(coevolution_manager, 5, world_kwargs, log_path, evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 5, log_path, self.parallel, evaluation_pool)
+                if self.use_data_collector and not self.data_collector_split_generations:
+                    log_filename = f'{log_path}/data/data'
+                    data_collector.save_to_file(log_filename)
                 break
+
+    @staticmethod
+    def create_argument_parser() -> argparse.ArgumentParser:
+        """Create a command-line argument parser for the coevolution driver.
+        Additional arguments can be added to the returned parser if needed.
+        The resulting arguments can be sent to :meth:`__init__` as keyword arguments.
+
+        Returns:
+            An argument parser for the coevolution driver.
+        """
+        parser = argparse.ArgumentParser()
+        parser.add_argument('config_filename')
+        parser.add_argument('-r', '--runs', dest='run_amount', type=int, default=30)
+        parser.add_argument('-np', '--no-parallel', dest='parallel', action='store_false')
+        parser.add_argument('-nd', '--no-data-collector', dest='use_data_collector', action='store_false')
+        parser.add_argument('--no-split-generations', dest='data_collector_split_generations', action='store_false')
+        parser.add_argument('--no-compress', dest='data_collector_compress', action='store_false')
+        parser.add_argument('--no-evaluation-logs', dest='data_collector_evaluation_logging', action='store_false')
+        parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false')
+        return parser

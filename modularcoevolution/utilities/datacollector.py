@@ -3,6 +3,8 @@ import json
 import os
 from typing import Sequence, Any, TypedDict
 
+import numpy
+
 from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
 
 
@@ -48,9 +50,24 @@ class DataCollector:
     """
 
     data: DataSchema
-    """A dictionary storing the data collected by this object. Consists of four sub-dictionaries: ``experiment``, ``generations``, ``individuals``, and ``evaluations``."""
+    """A dictionary storing the data collected by this object. Consists of four sub-dictionaries:
+    ``experiment``, ``generations``, ``individuals``, and ``evaluations``."""
 
-    def __init__(self):
+    split_generations: bool
+    """If True, each generation will be stored in a separate file.
+    This is useful to limit RAM usage, by storing each generation's data and clearing the logs in RAM."""
+    compress: bool
+    """If True, the saved JSON file will be compressed with gzip.
+    Otherwise, it will be saved as a plaintext JSON file."""
+    evaluation_logging: bool
+    """If True, evaluation data from :meth:`set_evaluation_data` will be stored in the log.
+    Otherwise, it will be discarded. Disable this to save disk space if you don't need evaluation data."""
+
+    def __init__(self, split_generations: bool = True, compress: bool = True, evaluation_logging: bool = True):
+        self.split_generations = split_generations
+        self.compress = compress
+        self.evaluation_logging = evaluation_logging
+
         self.data = {
             "experiment": {
                 "parameters": {},
@@ -146,18 +163,32 @@ class DataCollector:
             agent_ids: The genotype ids of the agents in this evaluation.
             results: The dictionary of results returned by the evaluation function.
         """
+        if not self.evaluation_logging:
+            return
         self.data["evaluations"][evaluation_id] = {"agent_ids": agent_ids, "results": results}
         self.update_experiment()
 
-    def save_to_file(self, filename, clear_memory=False, compress=True) -> None:
+    def save_to_file(self, filename) -> None:
+        """
+        Save the stored data to a JSON file based on :attr:`split_generations` and :attr:`compress`.
+        Args:
+            filename: The path to the file to save to.
+        """
+        self._save_to_file(filename, clear_memory=self.split_generations, compress=self.compress)
+
+    def _save_to_file(self, filename, clear_memory=False, compress=True) -> None:
         """
         Save the stored data to a compressed JSON file.
         Args:
-            filename: The path to the file to save to.
+            filename: The path to the file to save to. If `clear_memory` is True,
+            a generation number will be appended to the filename.
             clear_memory: If True, the individual and evaluation data will be cleared from memory after saving.
             This is useful to limit RAM usage, by storing each generation's data to a separate file.
             compress: If True, compress the JSON file with gzip. Otherwise, save as a plaintext JSON file.
         """
+        if clear_memory:
+            last_generation = max(int(generation) for population in self.data["generations"].values() for generation in population)
+            filename = filename + str(last_generation)
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         if compress:
             with gzip.open(filename, 'wt+', encoding='UTF-8') as log_file:
@@ -177,16 +208,23 @@ class DataCollector:
         Args:
             filename: The path of the file to load from.
         """
-        with gzip.open(filename, 'rt', encoding='UTF-8') as log_file:
-            new_data: DataSchema = json.load(log_file)
-            for table in new_data:
-                if table in ("generations", "individuals"):
-                    for population_name in new_data[table]:
-                        if population_name not in self.data[table]:
-                            self.data[table][population_name] = {}
-                        self.data[table][population_name].update(new_data[table][population_name])
-                else:
-                    self.data[table].update(new_data[table])
+        try:
+            with gzip.open(filename, 'rt', encoding='UTF-8') as log_file:
+                self._load_from_file(log_file)
+        except OSError:
+            with open(filename, 'rt', encoding='UTF-8') as log_file:
+                self._load_from_file(log_file)
+
+    def _load_from_file(self, log_file) -> None:
+        new_data: DataSchema = json.load(log_file)
+        for table in new_data:
+            if table in ("generations", "individuals"):
+                for population_name in new_data[table]:
+                    if population_name not in self.data[table]:
+                        self.data[table][population_name] = {}
+                    self.data[table][population_name].update(new_data[table][population_name])
+            else:
+                self.data[table].update(new_data[table])
 
     def load_directory(self, pathname) -> None:
         """
@@ -209,6 +247,10 @@ class DataCollector:
             pathname: The path of the directory to load from.
         """
         files = [file for file in os.scandir(pathname) if file.is_file()]
+        if len(files) == 1:
+            # Handles the case where the experiment was saved to a single file.
+            self.load_from_file(files[0].path)
+            return
         files.sort(key=lambda file: int("".join(filter(str.isdigit, file.name))))
         self.load_from_file(files[-1].path)
 
@@ -229,5 +271,7 @@ class StringDefaultJSONEncoder(json.JSONEncoder):
         except TypeError:
             if isinstance(o, type):
                 return o.__name__
+            elif isinstance(o, numpy.ndarray):
+                return o.tolist()
             else:
                 return str(o)

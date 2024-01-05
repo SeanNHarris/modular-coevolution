@@ -146,13 +146,12 @@ class LinearGenotype(BaseGenotype):
             if random.random() < self.gene_mutation_rate:
                 self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value[i] - self.min_value[i]) / 100)
                 if self.round_genes[i]:
-                    self.genes[i] = math.floor(self.genes[i])
+                    self.genes[i] = math.floor(max(self.min_value[i], min(self.genes[i], self.max_value[i] - 1)))
                 if self.loop_genes[i]:
                     self.genes[i] = (self.genes[i] - self.min_value[i]) % (self.max_value[i] - self.min_value[i]) + self.min_value[i]
                 else:
                     self.genes[i] = max(self.min_value[i], min(self.genes[i], self.max_value[i]))
                 # TODO: Warn if `round_genes` conflicts with non-integer min or max
-
 
         self.creation_method = 'Mutation'
 

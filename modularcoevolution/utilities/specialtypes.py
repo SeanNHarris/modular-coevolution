@@ -6,8 +6,7 @@ Stored separately to prevent circular import issues.
 from typing import NewType, TypedDict
 
 GenotypeID = NewType("GenotypeID", int)
-"""Refers to an ``int`` used as an ID to uniquely reference :class:`.BaseGenotype` instances
-"""
+"""A unique integer ID assigned to each :class:`.BaseGenotype` instance as a primary key."""
 _next_genotype_id: GenotypeID = GenotypeID(0)
 
 
@@ -24,7 +23,7 @@ def claim_genotype_id() -> GenotypeID:
 
 
 EvaluationID = NewType("EvaluationID", int)
-"""Refers to an ``int`` used as an ID to uniquely reference evaluations as part of a :class:`.BaseEvolutionManager`
+"""A unique integer ID assigned to each :class:`.BaseEvolutionManager` evaluation as a primary key.
 """
 _next_evaluation_id: EvaluationID = EvaluationID(0)
 

@@ -173,7 +173,7 @@ class Coevolution:
             self.evaluation_table[evaluation_id] = group
             self.remaining_evolution_evaluations.append(evaluation_id)
 
-    def build_evaluation_groups(self) -> list[tuple[GenotypeID, ...]]:
+    def build_evaluation_groups_careful(self) -> list[tuple[GenotypeID, ...]]:
         """Builds groups of agents to evaluate together, and returns them as a list of tuples of agent ids.
         The minimum number of groups will be formed such that each agent is evaluated :prop:`evaluations_per_individual` times.
 
@@ -203,6 +203,27 @@ class Coevolution:
             groups.append(tuple(group))
             minimum_evaluation_count = min(heapq.nsmallest(1, agent_queue)[0][0] for agent_queue in agent_queues)
         return groups
+
+    def build_evaluation_groups(self) -> list[tuple[GenotypeID, ...]]:
+        """Builds groups of agents to evaluate together, and returns them as a list of tuples of agent ids.
+        Groups are generated at random without the usual checks for evenness.
+
+        Returns: A list of evaluation groups, where each group is a list of agent ids for that evaluation.
+        """
+        groups = []
+        agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.agent_generators]
+        for agent_list in agent_lists:
+            random.shuffle(agent_list)
+        max_length = max(len(agent_list) for agent_list in agent_lists)
+        for separation in range(self.evaluations_per_individual):
+            for position in range(max_length):
+                group = []
+                for player_index, agent_list in enumerate(agent_lists):
+                    index = (position + separation * player_index) % len(agent_list)
+                    group.append(agent_list[index])
+                groups.append(tuple(group))
+        return groups
+
 
     def get_remaining_evaluations(self) -> list[EvaluationID]:
         """Gets a list of evaluations that need to be run.
