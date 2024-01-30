@@ -4,35 +4,41 @@
 # Embedded file name: S:\My Documents\ceads\ceads\CEADS-LIN\geneticprogramming\GPNodes.py
 # Compiled at: 2017-03-21 14:16:04
 # Size of source mod 2**32: 7822 bytes
+from typing import Callable, Any
+
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
 
 import random
 
 
-class GPNode(metaclass=GPNodeTypeRegistry):
-    # TODO: Use strings or other values for id which aren't dependent on ordering, for compatibility reasons/clarity
-    functions = None
-    literals = None
+NodeFunction = Callable[[list[Any], dict[str, Any]], Any]
+LiteralFunction = Callable[[dict[str, Any]], Any]
+FunctionEntry = tuple[NodeFunction | LiteralFunction, Any, tuple[Any, ...]]
 
-    type_functions = None
-    terminal_list = None
-    non_terminal_list = None
-    branch_list = None
-    semiterminal_table = None
+
+class GPNode(metaclass=GPNodeTypeRegistry):
+    functions: dict[str, FunctionEntry] = {}
+    literals: list[str] = []
+
+    type_functions: dict[Any, list[str]] = None
+    terminal_list: list[str] = None
+    non_terminal_list: list[str] = None
+    branch_list: list[str] = None
+    semiterminal_table: dict[str, set[int]] = None
 
     DATA_TYPES = None
 
-    def __init__(self, output_type=None, function_id=-1, literal=None, terminal=False, non_semi_terminal=False,
+    def __init__(self, output_type=None, function_id=None, literal=None, terminal=False, non_semi_terminal=False,
                  non_terminal=False, branch=False, forbidden_nodes=None, fixed_context=None):
         if forbidden_nodes is None:
             forbidden_nodes = []
-        if function_id == -1:
+        if function_id is None:
             function_id = type(self).random_function(output_type, terminal, non_semi_terminal, non_terminal, branch,
                                                      forbidden_nodes=forbidden_nodes)
             if function_id is None:
                 raise Exception("Impossible constraints on GP node selection!")
         self.function_id = function_id
-        func_data = type(self).get_function(function_id)
+        func_data = type(self).get_function_data(function_id)
         self.function = func_data[0]
         self.output_type = func_data[1]
         self.input_types = func_data[2]
@@ -117,20 +123,15 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         cls.terminal_list = list()
         cls.non_terminal_list = list()
         cls.branch_list = list()
-        for node in range(len(cls.functions)):
-            node_data = cls.get_function(node)
-            cls.type_functions[node_data[1]].append(node)
+        for node_id, node_data in cls.functions.items():
+            node_data = cls.get_function_data(node_id)
+            cls.type_functions[node_data[1]].append(node_id)
             if len(node_data[2]) == 0:
-                cls.terminal_list.append(node)
+                cls.terminal_list.append(node_id)
             else:
-                cls.non_terminal_list.append(node)
+                cls.non_terminal_list.append(node_id)
                 if len(node_data[2]) > 1:
-                    cls.branch_list.append(node)
-
-        if cls.functions is None:
-            cls.functions = list()
-        if cls.literals is None:
-            cls.literals = list()
+                    cls.branch_list.append(node_id)
 
     @classmethod
     def build_height_tables(cls, height, forbidden_nodes=None):
@@ -143,8 +144,8 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         for function in cls.terminal_list:
             if function in forbidden_nodes:
                 continue
-            grow_table[1].add(cls.get_function(function)[1])
-            full_table[1].add(cls.get_function(function)[1])
+            grow_table[1].add(cls.get_function_data(function)[1])
+            full_table[1].add(cls.get_function_data(function)[1])
 
         for i in range(2, height + 1):
             grow_table[i] = set()
@@ -155,48 +156,18 @@ class GPNode(metaclass=GPNodeTypeRegistry):
                     continue
                 grow_valid = True
                 full_valid = True
-                for inputType in cls.get_function(function)[2]:
+                for inputType in cls.get_function_data(function)[2]:
                     if inputType not in grow_table[i - 1]:
                         grow_valid = False
                     if inputType not in full_table[i - 1]:
                         full_valid = False
 
                 if grow_valid:
-                    grow_table[i].add(cls.get_function(function)[1])
+                    grow_table[i].add(cls.get_function_data(function)[1])
                 if full_valid:
-                    full_table[i].add(cls.get_function(function)[1])
+                    full_table[i].add(cls.get_function_data(function)[1])
 
         return grow_table, full_table
-
-    @classmethod
-    def get_semi_terminals(cls):
-        if cls.semiterminalList is None:
-            cls.semiterminalList = list()
-            cls.semiterminalList.extend(cls.terminal_list)
-            dead_types = list()
-            while 1:
-                live_functions = [function for function in cls.non_terminal_list if
-                                  function not in cls.semiterminalList]
-                for data_type in cls.DATA_TYPES:
-                    if len(set(live_functions) & set(cls.type_functions[data_type])) == 0:
-                        dead_types.append(data_type)
-
-                modify = False
-                for function in live_functions:
-                    still_alive = False
-                    for inputType in cls.get_function(function)[2]:
-                        if inputType not in dead_types:
-                            still_alive = True
-
-                    if not still_alive:
-                        cls.semiterminalList.append(function)
-                        modify = True
-
-                if not modify:
-                    break
-
-            print(cls.semiterminalList)
-        return cls.semiterminalList
 
     @classmethod
     def build_semiterminal_table(cls, height, forbidden_nodes=None):
@@ -220,7 +191,7 @@ class GPNode(metaclass=GPNodeTypeRegistry):
                 modify = False
                 for function in live_functions:
                     still_alive = False
-                    for inputType in cls.get_function(function)[2]:
+                    for inputType in cls.get_function_data(function)[2]:
                         if inputType not in dead_types:
                             still_alive = True
 
@@ -252,10 +223,10 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             for type in cls.DATA_TYPES:
                 children_types = set()
                 for parent_type in type_tables[type][depth - 1]:
-                    edge_functions = [function for function in range(len(cls.functions)) if
+                    edge_functions = [function for function in cls.functions if
                                       function in cls.type_functions[parent_type] and function not in forbidden_nodes]
                     for function in edge_functions:
-                        children_types |= set(cls.get_function(function)[2])
+                        children_types |= set(cls.get_function_data(function)[2])
                 type_tables[type][depth] = children_types
         # Construct the depth table, listing the highest depth that can be reached from a type.
         for depth in range(2, max_height + 1):
@@ -273,19 +244,13 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         return type_depths
 
     @classmethod
-    def random_function(cls, output_type, terminal=False, non_semi_terminal=False, non_terminal=False, branch=False,
+    def random_function(cls, output_type, terminal=False, non_terminal=False, branch=False,
                         num_children=None, child_types=None, forbidden_nodes=None):
         if forbidden_nodes is None:
             forbidden_nodes = []
         possible = list([function for function in cls.type_functions[output_type] if function not in forbidden_nodes])
         if terminal:
             new_possible = [function for function in possible if function in cls.terminal_list]
-            if len(new_possible) > 0:
-                possible = new_possible
-            else:
-                return None
-        if non_semi_terminal:
-            new_possible = [function for function in possible if function not in cls.get_semi_terminals()]
             if len(new_possible) > 0:
                 possible = new_possible
             else:
@@ -303,13 +268,13 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             else:
                 return None
         if num_children is not None:
-            new_possible = [function for function in possible if len(cls.get_function(function)[2]) == num_children]
+            new_possible = [function for function in possible if len(cls.get_function_data(function)[2]) == num_children]
             if len(new_possible) > 0:
                 possible = new_possible
             else:
                 return None
         if child_types is not None:
-            new_possible = [function for function in possible if cls.get_function(function)[2] == child_types]
+            new_possible = [function for function in possible if cls.get_function_data(function)[2] == child_types]
             if len(new_possible) > 0:
                 possible = new_possible
             else:
@@ -317,31 +282,30 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         return random.choice(possible)
 
     @classmethod
-    def get_function(cls, func_id):
+    def get_function_data(cls, func_id):
         return cls.functions[func_id]
 
     @classmethod
     def get_id(cls, function):
-        return [func_id for func_id, func_tuple in enumerate(cls.functions) if func_tuple[0] == function][0]
+        return [func_id for func_id, func_tuple in cls.functions.items() if func_tuple[0] == function][0]
 
     @classmethod
-    def gp_primitive(cls, output_type, input_types):
+    def gp_primitive(cls, output_type: Any, input_types: tuple[Any, ...]):
         def internal_decorator(function):
-            if cls.functions is None:
-                cls.functions = list()
-            cls.functions.append((function, output_type, input_types))
+            function_id = function.__name__
+            if function_id in cls.functions:
+                raise ValueError(f"GPNode ID conflict: a function with name {function_id} was already registered!")
+            cls.functions[function_id] = (function, output_type, input_types)
             return function
         return internal_decorator
 
     @classmethod
-    def gp_literal(cls, output_type):
+    def gp_literal(cls, output_type: Any):
         def internal_decorator(function):
-            if cls.functions is None:
-                cls.functions = list()
-            if cls.literals is None:
-                cls.literals = list()
-            function_id = len(cls.functions)
-            cls.functions.append((function, output_type, ()))
+            function_id = function.__name__
+            if function_id in cls.functions:
+                raise ValueError(f"GPNode ID conflict: a function with name {function_id} was already registered!")
+            cls.functions[function_id] = (function, output_type, ())
             cls.literals.append(function_id)
             return function
         return internal_decorator

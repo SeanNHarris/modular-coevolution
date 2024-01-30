@@ -240,7 +240,7 @@ class GPTree(BaseGenotype):
             for function in typeChildren:
                 if function in self.forbiddenNodes:
                     continue
-                functionInfo = self.nodeType.get_function(function)
+                functionInfo = self.nodeType.get_function_data(function)
                 # Such functions have an input of a type that can reach exactly one less than that depth
                 if self.growTable[height - 1].issuperset(functionInfo[2]):  # Ensure that the function can stop at that depth (Using the depth table)
                     for inputType in functionInfo[2]:
@@ -295,7 +295,7 @@ class GPTree(BaseGenotype):
                 function = typeList[i % len(typeList)]
                 if function in self.forbiddenNodes:
                     continue
-                functionInfo = self.nodeType.get_function(function)
+                functionInfo = self.nodeType.get_function_data(function)
                 if self.growTable[height - 1].issuperset(functionInfo[2]):
                     node = self.nodeType(outputType, function, fixed_context=self.fixed_context)
                     break
