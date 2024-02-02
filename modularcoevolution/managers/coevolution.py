@@ -211,7 +211,7 @@ class Coevolution:
         Returns: A list of evaluation groups, where each group is a list of agent ids for that evaluation.
         """
         groups = []
-        agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.agent_generators]
+        agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.get_generator_order()]
         for agent_list in agent_lists:
             random.shuffle(agent_list)
         max_length = max(len(agent_list) for agent_list in agent_lists)

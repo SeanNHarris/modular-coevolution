@@ -2,6 +2,7 @@ import abc
 import copy
 import itertools
 import multiprocessing
+from functools import partial
 from typing import Sequence, Any, Union, Literal, Callable
 
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
@@ -198,13 +199,14 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
         return generators
 
-    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
+    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, exhibition = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
         Args:
             agent_groups: A list of agent groups to evaluate.
             parallel: Whether to evaluate the agents using a multiprocessing pool.
+            exhibition: If true, sends an `exhibition = True` parameter to the evaluation function.
             evaluation_pool: The multiprocessing pool to use for evaluation if ``parallel`` is True.
                 If None, a new pool will be created.
 
@@ -212,15 +214,19 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             A list of results from the evaluation function, in the order of the agent groups passed in.
 
         """
+        if not exhibition:
+            evaluate = self.evaluate
+        else:
+            evaluate = partial(self.evaluate, exhibition=True)
 
         if parallel:
             if evaluation_pool is None:
                 evaluation_pool = parallelutils.create_pool()
-            end_states = evaluation_pool.map(self.evaluate, agent_groups)
+            end_states = evaluation_pool.map(evaluate, agent_groups)
         else:
             end_states = list()
             for agents in agent_groups:
-                end_states.append(self.evaluate(agents))
+                end_states.append(evaluate(agents))
         return end_states
 
 
@@ -250,18 +256,22 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
         agent_numbers = [range(amount) for _ in agents]
         agent_group_numbers = list(itertools.product(*agent_numbers))
-        results = self.evaluate_all(agent_groups, parallel, evaluation_pool)
+        results = self.evaluate_all(agent_groups, parallel=False, exhibition=True, evaluation_pool=evaluation_pool)
         for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
-            number_string = '-'.join([str(number) for number in agent_numbers])
-            statistics_filepath = f'{log_path}/exhibitionStats{number_string}.txt'
-            with open(statistics_filepath, 'w+') as statistics_file:
-                statistics_file.truncate(0)
-                for player_index, agent in enumerate(agent_group):
-                    agent_name = agent_names[player_index]
-                    statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
-                    for metric_name, metric_value in result[player_index].items():
-                        statistics_file.write(f'{metric_name}:\n{metric_value}\n')
-                    statistics_file.write('\n')
+            self._process_exhibition_results(agent_group, agent_numbers, agent_names, result, log_path)
+
+    def _process_exhibition_results(self, agent_group, agent_numbers, agent_names, result, log_path):
+        number_string = '-'.join([str(number) for number in agent_numbers])
+        statistics_filepath = f'{log_path}/exhibitionStats{number_string}.txt'
+        with open(statistics_filepath, 'w+') as statistics_file:
+            statistics_file.truncate(0)
+            for player_index, agent in enumerate(agent_group):
+                agent_name = agent_names[player_index]
+                statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
+                for metric_name, metric_value in result[player_index].items():
+                    statistics_file.write(f'{metric_name}:\n{metric_value}\n')
+                statistics_file.write('\n')
+
 
 
 class PopulationMetrics:
