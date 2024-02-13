@@ -5,7 +5,7 @@
 # Compiled at: 2017-03-21 14:16:04
 # Size of source mod 2**32: 7822 bytes
 from functools import cache
-from typing import Callable, Any, Union, Optional
+from typing import Callable, Any, Union, Optional, Generator
 
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
 
@@ -30,13 +30,28 @@ class GPNode(metaclass=GPNodeTypeRegistry):
     DATA_TYPES = None  # TODO: Use an abstract function for this instead.
 
     function_id: str
+    """The ID of the node function, which is the string name of the Python function."""
     function: NodeFunction | LiteralFunction
+    """The function that this node represents."""
     literal: Any
+    """The literal value of this node, if it is a literal node."""
     output_type: NodeType
+    """The type of the output of this node (in the internal typing system)."""
     input_types: tuple[NodeType, ...]
+    """The types of the inputs to this node in order,
+    i.e. the output types of its children (in the internal typing system)."""
     input_nodes: list['GPNode']
+    """The children of this node in order."""
     parent: Optional['GPNode']
+    """The parent of this node. If this node is the root of a tree, this will be None."""
+    depth: int | None
+    """The depth of this node in the tree from the root. Cached for :meth:`GPNode.get_depth`.
+    Invalidated by :meth:`GPNode.set_parent`."""
+    height: int | None
+    """The height of this node in the tree from its deepest child. Cached for :meth:`GPNode.get_height`.
+    Invalidated by :meth:`GPNode.add_input`."""
     fixed_context: dict[str, Any]
+    """A dictionary of fixed context values that are used to parameterize literal generation."""
 
     def __init__(self, function_id, literal=None, fixed_context=None):
         self.function_id = function_id
@@ -50,13 +65,19 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         if function_id in type(self).literals and literal is None:
             self.literal = self.function(fixed_context)
         self.parent = None
+        self.depth = None
+        self.height = None
 
-    @classmethod
-    def initialize_class(cls):
-        if cls.type_functions is None:
-            cls.build_data_type_tables()
+    def execute(self, context) -> Any:
+        """Executes the function represented by this node, using the given context.
 
-    def execute(self, context):
+        Args:
+            context: A dictionary of context values that are used to parameterize the function or its children.
+
+        Returns:
+            The output of the function represented by this node,
+            or the literal value of this node if it is a literal node.
+        """
         output = None
         if self.function_id not in type(self).literals:
             output = self.function(self.input_nodes, context)
@@ -64,33 +85,74 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             output = self.literal
         return output
 
-    def add_input(self, input_node):
+    def add_input(self, input_node: 'GPNode') -> None:
+        """Adds a child to this node as an input.
+
+        Args:
+            input_node: The child node to add. The output type should match the input type of this node.
+                This type constraint is not checked here. Does not automatically set this node as the parent.
+        """
         self.input_nodes.append(input_node)
+        self.height = None
 
-    def set_parent(self, parent):
+    def set_parent(self, parent: 'GPNode') -> None:
+        """Sets the parent of this node.
+
+        Args:
+            parent: The parent node to set. Does not automatically add this node as a child of the parent.
+        """
         self.parent = parent
+        self.depth = None
 
-    def get_height(self):
+    def get_depth(self) -> int:
+        """Gets the depth of this node in the tree from the root. The root node has a depth of 0.
+        Cached in the :attr:`GPNode.depth` attribute.
+
+        Returns: The depth of this node in the tree.
+        """
+        if self.depth is not None:
+            return self.depth
+
+        if self.parent is None:
+            self.depth = 0
+            return 0
+        else:
+            self.depth = self.parent.get_depth() + 1
+            return self.depth
+
+    def get_height(self) -> int:
+        """Gets the height of this node in the tree from its deepest child,
+        i.e. the height of the subtree rooted at this node. A single node has a height of 1.
+        Cached in the :attr:`GPNode.height` attribute.
+
+        Returns: The height of this node in the tree.
+        """
+
+        if self.height is not None:
+            return self.height
+
         if len(self.input_nodes) == 0:
+            self.height = 1
             return 1
         else:
             max_length = 0
             for node in self.input_nodes:
                 max_length = max(max_length, node.get_height())
 
-            return max_length + 1
+            self.height = max_length + 1
+            return self.height
 
-    def get_size(self):
+    def get_size(self) -> int:
         return sum((1 for _ in self.traverse_post_order()))
 
-    def get_node_list(self):
+    def get_node_list(self) -> list['GPNode']:
         node_list = [self]
         for input_node in self.input_nodes:
             node_list.extend(input_node.get_node_list())
 
         return node_list
 
-    def tree_string(self, max_height, depth):
+    def tree_string(self, max_height, depth) -> str:
         string = ''
         for _ in range(depth):
             string += '|\t'
@@ -102,27 +164,35 @@ class GPNode(metaclass=GPNodeTypeRegistry):
 
         return string
 
-    def traverse_post_order(self):
+    def traverse_post_order(self) -> Generator['GPNode', None, None]:
         for child in self.input_nodes:
             for node in child.traverse_post_order():
                 yield node
 
         yield self
 
-    def traverse_pre_order(self):
+    def traverse_pre_order(self) -> Generator['GPNode', None, None]:
         yield self
         for child in self.input_nodes:
             for node in child.traverse_pre_order():
                 yield node
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.function_id not in type(self).literals:
             return self.function.__name__
         else:
             return self.function.__name__ + '(' + str(self.literal) + ')'
 
     @classmethod
-    def build_data_type_tables(cls):
+    def initialize_class(cls) -> None:
+        """Performs any class-level initialization that is necessary. Does nothing if called after the first time.
+        This is called by :class:`GPTree` when it is initialized.
+        Do not call this before the primitive function decorators have been applied."""
+        if cls.type_functions is None:
+            cls.build_data_type_tables()
+
+    @classmethod
+    def build_data_type_tables(cls) -> None:
         cls.type_functions = dict()
         for data_type in cls.DATA_TYPES:
             cls.type_functions[data_type] = list()

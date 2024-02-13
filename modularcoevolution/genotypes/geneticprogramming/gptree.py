@@ -67,6 +67,8 @@ class GPTree(BaseGenotype):
 
     root: GPNode
     """The root node of the tree."""
+    node_list: list[GPNode] | None
+    """Cached output for :meth:`GPTree.getNodeList`."""
     node_id_list: list[str | Any] | None
     """Cached output for :meth:`GPTree.getNodeIDList`."""
 
@@ -127,6 +129,7 @@ class GPTree(BaseGenotype):
             height = random.randint(self.min_height, self.max_height)
             self.root = self.random_subtree(height, self.return_type)
 
+        self.node_list = None
         self.node_id_list = None
 
     # Run the program the tree represents
@@ -159,6 +162,7 @@ class GPTree(BaseGenotype):
             replacement.set_parent(parent)
             if self.root.get_height() > MAXIMUM_HEIGHT:
                 raise Exception(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
+        self.node_list = None  # Invalidate the cached node list
         self.node_id_list = None  # Invalidate the cached node ID list
 
     def _replace_point(self, node: GPNode, replacement: GPNode) -> None:
@@ -179,27 +183,32 @@ class GPTree(BaseGenotype):
             index = parent.input_nodes.index(node)
             parent.input_nodes[index] = replacement
             replacement.set_parent(parent)
+        self.node_list = None  # Invalidate the cached node list
         self.node_id_list = None  # Invalidate the cached node ID list
 
-    def _random_node(self, output_type: int = None) -> GPNode:
+    def _random_node(self, output_type: int = None, max_depth: int = None) -> GPNode:
         """Selects a random node from the tree.
 
         Args:
             output_type: The type of the node to be selected. If None, any type is allowed.
+            max_depth: The maximum depth of the node to be selected. If None, any depth is allowed.
 
         Returns:
-            A random node from the tree, matching `output_type` if specified.
+            A random node from the tree, matching any parameters specified.
 
         Raises:
-            ValueError: If no nodes of type `output_type` are found in the tree.
+            ValueError: If no nodes matching the parameters are found in the tree.
         """
-        if output_type is None:
-            return random.choice(self.root.get_node_list())
-        else:
-            node_list = [node for node in self.root.get_node_list() if node.output_type == output_type]
+        node_list = self.get_node_list()
+        if output_type is not None:
+            node_list = [node for node in node_list if node.output_type == output_type]
             if len(node_list) == 0:
-                raise ValueError(f"No nodes of type {output_type} found in the tree.")
-            return random.choice(node_list)
+                raise ValueError(f"No valid nodes of type {output_type} found in the tree.")
+        if max_depth is not None:
+            node_list = [node for node in node_list if node.get_depth() <= max_depth]
+            if len(node_list) == 0:
+                raise ValueError(f"No valid nodes found at depth {max_depth} or less in the tree.")
+        return random.choice(node_list)
 
     def mutate(self) -> None:
         """Mutates the tree in place.
@@ -212,8 +221,10 @@ class GPTree(BaseGenotype):
         The height of the new subtree is chosen randomly around the height of the old subtree."""
         old_subtree = self._random_node()
         mean_height = old_subtree.get_height()
-        real_height = int(round(random.gauss(mean_height, SUBTREE_MUTATE_HEIGHT_SIGMA)))
-        new_subtree = self.random_subtree(real_height, old_subtree.output_type)
+        generate_height = int(round(random.gauss(mean_height, SUBTREE_MUTATE_HEIGHT_SIGMA)))
+        # Don't allow the new subtree to exceed the maximum height
+        generate_height = min(generate_height, MAXIMUM_HEIGHT - old_subtree.get_depth())
+        new_subtree = self.random_subtree(generate_height, old_subtree.output_type)
         try:
             self._replace_subtree(old_subtree, new_subtree)
         except Exception as e:
@@ -237,11 +248,13 @@ class GPTree(BaseGenotype):
         Args:
             donor: The other parent tree to recombine with.
         """
+        # Retry if a node has no valid recombination point.
         for _ in range(100):
-            # Retry if a node has no valid recombination point.
             donor_subtree = donor._random_node()
+            # Don't place the donor subtree in a position that would exceed the maximum height
+            maximum_depth = MAXIMUM_HEIGHT - donor_subtree.get_height()
             try:
-                parent_subtree = self._random_node(donor_subtree.output_type)
+                parent_subtree = self._random_node(output_type=donor_subtree.output_type, max_depth=maximum_depth)
                 break
             except ValueError:
                 continue
@@ -250,12 +263,7 @@ class GPTree(BaseGenotype):
             self.mutate()
             return
 
-        try:
-            self._replace_subtree(parent_subtree, donor_subtree)
-        except Exception as e:
-            warn(f"Subtree mutation failed; retrying: {e}")
-            self.recombine(donor)
-            return
+        self._replace_subtree(parent_subtree, donor_subtree)
 
         self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"
@@ -267,12 +275,25 @@ class GPTree(BaseGenotype):
         cloned_genotype.creation_method = "Cloning"
         return cloned_genotype
 
-    # Computes an id list for the tree, which is just a preorder list of node ids.
+    def get_node_list(self) -> list[GPNode]:
+        """Generates a preorder list of nodes for the tree.
+        Cached in :attr:`node_list`, and invalidated by any method that changes the tree.
+
+        Returns:
+            A preorder list of nodes for the tree.
+        """
+        if self.node_list is not None:
+            return self.node_list
+        node_list = self.root.get_node_list()
+        self.node_list = node_list
+        return node_list
+
     def get_node_id_list(self) -> list[str | Any]:
         """Generates a preorder list of node IDs and literals for the tree.
         This list can be used as the :attr:`GPTreeParameters.id_list` parameter to regenerate the tree.
         All elements are string ids, except for literals,
         which are string ids followed by the literal values themselves.
+        Cached in :attr:`node_id_list`, and invalidated by any method that changes the tree.
 
         Returns:
             A preorder list of node IDs for the tree.
@@ -296,11 +317,9 @@ class GPTree(BaseGenotype):
 
     # Positive is good, negative is bad
     def get_fitness_modifier(self, raw_fitness):
-        assert self.parsimony_weight > 0  # Check that the old parameter is not being used.
-        parsimony_pressure = min(0.9, self.parsimony_weight * len(self))  # Cap penalty at 90%
-        fitness_modifier = -parsimony_pressure * abs(raw_fitness)  # Percentage penalty based on size
-        # print("Parsimony pressure penalty of " + str(parsimony_pressure))
-        return fitness_modifier
+        # Fitness modifier is added, so negate to make it a penalty
+        penalty = -self.parsimony_weight * len(self)
+        return penalty
 
     # Generate a tree given an id list
     def _generate_from_list(self, id_list):

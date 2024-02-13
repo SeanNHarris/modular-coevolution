@@ -295,7 +295,8 @@ class PopulationMetrics:
                         metric_function: Union[MetricFunction, str],
                         is_objective: bool = False,
                         repeat_mode: Literal['replace', 'average', 'min', 'max', 'sum'] = 'average',
-                        log_history: bool = False) -> None:
+                        log_history: bool = False,
+                        add_fitness_modifier: bool = False) -> None:
         """
         Registers a metric.
         A metric is any data derived from the evaluation results which should be logged per-individual.
@@ -318,13 +319,17 @@ class PopulationMetrics:
                 Avoid using this unnecessarily, as it can impact the size of the log file.
             metric_function: A function which computes the metric from the dictionary of evaluation results.
                 Alternatively, a string key can be provided as a shortcut for a function which returns the result value with this key.
+            add_fitness_modifier: If true, the individual's :meth:`BaseObjectiveTracker.get_fitness_modifier`
+                result will be added to this metric (e.g. for parsimony pressure).
+
         """
         metric_configuration: MetricConfiguration = {
             'name': metric_name,
             'is_objective': is_objective,
             'repeat_mode': repeat_mode,
             'log_history': log_history,
-            'automatic': True
+            'automatic': True,
+            'add_fitness_modifier': add_fitness_modifier
         }
         self.metrics.append((metric_configuration, metric_function))
 
@@ -345,4 +350,4 @@ class PopulationMetrics:
                 - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
         """
 
-        self.register_metric('fitness', fitness_function, is_objective=True, repeat_mode=repeat_mode, log_history=True)
+        self.register_metric('fitness', fitness_function, is_objective=True, repeat_mode=repeat_mode, log_history=True, add_fitness_modifier=True)

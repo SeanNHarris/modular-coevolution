@@ -30,6 +30,8 @@ class MetricConfiguration(TypedDict):
     """If true, store a history of all submitted values for this metric. Avoid using this unnecessarily, as it can impact the size of the log file."""
     automatic: bool
     """If true, this metric will be automatically computed by the :class:`.BaseGenerator` and does not need to be submitted manually."""
+    add_fitness_modifier: bool
+    """If true, the individual's :meth:`.get_fitness_modifier` result will be added to this metric (e.g. for parsimony pressure)."""
 
 
 class MetricSubmission(TypedDict, MetricConfiguration):
@@ -147,6 +149,12 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
             if submission['log_history'] != (metric in self.metric_histories):
                 raise ValueError(f"Metric {metric} was submitted with log_history={submission['log_history']}, but was previously submitted with log_history={metric in self.metric_histories}.")
 
+        # Add fitness modifier
+        if submission['add_fitness_modifier']:
+            if not isinstance(value, float):
+                raise ValueError(f"Metric {metric} was submitted with add_fitness_modifier=True, but is not a numeric value.")
+            value += self.get_fitness_modifier(value)
+
         # Update statistics
         self.metric_statistics[metric]["count"] += 1
         # Update numeric statistics when relevant
@@ -181,7 +189,16 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     def get_active_objectives(self):
         raise NotImplementedError("This method has been removed.")
 
-    def get_fitness_modifier(self, raw_fitness):
+    def get_fitness_modifier(self, raw_fitness: float) -> float:
+        """Return a fitness modifier to be added to the given raw fitness value.
+        This is most commonly used for parsimony pressure.
+
+        Args:
+            raw_fitness: The raw value of the metric.
+
+        Returns:
+            A value to be added to the raw fitness value. Use a negative value for a penalty.
+        """
         return 0
 
     def set_fitness(self, fitness: float, average: bool = False) -> None:
