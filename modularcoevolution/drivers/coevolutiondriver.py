@@ -56,6 +56,8 @@ class CoevolutionDriver:
     """Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging."""
     run_exhibition: bool
     """Whether to run and log exhibition evaluations between the best individuals of each generation."""
+    exhibition_rate: int
+    """The rate at which to run exhibition evaluations, e.g. every 5 generations."""
 
     use_data_collector: bool
     """Whether to use a data collector to store results. This will result in a lot of logged data."""
@@ -79,6 +81,7 @@ class CoevolutionDriver:
                  data_collector_compress: bool = True,
                  data_collector_evaluation_logging: bool = True,
                  run_exhibition: bool = True,
+                 exhibition_rate: int = 1,
                  merge_parameters: dict = None):
         """Create a new coevolution driver.
 
@@ -92,6 +95,7 @@ class CoevolutionDriver:
             data_collector_compress: If True, the data collector will compress the saved files with gzip. See :attr:`.DataCollector.compress`.
             data_collector_evaluation_logging: If True, the data collector will log the results of each evaluation. See :attr:`.DataCollector.evaluation_logging`.
             run_exhibition: Whether to run and log exhibition evaluations between the best individuals of each generation.
+            exhibition_rate: The rate at which to run exhibition evaluations, e.g. every 5 generations.
             merge_parameters: A dictionary of parameters to merge into the configuration file.
                 Use this for parameters generated programmatically.
 
@@ -107,6 +111,7 @@ class CoevolutionDriver:
             # TODO: Support disabling the data collector again
             raise Warning("Disabling the data collector is not currently supported.")
         self.run_exhibition = run_exhibition
+        self.exhibition_rate = exhibition_rate
 
         if merge_parameters is None:
             merge_parameters = {}
@@ -229,7 +234,7 @@ class CoevolutionDriver:
                     evaluations = coevolution_manager.get_remaining_evaluations()
                     agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
 
-                    end_states = experiment.evaluate_all(agent_groups, self.parallel, evaluation_pool)
+                    end_states = experiment.evaluate_all(agent_groups, parallel=self.parallel, evaluation_pool=evaluation_pool)
 
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]
@@ -243,7 +248,7 @@ class CoevolutionDriver:
                 if self.use_data_collector and self.data_collector_split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
-                if self.run_exhibition and coevolution_manager.generation % 1 == 0:
+                if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
                     experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, self.parallel, evaluation_pool)
 
             except EvolutionEndedException:
@@ -254,6 +259,13 @@ class CoevolutionDriver:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 break
+            except KeyboardInterrupt:
+                print("Keyboard interrupt received. Ending run.")
+                if evaluation_pool is not None:
+                    evaluation_pool.terminate()
+                break
+        if evaluation_pool is not None:
+            evaluation_pool.close()
 
     @staticmethod
     def create_argument_parser() -> argparse.ArgumentParser:
@@ -273,4 +285,5 @@ class CoevolutionDriver:
         parser.add_argument('--no-compress', dest='data_collector_compress', action='store_false')
         parser.add_argument('--no-evaluation-logs', dest='data_collector_evaluation_logging', action='store_false')
         parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false')
+        parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1)
         return parser

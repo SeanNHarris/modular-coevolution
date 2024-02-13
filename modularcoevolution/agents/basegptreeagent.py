@@ -16,22 +16,22 @@ class BaseGPTreeAgent(BaseEvolutionaryAgent, metaclass=abc.ABCMeta):
         super().__init__(parameters=parameters, genotype=genotype, **kwargs)
 
     def parameter_string(self) -> str:
-        return str(self.genotype.getNodeIDList())
+        return str(self.genotype.get_node_id_list())
 
     def get_parameters(self) -> dict[str, Any]:
         parameters = self.genotype_default_parameters()
         parameters.update({
-            "idList": self.genotype.getNodeIDList(),
+            "id_list": self.genotype.get_node_id_list(),
             # TODO: Maybe fixed context should be a class property?
-            "fixedContext": self.genotype.fixed_context
+            "fixed_context": self.genotype.fixed_context
         })
         return parameters
 
     def apply_parameters(self, parameters: dict[str, Any]) -> None:
         if self.genotype is None:
             genotype_parameters = self.genotype_default_parameters()
-            if "idList" in parameters:
-                genotype_parameters["idList"] = parameters["idList"].copy()
-            if "fixedContext" in parameters:
-                genotype_parameters["fixedContext"] = parameters["fixedContext"].copy()
+            if "id_list" in parameters:
+                genotype_parameters["id_list"] = parameters["id_list"].copy()
+            if "fixed_context" in parameters:
+                genotype_parameters["fixed_context"] = parameters["fixed_context"].copy()
             self.genotype = self.genotype_class()(genotype_parameters)

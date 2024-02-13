@@ -62,6 +62,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     reevaluate_per_generation: bool
     """If True, all genotypes will be evaluated each generation, even if they were previously evaluated. If False,
     already-evaluated individuals will be skipped."""
+    compute_diversity: bool
+    """If True, compute the diversity of each genotype as a metric."""
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
@@ -75,7 +77,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                  data_collector: DataCollector = None,
                  copy_survivor_objectives: bool = False,
                  reevaluate_per_generation: bool = True,
-                 using_hall_of_fame: bool = True):
+                 using_hall_of_fame: bool = False,
+                 compute_diversity: bool = False):
         """
 
         Args:
@@ -97,6 +100,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 `copy_survivor_objectives` should be set to True.
             using_hall_of_fame: If True, store a hall of fame and include it in the output of
                 :meth:`get_individuals_to_test`.
+            compute_diversity: If True, compute the diversity of each genotype as a metric.
 
         .. warning::
             ``using_hall_of_fame`` currently uses a non-standard implementation of the hall of fame and is subject to
@@ -126,7 +130,9 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.hall_of_fame = list()
         self.genotypes_by_id = dict()
 
-        self._register_novelty_metric()
+        self.compute_diversity = compute_diversity
+        if self.compute_diversity:
+            self._register_novelty_metric()
 
         population_set = set()
         for i in range(self.initial_size):
@@ -214,7 +220,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
         super().submit_evaluation(agent_id, evaluation_results)
         individual = self.get_genotype_with_id(agent_id)
-        if "novelty" not in individual.metrics:
+        if self.compute_diversity and "novelty" not in individual.metrics:
             novelty = self.get_diversity(agent_id, min(100, len(self.population)))
             self.submit_metric(agent_id, "novelty", novelty)
 
@@ -257,7 +263,11 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
         This method should be called during :meth:`end_generation`."""
         if self.data_collector is not None:
-            diversity = self.population[0].metrics["novelty"]  # Diversity measured from the best individual
+            # Diversity measured from the best individual
+            if self.compute_diversity:
+                diversity = self.population[0].metrics["novelty"]
+            else:
+                diversity = self.get_diversity(self.population[0].id, min(100, len(self.population)))
             population_IDs = [individual.id for individual in self.population]
             metric_statistics = dict()
             for metric, configuration in self.metric_configurations.items():
@@ -288,7 +298,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         print("Best individual of this generation: (fitness score of " + str(self.population[0].fitness) + ")")
         print(self.population[0])
 
-        print(str([individual.fitness for individual in self.population]))
+        list_amount = min(self.population_size, 100)
+        print(str([individual.fitness for individual in self.population[:list_amount]]))
 
     def _register_novelty_metric(self) -> None:
         """Automatically register a diversity metric called ``"novelty"``."""

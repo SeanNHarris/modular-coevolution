@@ -199,7 +199,7 @@ def round_robin_evaluation(
     # The same pair of agents can still be evaluated multiple times in different player orders.
     agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
     agent_groups = agent_groups * repeat_evaluations
-    results = experiment_definition.evaluate_all(agent_groups, parallel)
+    results = experiment_definition.evaluate_all(agent_groups, parallel=parallel)
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]

@@ -57,15 +57,11 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def clone(self, copy_objectives: bool = False) -> "BaseGenotype":
-        """Return a deep copy of the current individual.
-
-        Args:
-            copy_objectives: If True, objective values will be copied to the clone.
-                If False, objective values will be reset for the clone.
+    def clone(self) -> "BaseGenotype":
+        """Return a new individual with an identical genotype. The new individual will have a new ID and metrics.
 
         Returns:
-            A deep copy of the current individual.
+            A new individual with an identical genotype.
 
         """
         pass

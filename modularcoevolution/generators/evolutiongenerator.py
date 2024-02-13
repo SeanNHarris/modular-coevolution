@@ -25,6 +25,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                  recombination_fraction: float = 0.75,
                  diversity_weight: float = 0,
                  diverse_elites: bool = False,
+                 compute_diversity: bool = False,
                  seed: Any = None,
                  data_collector: DataCollector = None,
                  copy_survivor_objectives: bool = False,
@@ -34,7 +35,8 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         super().__init__(agent_class, population_name, initial_size, agent_parameters=agent_parameters,
                          genotype_parameters=genotype_parameters, seed=seed,
                          data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives,
-                         reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame)
+                         reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame,
+                         compute_diversity=compute_diversity)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -58,14 +60,13 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
     def end_generation(self) -> None:
         random.shuffle(self.population)  # Python's list.sort maintains existing order between same-valued individuals, which can lead to stagnation in extreme cases such as all zero fitnesses
 
-        for genotype in self.population:
-            if "novelty" in genotype.metrics:
+        if self.diversity_weight > 0:
+            for genotype in self.population:
                 novelty = genotype.metrics["novelty"]
-            else:
-                novelty = self.get_diversity(genotype.id, min(30, len(self.population)))
-                genotype.metrics["novelty"] = novelty
-            if novelty > self.max_novelty:
-                self.max_novelty = novelty
+                if novelty > self.max_novelty:
+                    self.max_novelty = novelty
+        else:
+            self.max_novelty = 0
 
         if self.diverse_elites:
             best = max(self.population, key=lambda x: x.fitness)
@@ -82,7 +83,10 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         next_generation = list()
         next_generation_set = set()
         for i in range(self.initial_size):
-            survivor = self.population[i].clone(copy_objectives=self.copy_survivor_objectives)
+            if self.copy_survivor_objectives:
+                survivor = self.population[i]
+            else:
+                survivor = self.population[i].clone()
             next_generation.append(survivor)
             next_generation_set.add(survivor)
 

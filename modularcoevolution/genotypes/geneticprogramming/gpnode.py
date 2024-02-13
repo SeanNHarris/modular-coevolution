@@ -4,39 +4,41 @@
 # Embedded file name: S:\My Documents\ceads\ceads\CEADS-LIN\geneticprogramming\GPNodes.py
 # Compiled at: 2017-03-21 14:16:04
 # Size of source mod 2**32: 7822 bytes
-from typing import Callable, Any
+from functools import cache
+from typing import Callable, Any, Union, Optional
 
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
 
 import random
 
-
+NodeType = int
 NodeFunction = Callable[[list[Any], dict[str, Any]], Any]
 LiteralFunction = Callable[[dict[str, Any]], Any]
-FunctionEntry = tuple[NodeFunction | LiteralFunction, Any, tuple[Any, ...]]
+FunctionEntry = tuple[NodeFunction | LiteralFunction, NodeType, tuple[NodeType, ...]]
 
 
 class GPNode(metaclass=GPNodeTypeRegistry):
     functions: dict[str, FunctionEntry] = {}
     literals: list[str] = []
 
-    type_functions: dict[Any, list[str]] = None
+    type_functions: dict[NodeType, list[str]] = None
     terminal_list: list[str] = None
     non_terminal_list: list[str] = None
     branch_list: list[str] = None
     semiterminal_table: dict[str, set[int]] = None
 
-    DATA_TYPES = None
+    DATA_TYPES = None  # TODO: Use an abstract function for this instead.
 
-    def __init__(self, output_type=None, function_id=None, literal=None, terminal=False, non_semi_terminal=False,
-                 non_terminal=False, branch=False, forbidden_nodes=None, fixed_context=None):
-        if forbidden_nodes is None:
-            forbidden_nodes = []
-        if function_id is None:
-            function_id = type(self).random_function(output_type, terminal, non_semi_terminal, non_terminal, branch,
-                                                     forbidden_nodes=forbidden_nodes)
-            if function_id is None:
-                raise Exception("Impossible constraints on GP node selection!")
+    function_id: str
+    function: NodeFunction | LiteralFunction
+    literal: Any
+    output_type: NodeType
+    input_types: tuple[NodeType, ...]
+    input_nodes: list['GPNode']
+    parent: Optional['GPNode']
+    fixed_context: dict[str, Any]
+
+    def __init__(self, function_id, literal=None, fixed_context=None):
         self.function_id = function_id
         func_data = type(self).get_function_data(function_id)
         self.function = func_data[0]
@@ -48,6 +50,11 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         if function_id in type(self).literals and literal is None:
             self.literal = self.function(fixed_context)
         self.parent = None
+
+    @classmethod
+    def initialize_class(cls):
+        if cls.type_functions is None:
+            cls.build_data_type_tables()
 
     def execute(self, context):
         output = None
@@ -209,7 +216,7 @@ class GPNode(metaclass=GPNodeTypeRegistry):
     @classmethod
     def build_depth_table(cls, max_height, forbidden_nodes=None):
         # It's clearly impossible to go more than this depth without hitting a dead end or loop
-        # maxHeight = len(cls.DATA_TYPES)
+        # max_height = len(cls.DATA_TYPES)
 
         if forbidden_nodes is None:
             forbidden_nodes = []
@@ -244,42 +251,27 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         return type_depths
 
     @classmethod
-    def random_function(cls, output_type, terminal=False, non_terminal=False, branch=False,
-                        num_children=None, child_types=None, forbidden_nodes=None):
+    @cache
+    def get_functions(cls, output_type: int, terminal=False, non_terminal=False, branch=False, num_children: int = None, child_types=None, forbidden_nodes=None):
         if forbidden_nodes is None:
             forbidden_nodes = []
         possible = list([function for function in cls.type_functions[output_type] if function not in forbidden_nodes])
         if terminal:
-            new_possible = [function for function in possible if function in cls.terminal_list]
-            if len(new_possible) > 0:
-                possible = new_possible
-            else:
-                return None
+            possible = [function for function in possible if function in cls.terminal_list]
         if non_terminal:
-            new_possible = [function for function in possible if function in cls.non_terminal_list]
-            if len(new_possible) > 0:
-                possible = new_possible
-            else:
-                return None
+            possible = [function for function in possible if function in cls.non_terminal_list]
         if branch:
-            new_possible = [function for function in possible if function in cls.branch_list]
-            if len(new_possible) > 0:
-                possible = new_possible
-            else:
-                return None
+            possible = [function for function in possible if function in cls.branch_list]
         if num_children is not None:
-            new_possible = [function for function in possible if len(cls.get_function_data(function)[2]) == num_children]
-            if len(new_possible) > 0:
-                possible = new_possible
-            else:
-                return None
+            possible = [function for function in possible if len(cls.get_function_data(function)[2]) == num_children]
         if child_types is not None:
-            new_possible = [function for function in possible if cls.get_function_data(function)[2] == child_types]
-            if len(new_possible) > 0:
-                possible = new_possible
-            else:
-                return None
-        return random.choice(possible)
+            possible = [function for function in possible if cls.get_function_data(function)[2] == child_types]
+        return possible
+
+    @classmethod
+    def random_function(cls, output_type, terminal=False, non_terminal=False, branch=False, num_children=None, child_types=None, forbidden_nodes=None):
+        possible_functions = cls.get_functions(output_type, terminal, non_terminal, branch, num_children, child_types, forbidden_nodes)
+        return random.choice(possible_functions)
 
     @classmethod
     def get_function_data(cls, func_id):

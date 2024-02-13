@@ -3,7 +3,7 @@ import copy
 import itertools
 import multiprocessing
 from functools import partial
-from typing import Sequence, Any, Union, Literal, Callable
+from typing import Sequence, Any, Union, Literal, Callable, Protocol
 
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
@@ -14,6 +14,20 @@ from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.dictutils import deep_copy_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
+
+
+class EvaluateProtocol(Protocol):
+    def __call__(self, agents: Sequence[BaseAgent]) -> Sequence[dict[str, Any]]:
+        """Evaluate the agents in the context of the experiment.
+
+        Args:
+            agents: An ordered list of agents, e.g. [attacker, defender]
+
+        Returns:
+            A list giving each agent a dictionary of results, e.g.
+            `[{'score': 0.7, 'cost': 0.3}, {'score': 0.3, 'cost': 0.5}]`
+        """
+        ...
 
 
 class BaseExperiment(metaclass=abc.ABCMeta):
@@ -46,16 +60,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             self.agent_types_by_population_name[population_name] = agent_type
 
     @abc.abstractmethod
-    def evaluate(self, agents: Sequence[BaseAgent], **kwargs) -> Sequence[dict[str, Any]]:
-        """Evaluate the agents in the context of the experiment.
-
-        Args:
-            agents: An ordered list of agents, e.g. [attacker, defender]
-            **kwargs: Any number of keyword arguments that will be passed by ``world_kwargs``.
+    def get_evaluate(self, **kwargs) -> EvaluateProtocol:
+        """Return an evaluation function which takes a list of agents and returns a list of results.
+        Any parameters should be baked into the evaluation function using :func:`functools.partial` or similar methods.
 
         Returns:
-            A list giving each agent a dictionary of results, e.g.
-            `[{'score': 0.7, 'cost': 0.3}, {'score': 0.3, 'cost': 0.5}]`
+            A function matching the :class:`.EvaluateProtocol` protocol.
         """
         pass
     
@@ -199,7 +209,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
         return generators
 
-    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, exhibition = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
+    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, exhibition: bool = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
@@ -214,15 +224,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             A list of results from the evaluation function, in the order of the agent groups passed in.
 
         """
-        if not exhibition:
-            evaluate = self.evaluate
-        else:
-            evaluate = partial(self.evaluate, exhibition=True)
+        evaluate = self.get_evaluate(exhibition=exhibition)
 
         if parallel:
             if evaluation_pool is None:
                 evaluation_pool = parallelutils.create_pool()
-            end_states = evaluation_pool.map(evaluate, agent_groups)
+            end_states = evaluation_pool.map(evaluate, agent_groups, chunksize=len(agent_groups) // (evaluation_pool._processes * 10))
         else:
             end_states = list()
             for agents in agent_groups:
