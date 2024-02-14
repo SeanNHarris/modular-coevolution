@@ -145,7 +145,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                     if sub_config not in population_config:
                         population_config[sub_config] = {}
                     if sub_config in override_config:
-                        population_config.update(override_config[sub_config])
+                        population_config[sub_config].update(override_config[sub_config])
             updated_config['populations'][population] = population_config
         return updated_config
 
@@ -237,31 +237,40 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         return end_states
 
 
-    def exhibition(self,
-                    populations: Sequence[BaseGenerator],
-                    amount: int,
-                    log_path: str,
-                    parallel: bool = False,
-                    evaluation_pool: multiprocessing.Pool = None) -> None:
+    def exhibition(
+            self,
+            populations: Sequence[BaseGenerator],
+            amount: int,
+            log_path: str,
+            generation: int = -1,
+            parallel: bool = False,
+            evaluation_pool: multiprocessing.Pool = None) -> None:
         """Run exhibition evaluations between the best individuals of the current generation.
 
         Args:
             populations: The list of generators to pull individuals from.
             amount: The number of agents to evaluate from each population.
             log_path: The path to the current log folder.
+            generation: The generation to pull individuals from. Defaults to the last completed generation.
             parallel: Whether to evaluate the agents using a multiprocessing pool.
             evaluation_pool: The multiprocessing pool to use for evaluation.
         """
-        agent_ids = [generator.get_representatives_from_generation(-1, amount) for generator in populations]
+        agent_ids = [generator.get_representatives_from_generation(generation, amount) for generator in populations]
         population_agents = [[population.build_agent_from_id(agent_id, True) for agent_id in agent_ids[population_index]] for population_index, population in enumerate(populations)]
         agents = [population_agents[population_index] for population_index in self.player_populations()]
         agent_names = [populations[population_index].population_name for population_index in self.player_populations()]
+        self._run_exhibition_games(agents, agent_names, log_path, parallel, evaluation_pool)
+
+    def _run_exhibition_games(
+            self,
+            agents: Sequence[Sequence[BaseAgent]],
+            agent_names: Sequence[str],
+            log_path: str,
+            parallel: bool = False,
+            evaluation_pool: multiprocessing.Pool = None) -> None:
 
         agent_groups = list(itertools.product(*agents))
-        # Don't evaluate games with duplicate agents.
-        # The same pair of agents can still be evaluated multiple times in different player orders.
-        agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
-        agent_numbers = [range(amount) for _ in agents]
+        agent_numbers = [range(len(agents[i])) for i in range(len(agents))]
         agent_group_numbers = list(itertools.product(*agent_numbers))
         results = self.evaluate_all(agent_groups, parallel=False, exhibition=True, evaluation_pool=evaluation_pool)
         for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
