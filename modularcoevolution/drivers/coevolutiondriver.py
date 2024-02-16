@@ -249,12 +249,12 @@ class CoevolutionDriver:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
-                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, self.parallel, evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
 
             except EvolutionEndedException:
                 print("Run complete.")
                 if self.run_exhibition:
-                    experiment.exhibition(coevolution_manager.agent_generators, 5, log_path, self.parallel, evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 5, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
                 if self.use_data_collector and not self.data_collector_split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)

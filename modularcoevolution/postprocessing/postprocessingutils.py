@@ -1,5 +1,6 @@
 import itertools
 import json
+import re
 from functools import partial
 from typing import Type, Sequence
 
@@ -7,6 +8,7 @@ from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgen
 from modularcoevolution.drivers import coevolutiondriver
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
+from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.datacollector import DataCollector, DataSchema
 
@@ -59,8 +61,14 @@ def load_run_data(run_folder, last_generation=False):
     return data_collector.data
 
 
-def load_experiment_data(experiment_folder, last_generation=False, parallel=True) -> dict[str, DataSchema]:
+def load_experiment_data(experiment_folder, last_generation=False, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
     run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
+    # Get folders of the form 'Run #', sorted by their number
+    run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
+    run_folders.sort(key=lambda folder: int(folder.split(' ')[-1]))
+
+    if run_numbers is not None:
+        run_folders = [run_folders[i] for i in run_numbers]
 
     if parallel:
         pool = parallelutils.create_pool()
@@ -84,32 +92,42 @@ def _get_run_name(run_folder):
     return str(run_folder).split('/')[-1]
 
 
+def _get_generation_list(run_data: DataSchema):
+    population_name = run_data['generations'].keys().__iter__().__next__()
+    return [int(generation) for generation in run_data['generations'][population_name].keys()]
+
+
 def load_best_run_individuals(
     run_data: DataSchema,
     experiment_definition: BaseExperiment,
-    limit_populations=None,
-    representative_size=-1
+    limit_populations: Sequence[str] = None,
+    representative_size: int = -1,
+    generation: int = -1
 ) -> dict[str, ArchiveGenerator]:
     """
     Load the best individuals from a run into :class:`.ArchiveGenerator` objects.
 
     Parameters:
-    - run_data: The run data containing information about the generations.
-    - experiment_definition: The experiment definition used for this run.
-    - limit_populations: If provided, only the specified populations will be loaded.
-    - representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+        run_data: The run data containing information about the generations.
+        experiment_definition: The experiment definition used for this run.
+        limit_populations: If provided, only the specified populations will be loaded.
+        representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+        generation: The generation to load the individuals from. If -1, the last generation will be used.
 
     Returns:
-    - dict[str, ArchiveGenerator]: A dictionary mapping population names to archive generators.
+        dict[str, ArchiveGenerator]: A dictionary mapping population names to archive generators.
 
     Raises:
-    - ValueError: If a population name is not found in the experiment definition.
+        ValueError: If a population name is not found in the experiment definition.
     """
 
     if limit_populations:
         populations_to_load = limit_populations
     else:
         populations_to_load = run_data['generations'].keys()
+
+    if generation < 0:
+        generation = max(_get_generation_list(run_data, populations_to_load[0]))
 
     experiment_genotypes = {}
     original_ids = {}
@@ -127,24 +145,20 @@ def load_best_run_individuals(
         run_agent_parameters = experiment_definition.config['populations'][population_name]['agent']
         run_genotype_parameters = experiment_definition.config['populations'][population_name]['genotype']
 
-        last_generation = max(
-            int(key) for key in run_data['generations'][population_name].keys()
-        )
-
         experiment_genotypes[population_name] = {}
-        population_size = len(run_data['generations'][population_name][str(last_generation)]['individual_ids'])
+        population_size = len(run_data['generations'][population_name][str(generation)]['individual_ids'])
         if representative_size < 0:
             population_representative_size = population_size
         else:
             population_representative_size = min(representative_size, population_size)
 
         elites = []
-        if 'front members' in run_data['generations'][population_name][str(last_generation)]['metric_statistics']:
+        if 'front members' in run_data['generations'][population_name][str(generation)]['metric_statistics']:
             # Multiobjective
             front = 0
 
             while len(elites) < population_representative_size:
-                front_elites = run_data['generations'][population_name][str(last_generation)]['metric_statistics']['front members'][front]
+                front_elites = run_data['generations'][population_name][str(generation)]['metric_statistics']['front members'][front]
                 amount_needed = population_representative_size - len(elites)
                 if amount_needed >= len(front_elites):
                     elites.extend(front_elites)
@@ -154,13 +168,15 @@ def load_best_run_individuals(
         else:
             # Single objective
             # The member list is sorted the same way it's sorted in evolution's next generation function, which is more or less fitness
-            generation_members = run_data['generations'][population_name][str(last_generation)]['individual_ids']
+            generation_members = run_data['generations'][population_name][str(generation)]['individual_ids']
             elites.extend(generation_members[:min(population_representative_size, len(generation_members))])
 
         population_genotypes = []
         population_original_ids = {}
         for individual_id in elites:
-            genotype_parameters = agent_type.genotype_default_parameters(run_agent_parameters)
+            genotype_parameters = run_data['individuals'][population_name][str(individual_id)]['genotype']
+            default_genotype_parameters = agent_type.genotype_default_parameters(run_agent_parameters)
+            deep_update_dictionary(genotype_parameters, default_genotype_parameters)
             deep_update_dictionary(genotype_parameters, run_genotype_parameters)
             genotype = agent_type.genotype_class()(genotype_parameters)
             population_genotypes.append(genotype)
@@ -171,8 +187,34 @@ def load_best_run_individuals(
     return archive_generators
 
 
+def load_generational_representatives(
+    run_data: DataSchema,
+    experiment_definition: BaseExperiment,
+    limit_populations: Sequence[str] = None,
+    representative_size: int = -1
+) -> list[dict[str, ArchiveGenerator]]:
+    """
+    Load the representatives from each generation of a run into :class:`.ArchiveGenerator` objects.
+
+    Parameters:
+        run_data: The run data containing information about the generations.
+        experiment_definition: The experiment definition used for this run.
+        limit_populations: If provided, only the specified populations will be loaded.
+        representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+
+    Returns:
+        For each generation, a dictionary mapping population names to archive generators.
+    """
+    generations = _get_generation_list(run_data)
+    result = []
+    for generation in generations:
+        result.append(load_best_run_individuals(run_data, experiment_definition, limit_populations, representative_size, generation))
+
+    return result
+
+
 def round_robin_evaluation(
-    populations: list[ArchiveGenerator],
+    populations: list[BaseGenerator],
     experiment_definition: BaseExperiment,
     repeat_evaluations: int = 1,
     parallel: bool = False
@@ -197,7 +239,7 @@ def round_robin_evaluation(
     agent_groups = list(itertools.product(*agents))
     # Don't evaluate games with duplicate agents.
     # The same pair of agents can still be evaluated multiple times in different player orders.
-    agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
+    # agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
     agent_groups = agent_groups * repeat_evaluations
     results = experiment_definition.evaluate_all(agent_groups, parallel=parallel)
     for agents, result in zip(agent_groups, results):

@@ -17,7 +17,7 @@ MAXIMUM_HEIGHT = 15
 
 
 # Hardcoded parameters
-SUBTREE_MUTATE_HEIGHT_SIGMA = 1
+SUBTREE_MUTATE_HEIGHT_SIGMA = 2
 
 
 class GPTreeParameters(TypedDict, total=False):
@@ -223,7 +223,7 @@ class GPTree(BaseGenotype):
         mean_height = old_subtree.get_height()
         generate_height = int(round(random.gauss(mean_height, SUBTREE_MUTATE_HEIGHT_SIGMA)))
         # Don't allow the new subtree to exceed the maximum height
-        generate_height = min(generate_height, MAXIMUM_HEIGHT - old_subtree.get_depth())
+        generate_height = min(max(1, generate_height), MAXIMUM_HEIGHT - old_subtree.get_depth())
         new_subtree = self.random_subtree(generate_height, old_subtree.output_type)
         try:
             self._replace_subtree(old_subtree, new_subtree)

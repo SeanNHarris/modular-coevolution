@@ -55,7 +55,10 @@ class ArchiveGenerator(BaseGenerator):
         return list(self.genotypes_by_id.keys())
 
     def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False) -> list[GenotypeID]:
-        raise NotImplementedError("ArchiveGenerator does not support get_representatives_from_generation.")
+        if generation <= 0:
+            return [individual.id for individual in self.population[:amount]]
+        else:
+            raise IndexError("ArchiveGenerator is not generational, and only has a generation 0.")
 
     def end_generation(self) -> None:
         """Empty, since this is not a generational generator."""

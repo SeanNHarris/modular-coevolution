@@ -8,9 +8,27 @@ import random
 
 # Note: these functions assume objective maximization
 class NSGAIIGenerator(BaseEvolutionaryGenerator):
-    def __init__(self, agent_class, population_name, initial_size, children_size, agent_parameters=None, genotype_parameters=None, mutation_fraction=0.25, recombination_fraction=0.75, tournament_size=2, seed=None, fitness_function=None, data_collector=None, copy_survivor_objectives=False, reevaluate_per_generation=True, using_hall_of_fame=True):
+    def __init__(
+            self,
+            agent_class,
+            population_name,
+            initial_size,
+            children_size,
+            agent_parameters=None,
+            genotype_parameters=None,
+            mutation_fraction=0.25,
+            recombination_fraction=0.75,
+            tournament_size=2,
+            seed=None,
+            fitness_function=None,
+            data_collector=None,
+            copy_survivor_objectives=False,
+            reevaluate_per_generation=True,
+            using_hall_of_fame=True,
+            compute_diversity=False,
+            past_population_width=-1):
         super().__init__(agent_class=agent_class, population_name=population_name, initial_size=initial_size, agent_parameters=agent_parameters, genotype_parameters=genotype_parameters, seed=seed, fitness_function=fitness_function,
-                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation)
+                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives, reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame, compute_diversity=compute_diversity, past_population_width=past_population_width)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -213,7 +231,7 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
             next_generation.append(child)
             next_generation_set.add(hash(child))
 
-        self.past_populations.append(self.population)
+        self.past_populations.append(self.population[:self.past_population_width])
         self.past_fronts.append(nondominating_fronts)
         self.population = next_generation
         for genotype in self.population:

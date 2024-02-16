@@ -14,6 +14,7 @@ from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.dictutils import deep_copy_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
+from ..generators.randomgenotypegenerator import RandomGenotypeGenerator
 
 
 class EvaluateProtocol(Protocol):
@@ -209,6 +210,36 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
         return generators
 
+    def create_random_generators(self, generate_size: int, reduce_size: int = -1) -> Sequence[RandomGenotypeGenerator]:
+        """Create a list of :class:`.RandomGenotypeGenerator` objects corresponding to the populations in the experiment.
+
+        Args:
+            generate_size: The number of random genotypes to generate in each population.
+                See :meth:`.RandomGenotypeGenerator.__init__`.
+            reduce_size: See :attr:`.RandomGenotypeGenerator.reduce_size`.
+                This method does not perform evaluation or reduction, it just passes this parameter to the generators.
+
+        Returns:
+            A list of :class:`.RandomGenotypeGenerator` objects, one for each population in the experiment.
+            These generators will be initialized with random genotypes corresponding to the experiment configuration.
+        """
+
+        generators = []
+        for population_name in self.population_names():
+            agent_class = self.agent_types_by_population_name[population_name]
+            agent_parameters = self.config['populations'][population_name]['agent']
+            genotype_parameters = self.config['populations'][population_name]['genotype']
+            generator = RandomGenotypeGenerator(
+                agent_class=agent_class,
+                population_name=population_name,
+                generate_size=generate_size,
+                reduce_size=reduce_size,
+                agent_parameters=agent_parameters,
+                genotype_parameters=genotype_parameters
+            )
+            generators.append(generator)
+        return generators
+
     def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, exhibition: bool = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
@@ -287,6 +318,15 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 for metric_name, metric_value in result[player_index].items():
                     statistics_file.write(f'{metric_name}:\n{metric_value}\n')
                 statistics_file.write('\n')
+
+    @staticmethod
+    def _set_config_value(config: dict, keys: Sequence[str], value: Any) -> None:
+        current_dict = config
+        for key in keys[:-1]:
+            if key not in current_dict:
+                current_dict[key] = {}
+            current_dict = current_dict[key]
+        current_dict[keys[-1]] = value
 
 
 

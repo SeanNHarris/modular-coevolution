@@ -64,6 +64,10 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     already-evaluated individuals will be skipped."""
     compute_diversity: bool
     """If True, compute the diversity of each genotype as a metric."""
+    past_population_width: int
+    """If non-negative, only store this many of the top individuals per generation in :attr:`past_populations`.
+    Useful for saving memory."""
+
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
@@ -78,7 +82,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                  copy_survivor_objectives: bool = False,
                  reevaluate_per_generation: bool = True,
                  using_hall_of_fame: bool = False,
-                 compute_diversity: bool = False):
+                 compute_diversity: bool = False,
+                 past_population_width: int = -1):
         """
 
         Args:
@@ -101,6 +106,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             using_hall_of_fame: If True, store a hall of fame and include it in the output of
                 :meth:`get_individuals_to_test`.
             compute_diversity: If True, compute the diversity of each genotype as a metric.
+            past_population_width: If non-negative, only store this many of the top individuals per generation in
+                :attr:`past_populations`. Useful for saving memory.
 
         .. warning::
             ``using_hall_of_fame`` currently uses a non-standard implementation of the hall of fame and is subject to
@@ -126,6 +133,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.population_size = self.initial_size
         self.population = list()
         self.past_populations = list()
+        self.past_population_width = past_population_width
         self.using_hall_of_fame = using_hall_of_fame
         self.hall_of_fame = list()
         self.genotypes_by_id = dict()

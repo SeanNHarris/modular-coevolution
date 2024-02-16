@@ -31,12 +31,13 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                  copy_survivor_objectives: bool = False,
                  reevaluate_per_generation: bool = True,
                  using_hall_of_fame: bool = False,
-                 tournament_size: int = 2):
+                 tournament_size: int = 2,
+                 past_population_width: int = 1):
         super().__init__(agent_class, population_name, initial_size, agent_parameters=agent_parameters,
                          genotype_parameters=genotype_parameters, seed=seed,
                          data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives,
                          reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame,
-                         compute_diversity=compute_diversity)
+                         compute_diversity=compute_diversity, past_population_width=past_population_width)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -48,7 +49,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
     def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False)\
             -> list[GenotypeID]:
         if generation == len(self.past_populations):
-            sorted_population = self.sorted_population(self.population)
+            sorted_population = self.population.copy()
         else:
             sorted_population = self.sorted_population(self.past_populations[generation])
         if force:
@@ -88,7 +89,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             else:
                 survivor = self.population[i].clone()
             next_generation.append(survivor)
-            next_generation_set.add(survivor)
+            next_generation_set.add(hash(survivor))
 
         num_mutation = int(math.ceil(self.mutation_fraction * self.children_size))
         num_recombination = int(math.floor(self.recombination_fraction * self.children_size))
@@ -108,7 +109,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             next_generation_set.add(hash(child))
 
         self.population.sort(key=lambda x: x.fitness, reverse=True)
-        self.past_populations.append(self.population)
+        self.past_populations.append(self.population[:self.past_population_width])
         self.population = next_generation
         self.population_size = self.initial_size + self.children_size
         for genotype in self.population:
