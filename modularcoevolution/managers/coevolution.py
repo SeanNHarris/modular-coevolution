@@ -129,7 +129,7 @@ class Coevolution:
             raise EvolutionEndedException
 
         # TODO: Handle debug printing better.
-        print("Starting next generation----------------------------------")
+        print(f"End of generation {self.generation}----------------------------------")
         for generator in self.agent_generators:
             generator.end_generation()
         if self.generation >= self.num_generations:

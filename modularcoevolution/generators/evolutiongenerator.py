@@ -61,6 +61,20 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
     def end_generation(self) -> None:
         random.shuffle(self.population)  # Python's list.sort maintains existing order between same-valued individuals, which can lead to stagnation in extreme cases such as all zero fitnesses
 
+        self.population.sort(key=lambda x: x.fitness, reverse=True)
+        self.past_populations.append(self.population[:self.past_population_width])
+        self.log_generation()
+
+    def next_generation(self):
+        # Population was already sorted in end_generation
+        # Re-sort using diversity fitness
+        if self.diverse_elites:
+            best = max(self.population, key=lambda x: x.fitness)
+            self.population.sort(key=lambda x: self.calculate_diversity_fitness(x), reverse=True)
+            self.population.remove(best)
+            self.population.insert(0,
+                                   best)  # Even with diverse elites, keep the absolute best individual as an elite no matter what.
+
         if self.diversity_weight > 0:
             for genotype in self.population:
                 novelty = genotype.metrics["novelty"]
@@ -69,18 +83,6 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         else:
             self.max_novelty = 0
 
-        if self.diverse_elites:
-            best = max(self.population, key=lambda x: x.fitness)
-            self.population.sort(key=lambda x: self.calculate_diversity_fitness(x), reverse=True)
-            self.population.remove(best)
-            self.population.insert(0,
-                                   best)  # Even with diverse elites, keep the absolute best individual as an elite no matter what.
-        else:
-            self.population.sort(key=lambda x: x.fitness, reverse=True)  # High fitness is good
-
-        self.log_generation()
-
-    def next_generation(self):
         next_generation = list()
         next_generation_set = set()
         for i in range(self.initial_size):
@@ -108,10 +110,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             next_generation.append(child)
             next_generation_set.add(hash(child))
 
-        self.population.sort(key=lambda x: x.fitness, reverse=True)
-        self.past_populations.append(self.population[:self.past_population_width])
         self.population = next_generation
-        self.population_size = self.initial_size + self.children_size
         for genotype in self.population:
             self.genotypes_by_id[genotype.id] = genotype
         if self.using_hall_of_fame:

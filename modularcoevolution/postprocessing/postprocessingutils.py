@@ -124,10 +124,10 @@ def load_best_run_individuals(
     if limit_populations:
         populations_to_load = limit_populations
     else:
-        populations_to_load = run_data['generations'].keys()
+        populations_to_load = list(run_data['generations'].keys())
 
     if generation < 0:
-        generation = max(_get_generation_list(run_data, populations_to_load[0]))
+        generation = max(_get_generation_list(run_data))
 
     experiment_genotypes = {}
     original_ids = {}

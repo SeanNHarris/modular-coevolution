@@ -228,6 +228,9 @@ class CoevolutionDriver:
         else:
             evaluation_pool = None
 
+        # Do a test evaluation to visualize what the scenario looks like
+        experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=self.parallel, evaluation_pool=evaluation_pool)
+
         while True:
             try:
                 while len(coevolution_manager.get_remaining_evaluations()) > 0:
@@ -249,12 +252,12 @@ class CoevolutionDriver:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
-                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
 
             except EvolutionEndedException:
                 print("Run complete.")
                 if self.run_exhibition:
-                    experiment.exhibition(coevolution_manager.agent_generators, 5, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
                 if self.use_data_collector and not self.data_collector_split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
