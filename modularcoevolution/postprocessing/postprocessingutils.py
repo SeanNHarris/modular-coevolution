@@ -1,3 +1,4 @@
+import functools
 import itertools
 import json
 import re
@@ -9,14 +10,17 @@ from modularcoevolution.drivers import coevolutiondriver
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.generators.basegenerator import BaseGenerator
+from modularcoevolution.genotypes.basegenotype import BaseGenotype
+from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
 from modularcoevolution.utilities import parallelutils
-from modularcoevolution.utilities.datacollector import DataCollector, DataSchema
+from modularcoevolution.utilities.datacollector import DataCollector, DataSchema, IndividualData
 
 import multiprocessing
 import os
 import random
 
 from modularcoevolution.utilities.dictutils import deep_update_dictionary
+from modularcoevolution.utilities.specialtypes import GenotypeID
 
 TRUNCATE = True
 world_kwargs = {}
@@ -50,18 +54,18 @@ def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseEx
     return experiment
 
 
-def load_run_data(run_folder, last_generation=False):
+def load_run_data(run_folder, last_generation=False, load_only: Sequence[str] = None) -> DataSchema:
     data_path = f'{run_folder}/data'
     print(f'Reading experiment run data from {data_path}')
     data_collector = DataCollector()
     if last_generation:
-        data_collector.load_last_generation(data_path)
+        data_collector.load_last_generation(data_path, load_only=load_only)
     else:
-        data_collector.load_directory(data_path)
+        data_collector.load_directory(data_path, load_only=load_only)
     return data_collector.data
 
 
-def load_experiment_data(experiment_folder, last_generation=False, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
+def load_experiment_data(experiment_folder, last_generation=False, load_only: Sequence[str] = None, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
     run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
     # Get folders of the form 'Run #', sorted by their number
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
@@ -72,19 +76,21 @@ def load_experiment_data(experiment_folder, last_generation=False, parallel=True
 
     if parallel:
         pool = parallelutils.create_pool()
-        load_run_data_partial = partial(load_run_data, last_generation=last_generation)
+        load_run_data_partial = partial(load_run_data, last_generation=last_generation, load_only=load_only)
         data_files = pool.map(load_run_data_partial, run_folders)
         pool.close()
         pool.join()
         run_data_files = {_get_run_name(run_folder): data_file for run_folder, data_file in
                           zip(run_folders, data_files)}
     else:
-        run_data_files = {_get_run_name(run_folder): load_run_data(run_folder, last_generation) for run_folder in run_folders}
+        run_data_files = {_get_run_name(run_folder): load_run_data(run_folder, last_generation, load_only) for run_folder in run_folders}
     return run_data_files
 
 
 def load_experiment_definition(experiment_folder: str, experiment_type: type[BaseExperiment]) -> BaseExperiment:
     run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
+    #return load_run_experiment_definition(run_folders[0], experiment_type)
+    run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
     return load_run_experiment_definition(run_folders[0], experiment_type)
 
 
@@ -102,7 +108,8 @@ def load_best_run_individuals(
     experiment_definition: BaseExperiment,
     limit_populations: Sequence[str] = None,
     representative_size: int = -1,
-    generation: int = -1
+    generation: int = -1,
+    load_metrics: bool = False
 ) -> dict[str, ArchiveGenerator]:
     """
     Load the best individuals from a run into :class:`.ArchiveGenerator` objects.
@@ -113,6 +120,7 @@ def load_best_run_individuals(
         limit_populations: If provided, only the specified populations will be loaded.
         representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
         generation: The generation to load the individuals from. If -1, the last generation will be used.
+        load_metrics: Whether to populate individuals' objective trackers with their metric data from the logs.
 
     Returns:
         dict[str, ArchiveGenerator]: A dictionary mapping population names to archive generators.
@@ -174,13 +182,20 @@ def load_best_run_individuals(
         population_genotypes = []
         population_original_ids = {}
         for individual_id in elites:
-            genotype_parameters = run_data['individuals'][population_name][str(individual_id)]['genotype']
+            individual_data: IndividualData = run_data['individuals'][population_name][str(individual_id)]
+            genotype_parameters = individual_data['genotype']
             default_genotype_parameters = agent_type.genotype_default_parameters(run_agent_parameters)
             deep_update_dictionary(genotype_parameters, default_genotype_parameters)
             deep_update_dictionary(genotype_parameters, run_genotype_parameters)
-            genotype = agent_type.genotype_class()(genotype_parameters)
+            genotype: BaseGenotype = agent_type.genotype_class()(genotype_parameters)
             population_genotypes.append(genotype)
             population_original_ids[genotype.id] = individual_id
+
+            if load_metrics:
+                genotype.metrics = individual_data['metrics']
+                genotype.metric_statistics = individual_data['metric_statistics']
+                genotype.metric_histories = individual_data['metric_histories']
+
         experiment_genotypes[population_name] = population_genotypes
         original_ids[population_name] = population_original_ids
     archive_generators = experiment_definition.create_archive_generators(experiment_genotypes, original_ids)
@@ -214,10 +229,12 @@ def load_generational_representatives(
 
 
 def round_robin_evaluation(
-    populations: list[BaseGenerator],
+    populations: Sequence[BaseGenerator],
     experiment_definition: BaseExperiment,
     repeat_evaluations: int = 1,
-    parallel: bool = False
+    parallel: bool = False,
+    evaluation_pool = None,
+    **kwargs
 ):
     """
     Evaluate the populations through round-robin evaluations.
@@ -227,6 +244,7 @@ def round_robin_evaluation(
         experiment_definition: The experiment definition to use for evaluation.
         repeat_evaluations: The number of times to repeat each pairing.
         parallel: Whether to evaluate the populations in parallel.
+        kwargs: Additional keyword arguments to pass to the evaluation function.
     """
     player_populations = experiment_definition.player_populations()
     individual_ids = [population.get_individuals_to_test() for population in populations]
@@ -241,7 +259,86 @@ def round_robin_evaluation(
     # The same pair of agents can still be evaluated multiple times in different player orders.
     # agent_groups = [agent_group for agent_group in agent_groups if len(set(agent_group)) == len(agent_group)]
     agent_groups = agent_groups * repeat_evaluations
-    results = experiment_definition.evaluate_all(agent_groups, parallel=parallel)
+    results = experiment_definition.evaluate_all(agent_groups, parallel=parallel, evaluation_pool=evaluation_pool, **kwargs)
+    for agents, result in zip(agent_groups, results):
+        for player_index, agent in enumerate(agents):
+            generator = populations[player_populations[player_index]]
+            generator.submit_evaluation(agent.genotype.id, result[player_index])
+
+
+def round_robin_homogenous_evaluation(
+    populations: Sequence[BaseGenerator],
+    experiment_definition: BaseExperiment,
+    repeat_evaluations: int = 1,
+    parallel: bool = False,
+    evaluation_pool = None,
+    **kwargs
+):
+    """
+    Evaluate the populations through round-robin evaluations,
+    using the same individual for all players from the same population.
+    This results in `O(len(populations)**2)` evaluations, less than :func:`round_robin_evaluation`,
+    but won't consider heterogeneous teams.
+    The resulting objective scores are managed within the archive generators.
+    Args:
+        populations: A list containing the :class:`.ArchiveGenerator` for each population.
+        experiment_definition: The experiment definition to use for evaluation.
+        repeat_evaluations: The number of times to repeat each pairing.
+        parallel: Whether to evaluate the populations in parallel.
+        kwargs: Additional keyword arguments to pass to the evaluation function.
+    """
+    player_populations = experiment_definition.player_populations()
+    individual_ids = [population.get_individuals_to_test() for population in populations]
+    # TODO: Build a new agent for each evaluation in case the agent has state.
+    population_agents = [[population.build_agent_from_id(individual_id, True)
+                          for individual_id in individual_ids[population_index]]
+                         for population_index, population in enumerate(populations)]
+    population_groups = list(itertools.product(*population_agents))
+    agent_groups = []
+    for group in population_groups:
+        agent_group = [group[player_index] for player_index in player_populations]
+        agent_groups.extend([agent_group] * repeat_evaluations)
+
+    results = experiment_definition.evaluate_all(agent_groups, parallel=parallel, evaluation_pool=evaluation_pool, **kwargs)
+    for agents, result in zip(agent_groups, results):
+        for player_index, agent in enumerate(agents):
+            generator = populations[player_populations[player_index]]
+            generator.submit_evaluation(agent.genotype.id, result[player_index])
+
+
+def round_robin_team_evaluation(
+    populations: Sequence[BaseGenerator],
+    population_teams: list[list[list[GenotypeID]]],
+    experiment_definition: BaseExperiment,
+    repeat_evaluations: int = 1,
+    parallel: bool = False,
+    evaluation_pool = None,
+    **kwargs
+):
+    """
+    Evaluate the populations through round-robin evaluations, using fixed teams.
+    The resulting objective scores are managed within the archive generators.
+    Args:
+        populations: A list containing the :class:`.ArchiveGenerator` for each population.
+        population_teams: For each generator, a list of teams, where each team is a list of genotype IDs.
+            A team is a list of individuals from a population that are always evaluated together.
+        experiment_definition: The experiment definition to use for evaluation.
+        repeat_evaluations: The number of times to repeat each pairing.
+        parallel: Whether to evaluate the populations in parallel.
+        kwargs: Additional keyword arguments to pass to the evaluation function.
+    """
+    player_populations = experiment_definition.player_populations()
+    agent_table = {}
+    for population in populations:
+        for individual in population.get_individuals_to_test():
+            agent_table[individual] = population.build_agent_from_id(individual, True)
+
+    groups = list(itertools.product(*population_teams))
+    for index, group in enumerate(groups):
+        groups[index] = functools.reduce(list.__add__, group)
+    groups = groups * repeat_evaluations
+    agent_groups = [[agent_table[individual] for individual in group] for group in groups]
+    results = experiment_definition.evaluate_all(agent_groups, parallel=parallel, evaluation_pool=evaluation_pool, **kwargs)
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]

@@ -5,7 +5,7 @@ Todo:
 """
 import statistics
 
-from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration
+from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, compute_shared_objectives
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
 
@@ -17,6 +17,7 @@ import abc
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.utilities.datacollector import DataCollector
+from modularcoevolution.managers.coevolution import Coevolution
 
 
 AgentType = TypeVar("AgentType", bound=BaseEvolutionaryAgent)
@@ -33,8 +34,11 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
     population: list[BaseGenotype]
     """The current population of the EA."""
+    previous_population: list[BaseGenotype]
+    """The population from the previous generation. Unaffected by :attr:`past_population_width`."""
     past_populations: list[list[BaseGenotype]]
-    """A list of populations from previous generations."""
+    """A list of populations from previous generations. To save memory, the :attr:`past_population_width` parameter
+    can be set to only store the top individuals from each generation."""
     hall_of_fame: list[BaseGenotype]
     """A hall of fame storing high-quality individuals from past generations. Nothing adds to the hall of fame in this
     abstract base class."""
@@ -67,23 +71,38 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     past_population_width: int
     """If non-negative, only store this many of the top individuals per generation in :attr:`past_populations`.
     Useful for saving memory."""
-
+    competitive_fitness_sharing: bool
+    """If True, use competitive fitness sharing to compute alternative objective values."""
+    shared_sampling_size: int
+    """If greater than zero, use shared sampling to provide mandatory opponents
+    with high competitive fitness sharing values."""
+    _shared_objective_map: dict[str, str]
+    """A mapping from shared objective names to their original objective names.
+        Only used if :attr:`competitive_fitness_sharing` is True."""
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
+    manager: Coevolution
+    """The :class:`.Coevolution` manager managing opponents for this generator, if any."""
 
-    def __init__(self, agent_class: Type[AgentType],
-                 population_name: str,
-                 initial_size: int,
-                 agent_parameters: dict[str, Any] = None,
-                 genotype_parameters: dict[str, Any] = None,
-                 seed: list = None,
-                 data_collector: DataCollector = None,
-                 copy_survivor_objectives: bool = False,
-                 reevaluate_per_generation: bool = True,
-                 using_hall_of_fame: bool = False,
-                 compute_diversity: bool = False,
-                 past_population_width: int = -1):
+    def __init__(
+            self,
+            agent_class: Type[AgentType],
+            population_name: str,
+            initial_size: int,
+            agent_parameters: dict[str, Any] = None,
+            genotype_parameters: dict[str, Any] = None,
+            seed: list = None,
+            data_collector: DataCollector = None,
+            manager: Coevolution = None,
+            copy_survivor_objectives: bool = False,
+            reevaluate_per_generation: bool = True,
+            using_hall_of_fame: bool = False,
+            compute_diversity: bool = False,
+            past_population_width: int = -1,
+            competitive_fitness_sharing: bool = False,
+            shared_sampling_size: int = -1,
+    ):
         """
 
         Args:
@@ -97,6 +116,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 :meth:`.BaseEvolutionaryAgent.genotype_default_parameters`. Overwrites any default parameters.
             seed: A list of genotype parameters which will each be used to add one genotype to the initial population.
             data_collector: The :class:`.DataCollector` to be used for logging.
+            manager: The :class:`.Coevolution` manager managing opponents for this generator, if any.
             copy_survivor_objectives: If True, genotypes which survive to the next generation will keep their existing
                 objective values. If False, objective values will be reset each generation.
             reevaluate_per_generation: If True, all genotypes will be evaluated each generation, even if they were
@@ -104,14 +124,14 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 the fitness landscape can change between generations, such as for coevolution. If this is set to False,
                 `copy_survivor_objectives` should be set to True.
             using_hall_of_fame: If True, store a hall of fame and include it in the output of
-                :meth:`get_individuals_to_test`.
+                :meth:`get_mandatory_opponents`.
             compute_diversity: If True, compute the diversity of each genotype as a metric.
             past_population_width: If non-negative, only store this many of the top individuals per generation in
                 :attr:`past_populations`. Useful for saving memory.
-
-        .. warning::
-            ``using_hall_of_fame`` currently uses a non-standard implementation of the hall of fame and is subject to
-            change. It was intended for a specific application and has not been expanded.
+            competitive_fitness_sharing: If True, use competitive fitness sharing
+                to compute alternative objective values.
+            shared_sampling_size: If greater than zero, use shared sampling to provide mandatory opponents
+                with high competitive fitness sharing values.
         """
         super().__init__(population_name)
         self.agent_class = agent_class
@@ -124,6 +144,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.initial_size = initial_size
         self.seed = seed
         self.data_collector = data_collector
+        self.manager = manager
         self.copy_survivor_objectives = copy_survivor_objectives
         self.reevaluate_per_generation = reevaluate_per_generation
         assert issubclass(agent_class, BaseEvolutionaryAgent)
@@ -132,6 +153,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.generation = 0
         self.population_size = self.initial_size
         self.population = list()
+        self.previous_population = list()
         self.past_populations = list()
         self.past_population_width = past_population_width
         self.using_hall_of_fame = using_hall_of_fame
@@ -141,6 +163,12 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.compute_diversity = compute_diversity
         if self.compute_diversity:
             self._register_novelty_metric()
+
+        self.competitive_fitness_sharing = competitive_fitness_sharing
+        self.shared_sampling_size = shared_sampling_size
+        if shared_sampling_size > 0 and not competitive_fitness_sharing:
+            raise ValueError("Shared sampling requires competitive fitness sharing to be enabled.")
+        self._shared_objective_map = dict()
 
         population_set = set()
         for i in range(self.initial_size):
@@ -201,32 +229,43 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         """Get a list of agent IDs in need of evaluation, skipping those already evaluated if
         :attr:`reevaluate_per_generation` is False.
 
-        If :attr:`using_hall_of_fame` is true, the hall of fame will be added to this list.
-
-        .. warning::
-            This is a non-standard implementation of the hall of fame and is subject to change.
-            It was intended for a specific application and has not been expanded.
-
         Returns: A list of IDs for agents which need to be evaluated.
 
         """
         result = [genotype.id for genotype in self.population
                   if self.reevaluate_per_generation or not genotype.is_evaluated]
-        if self.using_hall_of_fame:
-            result += [genotype.id for genotype in self.hall_of_fame]
         return result
 
-    def submit_evaluation(self, agent_id: GenotypeID, evaluation_results: dict[str, Any]) -> None:
+    def get_mandatory_opponents(self) -> list[GenotypeID]:
+        """Get a list of agent IDs which must be evaluated against all opponents.
+        This implementation returns the hall of fame if :attr:`using_hall_of_fame` is True, and an empty list otherwise.
+
+        Returns: A list of mandatory opponent IDs.
+
+        """
+        mandatory_list = []
+        if self.using_hall_of_fame:
+            mandatory_list.extend(genotype.id for genotype in self.hall_of_fame)
+        if self.shared_sampling_size > 0 and self.generation > 0:
+            mandatory_list.extend(self._construct_shared_sample(self.shared_sampling_size))
+        return mandatory_list
+
+    def submit_evaluation(
+            self,
+            agent_id: GenotypeID,
+            evaluation_results: dict[str, Any],
+            opponents: list[GenotypeID] = None,
+    ) -> None:
         """Called by a :class:`.BaseEvolutionManager` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Args:
             agent_id: The index of the agent associated with the evaluation results.
             evaluation_results: The results of the evaluation.
-
+            opponents: The IDs of the opponents the agent was evaluated against, if any.
         """
 
-        super().submit_evaluation(agent_id, evaluation_results)
+        super().submit_evaluation(agent_id, evaluation_results, opponents)
         individual = self.get_genotype_with_id(agent_id)
         if self.compute_diversity and "novelty" not in individual.metrics:
             novelty = self.get_diversity(agent_id, min(100, len(self.population)))
@@ -244,6 +283,128 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 individual.parent_ids.copy(),
                 individual.creation_method,
             )
+
+    @abc.abstractmethod
+    def end_generation(self) -> None:
+        """Called by a :class:`.BaseEvolutionManager` to signal that the current generation has ended.
+
+        Sorting the population and any logging of the generation should be performed here.
+
+        This method should not add or remove individuals from the population.
+
+        """
+        # TODO: Separate sorting of population into a separate method, move more to base class
+        if self.competitive_fitness_sharing:
+            opponents = set()
+            for individual in self.population:
+                individual_opponents = individual.get_opponents()
+                opponents.update(individual_opponents)
+
+            for shared_objective in self._shared_objective_map:
+                base_objective = self._shared_objective_map[shared_objective]
+                for opponent in opponents:
+                    shared_scores = compute_shared_objectives(self.population, opponent, base_objective)
+                    for individual, score in zip(self.population, shared_scores):
+                        self.submit_metric(individual.id, shared_objective, score)
+
+        super().end_generation()
+
+    @abc.abstractmethod
+    def next_generation(self) -> None:
+        """Signals the generator that a generation has completed and that the generator may modify its population.
+
+        Changes to the population should only occur as a result of this method being called. However, modifying the
+        population at all is optional.
+
+        This function will only be called after :meth:`.end_generation`, so it can be assumed that the population is sorted.
+        """
+        self.previous_population = self.population.copy()
+
+        super().next_generation()
+
+    def _construct_shared_sample(self, size: int) -> list[GenotypeID]:
+        """Construct a sample of genotypes to be used for shared sampling.
+        Shared sampling aims to construct a diverse sample set which maximizes marginal shared fitness for each
+        individual added to the sample.
+        Since we are using a continuous version of competitive fitness sharing, this method does not exactly match
+        the version from New Methods for Competitive Coevolution.
+        If there are multiple objectives, the sample set will be constructed to maximize the sum of shared objective
+        values for each added individual.
+
+        Args:
+            size: The size of the sample set to be constructed.
+
+        Returns: A list of genotype IDs of the requested size following the shared sampling algorithm.
+
+        Raises:
+            ValueError: If called in the first generation.
+        """
+        if self.previous_population is None:
+            raise ValueError("Cannot use shared sampling in the first generation.")
+        if size > len(self.previous_population):
+            size = len(self.previous_population)
+        # All single individuals will have the same shared objective value (in this continuous variant)
+        # So pick a broadly "good" one to start.
+        starting_individual = None
+        starting_individual_score = None
+        for individual in self.previous_population:
+            objective_sum = 0
+            for base_objective in self._shared_objective_map.values():
+                objective_sum += individual.metrics[base_objective]
+            if starting_individual is None or objective_sum > starting_individual_score:
+                starting_individual = individual
+                starting_individual_score = objective_sum
+        sample = [starting_individual]
+
+        opponents = set()
+        for individual in self.previous_population:
+            individual_opponents = individual.get_opponents()
+            opponents.update(individual_opponents)
+
+        while len(sample) < size:
+            best_individual = None
+            best_individual_score = None
+            for individual in self.previous_population:
+                if individual in sample:
+                    continue
+                augmented_sample = sample.copy()
+                augmented_sample.append(individual)
+                # Compute the total shared objective value this individual would get if included in the sample.
+                # More distinct individuals to the existing sample will have higher shared objective values.
+                total_score = 0
+                for shared_objective in self._shared_objective_map:
+                    base_objective = self._shared_objective_map[shared_objective]
+                    for opponent in opponents:
+                        shared_scores = compute_shared_objectives(augmented_sample, opponent, base_objective)
+                        total_score += shared_scores[-1]
+                if best_individual is None or total_score > best_individual_score:
+                    best_individual = individual
+                    best_individual_score = total_score
+            sample.append(best_individual)
+        return [individual.id for individual in sample]
+
+
+    def register_metric(self, metric_configuration: MetricConfiguration, metric_function: callable) -> None:
+        """Register a metric with this generator.
+
+        Args:
+            metric_configuration: The metric to register.
+            metric_function: A function which computes the metric from the dictionary of evaluation results.
+                Alternatively, a string key in the dictionary of evaluation results which contains the metric value.
+
+        """
+        if self.competitive_fitness_sharing and metric_configuration['is_objective']:
+            modified_metric: MetricConfiguration = metric_configuration.copy()
+            modified_metric['name'] = 'base_' + metric_configuration['name']
+            modified_metric['is_objective'] = False
+            super().register_metric(modified_metric, metric_function)
+            shared_metric: MetricConfiguration = metric_configuration.copy()
+            shared_metric['automatic'] = False
+            shared_metric['log_history'] = False
+            super().register_metric(shared_metric, metric_function)
+            self._shared_objective_map[shared_metric['name']] = modified_metric['name']
+        else:
+            super().register_metric(metric_configuration, metric_function)
 
     def get_diversity(self, reference_id: GenotypeID = None, samples: int = None) -> float:
         """Calculates the diversity of the population with respect to a reference individual.
@@ -303,11 +464,27 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 population_metrics
             )
 
+        for individual in self.population:
+            self.data_collector.set_individual_data(
+                self.population_name,
+                individual.id,
+                individual.get_raw_genotype(),
+                individual.evaluation_ids.copy(),
+                individual.metrics.copy(),
+                individual.metric_statistics.copy(),
+                individual.metric_histories.copy(),
+                individual.parent_ids.copy(),
+                individual.creation_method,
+            )
+
         print("Best individual of this generation: (fitness score of " + str(self.population[0].fitness) + ")")
         print(self.population[0])
 
         list_amount = min(self.population_size, 100)
         print(str([individual.fitness for individual in self.population[:list_amount]]))
+
+    def update_hall_of_fame(self) -> None:
+        pass
 
     def _register_novelty_metric(self) -> None:
         """Automatically register a diversity metric called ``"novelty"``."""
@@ -316,6 +493,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             "is_objective": False,
             "repeat_mode": "replace",
             "log_history": False,
-            "automatic": False
+            "automatic": False,
+            "add_fitness_modifier": False,
         }
         self.register_metric(metric_configuration, None)

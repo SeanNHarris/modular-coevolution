@@ -10,11 +10,16 @@ from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
+from modularcoevolution.generators.randomgenotypegenerator import RandomGenotypeGenerator
 from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.dictutils import deep_copy_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
-from ..generators.randomgenotypegenerator import RandomGenotypeGenerator
+
+try:
+    import tqdm
+except ImportError:
+    tqdm = None
 
 
 class EvaluateProtocol(Protocol):
@@ -240,32 +245,43 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             generators.append(generator)
         return generators
 
-    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, exhibition: bool = False, evaluation_pool: multiprocessing.Pool = None) -> list[Sequence[dict[str, Any]]]:
+    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, evaluation_pool: multiprocessing.Pool = None, **kwargs) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
         Args:
             agent_groups: A list of agent groups to evaluate.
             parallel: Whether to evaluate the agents using a multiprocessing pool.
-            exhibition: If true, sends an `exhibition = True` parameter to the evaluation function.
             evaluation_pool: The multiprocessing pool to use for evaluation if ``parallel`` is True.
                 If None, a new pool will be created.
+            kwargs: Additional keyword arguments to pass to the evaluation function.
 
         Returns:
             A list of results from the evaluation function, in the order of the agent groups passed in.
 
         """
-        evaluate = self.get_evaluate(exhibition=exhibition)
+        evaluate = self.get_evaluate(**kwargs)
 
         if parallel:
             if evaluation_pool is None:
-                evaluation_pool = parallelutils.create_pool()
-            end_states = evaluation_pool.map(evaluate, agent_groups, chunksize=len(agent_groups) // (evaluation_pool._processes * 10))
+                evaluation_pool: multiprocessing.Pool = parallelutils.create_pool()
+            result_iterator = evaluation_pool.imap(evaluate, agent_groups)
         else:
-            end_states = list()
-            for agents in agent_groups:
-                end_states.append(evaluate(agents))
-        return end_states
+            result_iterator = map(evaluate, agent_groups)
+
+        if tqdm is not None and len(agent_groups) > 100:
+            result_iterator = tqdm.tqdm(result_iterator, total=len(agent_groups), desc="Running evaluations", unit="evals", smoothing=0.0)
+
+        try:
+            results = []
+            for result in result_iterator:
+                results.append(result)
+            return results
+        except KeyboardInterrupt as interrupt:
+            # If the user stops execution during evaluations, terminate the pool to kill any remaining processes.
+            if parallel:
+                evaluation_pool.terminate()
+            raise interrupt
 
 
     def exhibition(

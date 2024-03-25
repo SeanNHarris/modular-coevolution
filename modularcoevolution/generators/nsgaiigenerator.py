@@ -54,6 +54,7 @@ class NSGAIIGenerator(BaseEvolutionaryGenerator):
         raise NotImplementedError("This is a multi-objective algorithm and does not store a single fitness.")
 
     def next_generation(self, result_log=None, agent_log=None):
+        super().next_generation()
         nondominating_fronts = nondominated_sort(self.population)
         crowding_distances = dict()
         for front in nondominating_fronts:

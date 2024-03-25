@@ -96,6 +96,15 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
         pass
 
+    def get_mandatory_opponents(self) -> list[GenotypeID]:
+        """Get a list of agent IDs which must be evaluated against all opponents.
+        An example use case of this is a hall of fame.
+        The default implementation returns an empty list.
+
+        Returns: A list of IDs for agents which must be evaluated against all opponents.
+        """
+        return []
+
     @abc.abstractmethod
     def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False) -> list[GenotypeID]:
         """Return a set of agent IDs for high-quality representatives of the population from a certain generation,
@@ -115,19 +124,24 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
         pass
 
-    def submit_evaluation(self, agent_id: GenotypeID, evaluation_results: dict[str, Any]) -> None:
+    def submit_evaluation(
+            self,
+            agent_id: GenotypeID,
+            evaluation_results: dict[str, Any],
+            opponents: list[GenotypeID] = None,
+    ) -> None:
         """Called by a :class:`.BaseEvolutionManager` to record objectives and metrics from evaluation results
         for the agent with given index.
 
         Args:
-            agent_id: The index of the agent associated with the evaluation results.
+            agent_id: The ID of the agent associated with the evaluation results.
             evaluation_results: The results of the evaluation.
-
+            opponents: The IDs of the opponents the agent was evaluated against, if any.
         """
 
         for metric_name in self.metric_configurations:
             if self.metric_configurations[metric_name]['automatic']:
-                self.submit_metric(agent_id, metric_name, self.compute_metric(metric_name, evaluation_results))
+                self.submit_metric(agent_id, metric_name, self.compute_metric(metric_name, evaluation_results), opponents)
 
     @abc.abstractmethod
     def end_generation(self) -> None:
@@ -184,7 +198,13 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         if metric_function is None and metric_configuration['automatic']:
             raise ValueError("A metric function must be provided for automatic metrics.")
 
-    def submit_metric(self, agent_id: GenotypeID, metric_name: str, metric_value: MetricTypes) -> None:
+    def submit_metric(
+            self,
+            agent_id: GenotypeID,
+            metric_name: str,
+            metric_value: MetricTypes,
+            opponents: list[GenotypeID] = None,
+    ) -> None:
         """Submit a metric value for an agent to store.
         The metric must have been previously registered using :meth:`.register_metric`.
 
@@ -192,13 +212,15 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
             agent_id: The ID of the agent associated with the metric.
             metric_name: The name of the metric.
             metric_value: The value of the metric.
-
+            opponents: The IDs of the opponents the agent was evaluated against, if any.
         """
         if metric_name not in self.metric_configurations:
             raise ValueError(f"Metric {metric_name} not registered.")
 
         metric_submission: MetricSubmission = self.metric_configurations[metric_name].copy()
         metric_submission['value'] = metric_value
+        if opponents is not None:
+            metric_submission['opponents'] = opponents
         self.get_genotype_with_id(agent_id).submit_metric(metric_submission)
 
     def compute_metric(self, metric_name: str, evaluation_results: dict[str, Any]) -> MetricTypes:

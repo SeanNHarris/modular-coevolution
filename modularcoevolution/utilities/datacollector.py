@@ -9,36 +9,58 @@ from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
 
 
 class ExperimentData(TypedDict):
+    """A dictionary storing global data for the experiment."""
     parameters: dict[str, Any]
-    master_tournament_objectives: dict[str, Any]
+    """A nested dictionary of parameters for the experiment. No specific format is specified."""
+    # master_tournament_objectives: dict[str, Any]
 
 
 class GenerationData(TypedDict):
+    """A dictionary storing the data for a single generation in a generator."""
     individual_ids: Sequence[GenotypeID]
+    """An ordered list of the genotype IDs of the individuals in this generation. Order is up to the generator."""
     objective_statistics: dict[str, Any]
+    """Aggregate statistics about the objectives of the individuals in this generation. Keyed by metric name."""
     population_metrics: dict[str, Any]
+    """Additional metrics about the entire population which aren't directly derived from individual metrics."""
 
 
 class IndividualData(TypedDict):
+    """A dictionary storing the data for a single individual, including its :class:`BaseObjectiveTracker` data."""
     genotype: Any
+    """A JSON-serializable representation of the genotype of this individual, which can be used to reconstruct it."""
     evaluation_ids: Sequence[EvaluationID]
+    """A list of evaluations this individual participated in."""
     metrics: dict[str, Any]
+    """The metrics of this individual, from its objective tracker."""
     metric_statistics: dict[str, Any]
+    """The metric statistics of this individual, from its objective tracker."""
     metric_histories: dict[str, Any]
+    """The metric histories of this individual, from its objective tracker."""
     parent_ids: Sequence[GenotypeID]
+    """The genotype IDs of the parents of this individual, if any."""
     creation_information: str
+    """A string describing how this individual was created (e.g. mutation, recombination)."""
 
 
 class EvaluationData(TypedDict):
+    """A dictionary storing the data for a single evaluation."""
     agent_ids: Sequence[GenotypeID]
-    results: dict[str, Any]
+    """The genotype IDs of the agents in this evaluation, in player order."""
+    results: Sequence[dict[str, Any]]
+    """A sequence of results for each agent in the evaluation. The format of each result is not specified."""
 
 
 class DataSchema(TypedDict):
+    """Top-level schema for the data stored by a :class:`DataCollector` object."""
     experiment: ExperimentData
+    """Stores overall data for the experiment."""
     generations: dict[str, dict[int, GenerationData]]
-    individuals: dict[str, dict[GenotypeID, IndividualData]]
+    """A nested dictionary of generation data, indexed by population name and generation number."""
+    individuals: dict[str, dict[GenotypeID, IndividualData]]  # Indexed by population name
+    """A nested dictionary of individual data, indexed by population name and genotype ID."""
     evaluations: dict[EvaluationID, EvaluationData]
+    """A dictionary of all recorded evaluations, indexed by evaluation ID."""
 
 
 class DataCollector:
@@ -201,23 +223,26 @@ class DataCollector:
             self.data["individuals"] = {}
             self.data["evaluations"] = {}
 
-    def load_from_file(self, filename) -> None:
+    def load_from_file(self, filename, load_only: Sequence[str] = None) -> None:
         """
         Load data from a previously logged experiment to the current data collector.
         To load data from multiple files (saved using `clear_memory = True`), use :meth:`load_directory` instead.
         Args:
             filename: The path of the file to load from.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
         """
         try:
             with gzip.open(filename, 'rt', encoding='UTF-8') as log_file:
-                self._load_from_file(log_file)
+                self._load_from_file(log_file, load_only=load_only)
         except OSError:
             with open(filename, 'rt', encoding='UTF-8') as log_file:
-                self._load_from_file(log_file)
+                self._load_from_file(log_file, load_only=load_only)
 
-    def _load_from_file(self, log_file) -> None:
+    def _load_from_file(self, log_file, load_only: Sequence[str] = None) -> None:
         new_data: DataSchema = json.load(log_file)
         for table in new_data:
+            if load_only is not None and table not in load_only:
+                continue
             if table in ("generations", "individuals"):
                 for population_name in new_data[table]:
                     if population_name not in self.data[table]:
@@ -226,33 +251,36 @@ class DataCollector:
             else:
                 self.data[table].update(new_data[table])
 
-    def load_directory(self, pathname) -> None:
+    def load_directory(self, pathname, load_only: Sequence[str] = None) -> None:
         """
         Load multiple files of data from a previously logged experiment to the current data collector.
         These files must end in a number, and will be loaded in order of that number.
         (This is already the default saving behavior of :class:`.CoevolutionDriver`.)
         Args:
             pathname: The path of the directory to load from.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
         """
         files = [file for file in os.scandir(pathname) if file.is_file()]
         files.sort(key=lambda file: int("".join(filter(str.isdigit, file.name))))
         for file in files:
-            self.load_from_file(file.path)
+            print(f"Loading {file.name}")
+            self.load_from_file(file.path, load_only=load_only)
 
-    def load_last_generation(self, pathname) -> None:
+    def load_last_generation(self, pathname, load_only: Sequence[str] = None) -> None:
         """
         Load the last generation of data from a previously logged experiment to the current data collector.
         This is useful if you only need to use the end results of an experiment.
         Args:
             pathname: The path of the directory to load from.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
         """
         files = [file for file in os.scandir(pathname) if file.is_file()]
         if len(files) == 1:
             # Handles the case where the experiment was saved to a single file.
-            self.load_from_file(files[0].path)
+            self.load_from_file(files[0].path, load_only=load_only)
             return
         files.sort(key=lambda file: int("".join(filter(str.isdigit, file.name))))
-        self.load_from_file(files[-1].path)
+        self.load_from_file(files[-1].path, load_only=load_only)
 
     def __getstate__(self):
         return self.__dict__.copy()

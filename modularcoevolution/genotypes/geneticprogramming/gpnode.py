@@ -5,7 +5,7 @@
 # Compiled at: 2017-03-21 14:16:04
 # Size of source mod 2**32: 7822 bytes
 from functools import cache
-from typing import Callable, Any, Union, Optional, Generator
+from typing import Callable, Any, Union, Optional, Generator, Sequence
 
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
 
@@ -44,10 +44,10 @@ class GPNode(metaclass=GPNodeTypeRegistry):
     """The children of this node in order."""
     parent: Optional['GPNode']
     """The parent of this node. If this node is the root of a tree, this will be None."""
-    depth: int | None
+    _depth: int | None
     """The depth of this node in the tree from the root. Cached for :meth:`GPNode.get_depth`.
     Invalidated by :meth:`GPNode.set_parent`."""
-    height: int | None
+    _height: int | None
     """The height of this node in the tree from its deepest child. Cached for :meth:`GPNode.get_height`.
     Invalidated by :meth:`GPNode.add_input`."""
     fixed_context: dict[str, Any]
@@ -59,14 +59,14 @@ class GPNode(metaclass=GPNodeTypeRegistry):
         self.function = func_data[0]
         self.output_type = func_data[1]
         self.input_types = func_data[2]
-        self.input_nodes = list()
+        self.input_nodes = [None for _ in self.input_types]
         self.literal = literal
         self.fixed_context = fixed_context
         if function_id in type(self).literals and literal is None:
             self.literal = self.function(fixed_context)
         self.parent = None
-        self.depth = None
-        self.height = None
+        self._depth = None
+        self._height = None
 
     def execute(self, context) -> Any:
         """Executes the function represented by this node, using the given context.
@@ -85,15 +85,27 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             output = self.literal
         return output
 
-    def add_input(self, input_node: 'GPNode') -> None:
-        """Adds a child to this node as an input.
+    def set_input(self, index: int, input_node: 'GPNode') -> None:
+        """Sets the child of this node at the given index to the given node, and sets this node as the parent of the child.
 
         Args:
-            input_node: The child node to add. The output type should match the input type of this node.
-                This type constraint is not checked here. Does not automatically set this node as the parent.
+            index: The index of the child to set.
+            input_node: The child node to set. The output type should match the input type of this node at the given index,
+                but this type constraint is not checked here.
         """
-        self.input_nodes.append(input_node)
-        self.height = None
+        self.input_nodes[index] = input_node
+        self._height = None  # Invalidate height cache
+        input_node.set_parent(self)
+
+    def add_input(self, input_node: 'GPNode') -> None:
+        """Adds a child to this node as an input, and sets this node as the parent of the child.
+
+        Args:
+            input_node: The child node to add. The output type should match corresponding input type of this node,
+                but this type constraint is not checked here.
+        """
+        next_input = self.input_nodes.index(None)
+        self.set_input(next_input, input_node)
 
     def set_parent(self, parent: 'GPNode') -> None:
         """Sets the parent of this node.
@@ -102,45 +114,45 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             parent: The parent node to set. Does not automatically add this node as a child of the parent.
         """
         self.parent = parent
-        self.depth = None
+        self._depth = None  # Invalidate depth cache
 
     def get_depth(self) -> int:
         """Gets the depth of this node in the tree from the root. The root node has a depth of 0.
-        Cached in the :attr:`GPNode.depth` attribute.
+        Cached in the :attr:`GPNode._depth` attribute.
 
         Returns: The depth of this node in the tree.
         """
-        if self.depth is not None:
-            return self.depth
+        if self._depth is not None:
+            return self._depth
 
         if self.parent is None:
-            self.depth = 0
+            self._depth = 0
             return 0
         else:
-            self.depth = self.parent.get_depth() + 1
-            return self.depth
+            self._depth = self.parent.get_depth() + 1
+            return self._depth
 
     def get_height(self) -> int:
         """Gets the height of this node in the tree from its deepest child,
         i.e. the height of the subtree rooted at this node. A single node has a height of 1.
-        Cached in the :attr:`GPNode.height` attribute.
+        Cached in the :attr:`GPNode._height` attribute.
 
         Returns: The height of this node in the tree.
         """
 
-        if self.height is not None:
-            return self.height
+        if self._height is not None:
+            return self._height
 
         if len(self.input_nodes) == 0:
-            self.height = 1
+            self._height = 1
             return 1
         else:
             max_length = 0
             for node in self.input_nodes:
                 max_length = max(max_length, node.get_height())
 
-            self.height = max_length + 1
-            return self.height
+            self._height = max_length + 1
+            return self._height
 
     def get_size(self) -> int:
         return sum((1 for _ in self.traverse_post_order()))
@@ -322,7 +334,17 @@ class GPNode(metaclass=GPNodeTypeRegistry):
 
     @classmethod
     @cache
-    def get_functions(cls, output_type: int, terminal=False, non_terminal=False, branch=False, num_children: int = None, child_types=None, forbidden_nodes=None):
+    def _get_functions(
+            cls,
+            output_type: NodeType,
+            terminal: bool = False,
+            non_terminal: bool = False,
+            branch: bool = False,
+            num_children: int = None,
+            child_types: Sequence[NodeType] = None,
+            has_child: NodeType = None,
+            forbidden_nodes: Sequence[str] = None
+    ) -> list[str]:
         if forbidden_nodes is None:
             forbidden_nodes = []
         possible = list([function for function in cls.type_functions[output_type] if function not in forbidden_nodes])
@@ -336,11 +358,44 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             possible = [function for function in possible if len(cls.get_function_data(function)[2]) == num_children]
         if child_types is not None:
             possible = [function for function in possible if cls.get_function_data(function)[2] == child_types]
+        if has_child is not None:
+            possible = [function for function in possible if has_child in cls.get_function_data(function)[2]]
         return possible
 
     @classmethod
-    def random_function(cls, output_type, terminal=False, non_terminal=False, branch=False, num_children=None, child_types=None, forbidden_nodes=None):
-        possible_functions = cls.get_functions(output_type, terminal, non_terminal, branch, num_children, child_types, forbidden_nodes)
+    def random_function(
+            cls,
+            output_type: NodeType,
+            terminal: bool = False,
+            non_terminal: bool = False,
+            branch: bool = False,
+            num_children: int = None,
+            child_types: Sequence[NodeType] = None,
+            has_child: NodeType = None,
+            forbidden_nodes: Sequence[str] = None
+    ):
+        """Returns a random function ID out of those that meet the provided constraints.
+        Use this when generating random nodes.
+
+        Args:
+            output_type: The output type of the function must match this argument.
+            terminal: If True, the function must be a terminal node.
+            non_terminal: If True, the function must be a non-terminal node.
+            branch: If True, the function must be a node with more than one input.
+            num_children: The number of children that the function must match.
+            child_types: An list of input types that the function must match in order.
+            has_child: At least one input to this function must match the given type.
+            forbidden_nodes: A list of function IDs to exclude from selection.
+
+        Returns:
+            A random function ID that meets the given constraints.
+
+        Raises:
+            ValueError: If no functions meet the given constraints.
+        """
+        possible_functions = cls._get_functions(output_type, terminal, non_terminal, branch, num_children, child_types, has_child, forbidden_nodes)
+        if len(possible_functions) == 0:
+            raise ValueError("No functions meet the given constraints.")
         return random.choice(possible_functions)
 
     @classmethod

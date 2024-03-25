@@ -16,9 +16,11 @@ class ArchiveGenerator(BaseGenerator):
     agent_parameters: dict[str, Any]
     """A dictionary of parameters to be passed to the agent class when creating agents."""
 
-    original_ids: dict[GenotypeID, int]
+    current_to_original_ids: dict[GenotypeID, int]
     """A dictionary mapping the genotype ID assigned during analysis to the original genotype ID in the log data.
     This is necessary because genotype IDs are not unique across different runs."""
+    original_to_current_ids: dict[int, GenotypeID]
+    """The reverse of :attr:`current_to_original_ids`."""
     genotypes_by_id: dict[GenotypeID, BaseObjectiveTracker]
     """A mapping from *current* genotype ID to a genotype with that :attr:`.BaseGenotype.id`."""
 
@@ -32,7 +34,8 @@ class ArchiveGenerator(BaseGenerator):
         # TODO: Move the ID to the BaseObjectiveTracker class to ensure that it always exists.
         self.population = list(genotypes)
         self.genotypes_by_id = {genotype.id: genotype for genotype in genotypes}
-        self.original_ids = original_ids
+        self.current_to_original_ids = original_ids
+        self.original_to_current_ids = {original_id: current_id for current_id, original_id in original_ids.items()}
         self.agent_class = agent_class
         self.agent_parameters = agent_parameters
 
@@ -89,6 +92,33 @@ class ArchiveGenerator(BaseGenerator):
                 }
         return metric_statistics
 
+    def copy(self, clear_metrics: bool = False) -> 'ArchiveGenerator':
+        population_copy = [genotype.clone() for genotype in self.population]
+        if clear_metrics:
+            for genotype in population_copy:
+                genotype.reset_objective_tracker()
+        copy_current_to_original_ids = {}
+        for genotype, clone in zip(self.population, population_copy):
+            copy_current_to_original_ids[clone.id] = self.current_to_original_ids[genotype.id]
+        generator = ArchiveGenerator(self.population_name, population_copy, copy_current_to_original_ids, self.agent_class, self.agent_parameters)
+        generator.metric_configurations = self.metric_configurations
+        generator.metric_functions = self.metric_functions
+        return generator
+
+    def make_subset(self, subset_ids: Sequence[GenotypeID], clear_metrics: bool = False) -> 'ArchiveGenerator':
+        subset_population = [self.genotypes_by_id[genotype_id] for genotype_id in subset_ids]
+        subset_copy = [genotype.clone() for genotype in subset_population]
+        if clear_metrics:
+            for genotype in subset_copy:
+                genotype.reset_objective_tracker()
+        copy_current_to_original_ids = {}
+        for genotype, clone in zip(subset_population, subset_copy):
+            copy_current_to_original_ids[clone.id] = self.current_to_original_ids[genotype.id]
+        generator = ArchiveGenerator(self.population_name, subset_copy, copy_current_to_original_ids, self.agent_class, self.agent_parameters)
+        generator.metric_configurations = self.metric_configurations
+        generator.metric_functions = self.metric_functions
+        return generator
+
     @staticmethod
     def merge_archives(archives: Sequence['ArchiveGenerator']) -> 'ArchiveGenerator':
         population_name = archives[0].population_name
@@ -98,7 +128,7 @@ class ArchiveGenerator(BaseGenerator):
         agent_parameters = archives[0].agent_parameters
         for archive in archives:
             population.extend(archive.population)
-            original_ids.update(archive.original_ids)
+            original_ids.update(archive.current_to_original_ids)
         merged_archive = ArchiveGenerator(population_name, population, original_ids, agent_class, agent_parameters)
         merged_archive.metric_configurations = archives[0].metric_configurations
         merged_archive.metric_functions = archives[0].metric_functions

@@ -87,10 +87,10 @@ class RandomGenotypeGenerator(BaseGenerator):
             raise IndexError("RandomGenotypeGenerator is not generational, and only has a generation 0.")
 
     def end_generation(self) -> None:
-        pass
+        super().end_generation()
 
     def next_generation(self) -> None:
-        pass
+        super().next_generation()
 
     def reduce_population(self) -> None:
         if self.reduce_size >= 0:

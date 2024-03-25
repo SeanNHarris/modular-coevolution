@@ -76,6 +76,9 @@ class Coevolution:
     opponents_this_generation: dict[GenotypeID, set[GenotypeID]]
     """A table of which opponents each agent has encountered this generation. This is used to avoid duplicate evaluations."""
 
+    mandatory_evaluations_only: bool
+    """If true, only mandatory evaluations will be performed. This is needed for shared sampling."""
+
     data_collector: Optional[DataCollector]
     """The data collector used to collect data, if present."""
 
@@ -89,6 +92,7 @@ class Coevolution:
                  tournament_batch_size=None,
                  tournament_ratio=1,
                  data_collector=None,
+                 mandatory_evaluations_only=False,
                  **kwargs):
         self.agent_generators = list(agent_generators)
         self.current_agents_per_generator = {generator: [] for generator in self.agent_generators}
@@ -117,6 +121,7 @@ class Coevolution:
         self.evaluations_per_individual = evaluations_per_individual
         self.evaluated_groups = {}
         self.opponents_this_generation = {}
+        self.mandatory_evaluations_only = mandatory_evaluations_only
 
         self.data_collector = data_collector
 
@@ -167,7 +172,9 @@ class Coevolution:
 
     def add_coevolutionary_evaluations(self) -> None:
         """Generates and adds all coevolutionary evaluations for the current generation."""
-        evaluation_groups = self.build_evaluation_groups()
+        evaluation_groups = self.build_mandatory_evaluations()
+        if not self.mandatory_evaluations_only or len(evaluation_groups) == 0:
+            evaluation_groups += self.build_evaluation_groups()
         for group in evaluation_groups:
             evaluation_id = claim_evaluation_id()
             self.evaluation_table[evaluation_id] = group
@@ -224,6 +231,29 @@ class Coevolution:
                 groups.append(tuple(group))
         return groups
 
+    def build_mandatory_evaluations(self) -> list[tuple[GenotypeID, ...]]:
+        groups = []
+        mandatory_opponents = {generator: generator.get_mandatory_opponents().copy() for generator in self.agent_generators}
+        for agent_list in mandatory_opponents.values():
+            random.shuffle(agent_list)
+        mandatory_agent_lists = [mandatory_opponents[generator] for generator in self.get_generator_order()]
+        max_mandatory_length = max(len(agent_list) for agent_list in mandatory_agent_lists)
+        if max_mandatory_length == 0:
+            return []
+
+        agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.get_generator_order()]
+        for to_evaluate_index, agent_list in enumerate(agent_lists):
+            for agent in agent_list:
+                for opponents_index in range(max_mandatory_length):
+                    group = []
+                    for player_index, mandatory_agent_list in enumerate(mandatory_agent_lists):
+                        if player_index == to_evaluate_index:
+                            group.append(agent)
+                        else:
+                            index = opponents_index % len(mandatory_agent_list)
+                            group.append(mandatory_agent_list[index])
+                    groups.append(tuple(group))
+        return groups
 
     def get_remaining_evaluations(self) -> list[EvaluationID]:
         """Gets a list of evaluations that need to be run.
@@ -317,7 +347,9 @@ class Coevolution:
         agent_group = self.evaluation_table[evaluation_id]
         if evaluation_id in self.remaining_evolution_evaluations:
             for generator, agent_id in zip(self.get_generator_order(), agent_group):
-                generator.submit_evaluation(agent_id, evaluation_results[agent_id])
+                opponents = list(agent_group)
+                opponents.remove(agent_id)
+                generator.submit_evaluation(agent_id, evaluation_results[agent_id], opponents)
             self.evaluated_groups[agent_group] = self.evaluated_groups.setdefault(agent_group, 0) + 1
             self.remaining_evolution_evaluations.remove(evaluation_id)
         elif evaluation_id in self.remaining_tournament_evaluations:

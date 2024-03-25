@@ -5,7 +5,7 @@ from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.geneticprogramming.gpnode import GPNodeTypeRegistry, GPNode
 from modularcoevolution.genotypes.diversity.gpdiversity import *
 
-from typing import Any, TypedDict, Union
+from typing import Any, TypedDict, Union, Callable, Literal
 
 import random
 
@@ -20,6 +20,9 @@ MAXIMUM_HEIGHT = 15
 SUBTREE_MUTATE_HEIGHT_SIGMA = 2
 
 
+MutationType = Literal["subtree", "point", "point_force", "insert", "delete"]
+
+
 class GPTreeParameters(TypedDict, total=False):
     node_type: Union[type, str]
     """See :attr:`GPTree.node_type`. This can be a type or a string name of a type.
@@ -32,6 +35,8 @@ class GPTreeParameters(TypedDict, total=False):
     """See :attr:`GPTree.max_height`."""
     parsimony_weight: float
     """See :attr:`GPTree.parsimony_weight`."""
+    scale_parsimony_with_fitness: bool
+    """See :attr:`GPTree.scale_parsimony_with_fitness`."""
     forbidden_nodes: tuple[str]
     """See :attr:`GPTree.forbidden_nodes`."""
     fixed_context: list[str, Any]  # Can we do more typing enforcement with this?
@@ -39,6 +44,13 @@ class GPTreeParameters(TypedDict, total=False):
     id_list: list[str | Any]
     """A list of node IDs and literal values to be used to generate the tree, instead of using random generation.
     This list should match the output of :meth:`GPTree.getNodeIDList`."""
+    mutation_functions: list[MutationType]
+    """A list of mutation functions to randomly select from when mutating the tree. Options include:
+    - "subtree": :meth:`GPTree._subtree_mutate`
+    - "point": :meth:`GPTree._point_mutate`
+    - "point_force": :meth:`GPTree._point_force_mutate`
+    - "insert": :meth:`GPTree._insert_mutate`
+    - "delete": :meth:`GPTree._delete_mutate`"""
 
 
 class GPTree(BaseGenotype):
@@ -57,6 +69,12 @@ class GPTree(BaseGenotype):
     """A percentage of fitness removed per node in the tree.
     Should be on the order of 0.01 = 1% depending on the expected tree size.
     Defaults to 0."""
+    scale_parsimony_with_fitness: bool
+    """If True, the parsimony pressure penalty will be scaled by the raw fitness of the tree
+    e.g. `penalty = -parsimony_weight * len(self) * raw_fitness`.
+    Otherwise, the penalty will only be based on tree size
+    e.g. `penalty = -parsimony_weight * len(self)`.
+    Defaults to False."""
     forbidden_nodes: tuple[str]
     """A tuple of node IDs that are not allowed to be used in the tree.
     This is useful when using the same node type for multiple populations or chromosomes with different restrictions."""
@@ -64,6 +82,8 @@ class GPTree(BaseGenotype):
     """A dictionary of information made available to all nodes in the tree.
     :meth:`GPNode.execute` passes a context dictionary to each node that it receives as a parameter, which is updated with this dictionary.
     The main purpose of this dictionary is to provide context to literal nodes, whose values can not depend on the dynamic context."""
+    mutation_functions = list[Callable]
+    """A list of mutation functions to randomly select from when mutating the tree."""
 
     root: GPNode
     """The root node of the tree."""
@@ -108,6 +128,11 @@ class GPTree(BaseGenotype):
         else:
             self.parsimony_weight = 0.0
 
+        if "scale_parsimony_with_fitness" in parameters:
+            self.scale_parsimony_with_fitness = parameters["scale_parsimony_with_fitness"]
+        else:
+            self.scale_parsimony_with_fitness = False
+
         if "forbidden_nodes" in parameters:
             self.forbidden_nodes = parameters["forbidden_nodes"]
         else:
@@ -117,6 +142,25 @@ class GPTree(BaseGenotype):
             self.fixed_context = parameters["fixed_context"]
         else:
             self.fixed_context = dict()
+
+        if "mutation_functions" in parameters:
+            self.mutation_functions = []
+            for function in parameters["mutation_functions"]:
+                match function:
+                    case "subtree":
+                        self.mutation_functions.append(self._subtree_mutate)
+                    case "point":
+                        self.mutation_functions.append(self._point_mutate)
+                    case "point_force":
+                        self.mutation_functions.append(self._point_force_mutate)
+                    case "insert":
+                        self.mutation_functions.append(self._insert_mutate)
+                    case "delete":
+                        self.mutation_functions.append(self._delete_mutate)
+                    case _:
+                        raise ValueError(f"Unknown mutation function: {function}")
+        else:
+            self.mutation_functions = [self._subtree_mutate, self._point_mutate, self._point_force_mutate, self._insert_mutate, self._delete_mutate]
 
         # self.node_type.build_data_type_tables()
         # self.growTable, self.fullTable = self.node_type.build_height_tables(MAXIMUM_HEIGHT,
@@ -149,19 +193,17 @@ class GPTree(BaseGenotype):
 
         Args:
             node: The root of the subtree to be replaced.
-            replacement: The root of the new subtree."""
+            replacement: The root of the new subtree.
 
+        Raises:
+            TreeConstraintException: If the replacement subtree exceeds the maximum height.
+        """
         if node is self.root:
             self.root = replacement
-            if self.root.get_height() > MAXIMUM_HEIGHT:
-                raise Exception(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
         else:
             parent = node.parent
             index = parent.input_nodes.index(node)
-            parent.input_nodes[index] = replacement
-            replacement.set_parent(parent)
-            if self.root.get_height() > MAXIMUM_HEIGHT:
-                raise Exception(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
+            parent.set_input(index, replacement)
         self.node_list = None  # Invalidate the cached node list
         self.node_id_list = None  # Invalidate the cached node ID list
 
@@ -181,8 +223,7 @@ class GPTree(BaseGenotype):
         else:
             parent = node.parent
             index = parent.input_nodes.index(node)
-            parent.input_nodes[index] = replacement
-            replacement.set_parent(parent)
+            parent.set_input(index, replacement)
         self.node_list = None  # Invalidate the cached node list
         self.node_id_list = None  # Invalidate the cached node ID list
 
@@ -197,41 +238,61 @@ class GPTree(BaseGenotype):
             A random node from the tree, matching any parameters specified.
 
         Raises:
-            ValueError: If no nodes matching the parameters are found in the tree.
+            TreeConstraintException: If no nodes matching the parameters are found in the tree.
         """
         node_list = self.get_node_list()
         if output_type is not None:
             node_list = [node for node in node_list if node.output_type == output_type]
             if len(node_list) == 0:
-                raise ValueError(f"No valid nodes of type {output_type} found in the tree.")
+                raise TreeConstraintException(f"No valid nodes of type {output_type} found in the tree.")
         if max_depth is not None:
             node_list = [node for node in node_list if node.get_depth() <= max_depth]
             if len(node_list) == 0:
-                raise ValueError(f"No valid nodes found at depth {max_depth} or less in the tree.")
+                raise TreeConstraintException(f"No valid nodes found at depth {max_depth} or less in the tree.")
         return random.choice(node_list)
+
+    def _random_height(self, mean_height: int, creation_depth: int) -> int:
+        """Generates a random height for a subtree, centered around a mean height.
+        The returned height plus the `creation_depth` will not exceed the maximum height.
+
+        Args:
+            mean_height: The mean height of the subtree to be generated.
+            creation_depth: The depth at which the subtree will be inserted.
+
+        Returns:
+            A random height for a subtree which will not violate the maximum height.
+        """
+        max_height = MAXIMUM_HEIGHT - creation_depth
+        return min(max(1, int(round(random.gauss(mean_height, SUBTREE_MUTATE_HEIGHT_SIGMA)))), max_height)
 
     def mutate(self) -> None:
         """Mutates the tree in place.
-        The mutation method is chosen randomly between subtree mutation and point mutation."""
-        mutation_function = random.choices((self._subtree_mutate, self._point_mutate), (0.5, 0.5), k=1)[0]
-        mutation_function()
+        The mutation method is chosen randomly between subtree mutation and point mutation.
+
+        Raises:
+            TreeInvalidError: If the tree exceeds the maximum height after mutation.
+        """
+        for _ in range(100):
+            mutation_function = random.choice(self.mutation_functions)
+            try:
+                mutation_function()
+                break
+            except TreeConstraintException as e:
+                warn(f"Mutation failed in {mutation_function.__name__} ({e.args[0]}); retrying.")
+        else:
+            warn("Mutation failed 100 times; aborting.")
+        if self.root.get_height() > MAXIMUM_HEIGHT:
+            raise TreeInvalidError(f"Fatal error after {mutation_function.__name__}: New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
+        self.creation_method = "Mutation"
 
     def _subtree_mutate(self) -> None:
         """Selects a random subtree in the tree, and randomly regenerates it.
         The height of the new subtree is chosen randomly around the height of the old subtree."""
         old_subtree = self._random_node()
         mean_height = old_subtree.get_height()
-        generate_height = int(round(random.gauss(mean_height, SUBTREE_MUTATE_HEIGHT_SIGMA)))
-        # Don't allow the new subtree to exceed the maximum height
-        generate_height = min(max(1, generate_height), MAXIMUM_HEIGHT - old_subtree.get_depth())
+        generate_height = self._random_height(mean_height, old_subtree.get_depth())
         new_subtree = self.random_subtree(generate_height, old_subtree.output_type)
-        try:
-            self._replace_subtree(old_subtree, new_subtree)
-        except Exception as e:
-            warn(f"Subtree mutation failed; retrying: {e}")
-            self._subtree_mutate()
-            return
-        self.creation_method = "Mutation"
+        self._replace_subtree(old_subtree, new_subtree)
 
     def _point_mutate(self) -> None:
         """Selects a random node in the tree and replaces it with a random node with the same input and output types,
@@ -239,7 +300,59 @@ class GPTree(BaseGenotype):
         node = self._random_node()
         new_node = self.node_type(self.node_type.random_function(node.output_type, child_types=node.input_types), fixed_context=self.fixed_context)
         self._replace_point(node, new_node)
-        self.creation_method = "Mutation"
+
+    def _point_force_mutate(self) -> None:
+        """Selects a random node in the tree and replaces it with a random node with the same output type.
+        The new node will inherit any valid children from the original node in order, discarding any invalid children.
+        New children will be generated for any remaining inputs."""
+        node = self._random_node()
+        node_height = node.get_height()
+        node_depth = node.get_depth()
+        new_node = self.node_type(self.node_type.random_function(node.output_type), fixed_context=self.fixed_context)
+        children_per_type = {input_type: [] for input_type in node.input_types}
+        for child in node.input_nodes:
+            children_per_type[child.output_type].append(child)
+        for input_type in new_node.input_types:
+            if input_type in children_per_type and len(children_per_type[input_type]) > 0:
+                new_node.add_input(children_per_type[input_type].pop(0))
+            else:
+                generate_height = self._random_height(node_height - 1, node_depth + 1)
+                new_node.add_input(self.random_subtree(generate_height, input_type))
+        self._replace_subtree(node, new_node)
+
+    def _insert_mutate(self) -> None:
+        """Selects a random node in the tree and inserts a random valid node in between it and its parent.
+        If the new node has multiple inputs, the selected node will be in a random valid position.
+        All other inputs will be randomly generated based on the height of the selected node."""
+        node = self._random_node()
+        if node.get_height() + node.get_depth() >= MAXIMUM_HEIGHT:
+            raise TreeConstraintException("Tree is too large to expand with insertion.")
+        node_depth = node.get_depth()  # Don't compute this below, as it will change when the node is moved
+        try:
+            new_node = self.node_type(self.node_type.random_function(node.output_type, has_child=node.output_type), fixed_context=self.fixed_context)
+        except ValueError:
+            raise TreeConstraintException(f"Output type {node.output_type} has no valid options for insertion.")
+        self._replace_subtree(node, new_node)
+        valid_child_positions = [index for index, input_type in enumerate(new_node.input_types) if input_type == node.output_type]
+        node_position = random.choice(valid_child_positions)
+        for index, input_type in enumerate(new_node.input_types):
+            if index == node_position:
+                new_node.add_input(node)
+            else:
+                generate_height = self._random_height(node.get_height(), node_depth + 1)  # +1 for the new parent
+                new_node.add_input(self.random_subtree(generate_height, input_type))
+
+    def _delete_mutate(self) -> None:
+        """Selects a random node in the tree and removes it, replacing it with one of its children.
+        Only nodes with children matching their output type can be selected."""
+        node_list = self.get_node_list()
+        valid_nodes = [node for node in node_list if node.output_type in node.input_types]
+        if len(valid_nodes) == 0:
+            raise TreeConstraintException("No valid nodes found for point deletion.")
+        node = random.choice(valid_nodes)
+        valid_children = [child for child in node.input_nodes if child.output_type == node.output_type]
+        promote_child = random.choice(valid_children)
+        self._replace_subtree(node, promote_child)
 
     # Subtree recombination
     def recombine(self, donor: 'GPTree') -> None:
@@ -247,6 +360,9 @@ class GPTree(BaseGenotype):
 
         Args:
             donor: The other parent tree to recombine with.
+
+        Raises:
+            TreeInvalidError: If the tree exceeds the maximum height after mutation.
         """
         # Retry if a node has no valid recombination point.
         for _ in range(100):
@@ -256,7 +372,7 @@ class GPTree(BaseGenotype):
             try:
                 parent_subtree = self._random_node(output_type=donor_subtree.output_type, max_depth=maximum_depth)
                 break
-            except ValueError:
+            except TreeConstraintException:
                 continue
         else:
             warn("Recombination failed to find a valid pair of nodes to recombine. Using mutation instead.")
@@ -264,6 +380,8 @@ class GPTree(BaseGenotype):
             return
 
         self._replace_subtree(parent_subtree, donor_subtree)
+        if self.root.get_height() > MAXIMUM_HEIGHT:
+            raise TreeInvalidError(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
 
         self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"
@@ -317,8 +435,20 @@ class GPTree(BaseGenotype):
 
     # Positive is good, negative is bad
     def get_fitness_modifier(self, raw_fitness):
+        """Returns the parsimony pressure penalty for the tree, scaled by :attr:`parsimony_weight`.
+        Depending on the value of :attr:`scale_parsimony_with_fitness`, the penalty may be proportional to the raw fitness.
+
+        Args:
+            raw_fitness: The value of the objective being modified. Used for proportional modifiers.
+
+        Returns:
+            A penalty value to be added to the fitness.
+        """
         # Fitness modifier is added, so negate to make it a penalty
         penalty = -self.parsimony_weight * len(self)
+        if self.scale_parsimony_with_fitness:
+            # Use the absolute value of the raw fitness to ensure that the penalty is always negative
+            penalty *= abs(raw_fitness)
         return penalty
 
     # Generate a tree given an id list
@@ -334,7 +464,6 @@ class GPTree(BaseGenotype):
         node = self.node_type(primitive_function, literal=literal, fixed_context=self.fixed_context)
         for input_type in node.input_types:
             child = self._generate_from_list(id_list)
-            child.set_parent(node)
             node.add_input(child)
         return node
 
@@ -367,12 +496,11 @@ class GPTree(BaseGenotype):
         node = self.node_type(node_function, fixed_context=self.fixed_context)
         for input_type in node.input_types:
             child = self.generate_grow_soft(height - 1, input_type)
-            child.set_parent(node)
             node.add_input(child)
         return node
 
     def generate_full_soft(self, height, output_type):
-        """Generates a tree using a relaxed version of the Full method, without strictly enforcing the height limit
+        """Generates a tree using a relaxed version of the Full method, without strictly enforcing the desired height
         (computationally expensive for strongly-typed GP).
 
         Args:
@@ -395,7 +523,6 @@ class GPTree(BaseGenotype):
         node = self.node_type(node_function, fixed_context=self.fixed_context)
         for input_type in node.input_types:
             child = self.generate_grow_soft(height - 1, input_type)
-            child.set_parent(node)
             node.add_input(child)
         return node
 
@@ -442,7 +569,6 @@ class GPTree(BaseGenotype):
                 inputs[i % len(node.input_types)] = child
 
             for child in inputs:
-                child.set_parent(node)
                 node.add_input(child)
 
         # Use terminal nodes at the depth limit
@@ -480,7 +606,6 @@ class GPTree(BaseGenotype):
 
         for inputType in node.input_types:
             child = self.generateGrow(height - 1, inputType)
-            child.set_parent(node)
             node.add_input(child)
         return node
 
@@ -492,3 +617,16 @@ class GPTree(BaseGenotype):
 
     def diversity_function(self, population, reference=None, samples=None):
         return edit_diversity(population, reference, samples)
+
+
+class TreeConstraintException(Exception):
+    """Raised when a tree generation function fails to generate a tree following height and type constraints.
+    This exception should only be called before modifications are made to the tree,
+    meaning that the tree is recoverable."""
+    pass
+
+
+class TreeInvalidError(Exception):
+    """Raised when a tree is modified into an invalid state.
+    This indicates a programming error and should not be caught."""
+    pass

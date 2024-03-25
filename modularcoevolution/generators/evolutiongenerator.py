@@ -12,32 +12,22 @@ from modularcoevolution.genotypes.selfadaptivewrapper import SelfAdaptiveWrapper
 from modularcoevolution.utilities.datacollector import DataCollector
 
 
-# TODO: Rename variables
 # Normal genetic programming evolutionary algorithm
 class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
-    def __init__(self, agent_class: Type[AgentType],
-                 population_name: str,
-                 initial_size: int,
-                 children_size: int,
-                 agent_parameters: dict[str, Any] = None,
-                 genotype_parameters: dict[str, Any] = None,
-                 mutation_fraction: float = 0.25,
-                 recombination_fraction: float = 0.75,
-                 diversity_weight: float = 0,
-                 diverse_elites: bool = False,
-                 compute_diversity: bool = False,
-                 seed: Any = None,
-                 data_collector: DataCollector = None,
-                 copy_survivor_objectives: bool = False,
-                 reevaluate_per_generation: bool = True,
-                 using_hall_of_fame: bool = False,
-                 tournament_size: int = 2,
-                 past_population_width: int = 1):
-        super().__init__(agent_class, population_name, initial_size, agent_parameters=agent_parameters,
-                         genotype_parameters=genotype_parameters, seed=seed,
-                         data_collector=data_collector, copy_survivor_objectives=copy_survivor_objectives,
-                         reevaluate_per_generation=reevaluate_per_generation, using_hall_of_fame=using_hall_of_fame,
-                         compute_diversity=compute_diversity, past_population_width=past_population_width)
+    def __init__(
+            self,
+            agent_class: Type[AgentType],
+            population_name: str,
+            initial_size: int,
+            children_size: int,
+            mutation_fraction: float = 0.25,
+            recombination_fraction: float = 0.75,
+            diversity_weight: float = 0,
+            diverse_elites: bool = False,
+            tournament_size: int = 2,
+            **kwargs
+    ):
+        super().__init__(agent_class, population_name, initial_size, **kwargs)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
         self.recombination_fraction = recombination_fraction
@@ -59,6 +49,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         return [sorted_population[i].id for i in indices]
 
     def end_generation(self) -> None:
+        super().end_generation()
         random.shuffle(self.population)  # Python's list.sort maintains existing order between same-valued individuals, which can lead to stagnation in extreme cases such as all zero fitnesses
 
         self.population.sort(key=lambda x: x.fitness, reverse=True)
@@ -66,6 +57,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         self.log_generation()
 
     def next_generation(self):
+        super().next_generation()
         # Population was already sorted in end_generation
         # Re-sort using diversity fitness
         if self.diverse_elites:

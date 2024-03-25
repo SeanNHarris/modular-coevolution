@@ -268,6 +268,7 @@ class CoevolutionDriver:
                     evaluation_pool.terminate()
                 break
         if evaluation_pool is not None:
+            evaluation_pool.terminate()
             evaluation_pool.close()
 
     @staticmethod

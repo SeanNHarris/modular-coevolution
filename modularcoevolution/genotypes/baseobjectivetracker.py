@@ -5,7 +5,7 @@ import math
 
 import numpy
 
-from modularcoevolution.utilities.specialtypes import EvaluationID
+from modularcoevolution.utilities.specialtypes import EvaluationID, GenotypeID
 
 MetricTypes = Union[float, str, list, dict, numpy.ndarray]
 
@@ -34,10 +34,12 @@ class MetricConfiguration(TypedDict):
     """If true, the individual's :meth:`.get_fitness_modifier` result will be added to this metric (e.g. for parsimony pressure)."""
 
 
-class MetricSubmission(TypedDict, MetricConfiguration):
+class MetricSubmission(MetricConfiguration, TypedDict, total=False):
     """A `TypedDict` used to send metrics and objectives, and describe how they should be handled."""
     value: MetricTypes
     """The value to submit for this metric."""
+    opponents: list[GenotypeID]
+    """The genotype IDs of the opponents this metric was evaluated against, if applicable."""
 
 
 class MetricStatistics(TypedDict, total=False):
@@ -56,6 +58,15 @@ class MetricStatistics(TypedDict, total=False):
     """The maximum observed value of this metric."""
 
 
+# TODO: Consider refactoring the objective tracker into a property of a genotype, rather than a superclass.
+# Pros:
+# - This is more natural, and helps in cases where we need to manipulate the objective tracker separate from the genotype.
+# - Some methods currently need to be named to specify that they relate to the tracker specifically.
+# Cons:
+# - This change will affect most of the codebase, and require a lot of effort refactoring.
+# - Accessing objective tracker properties will be slightly more verbose.
+# - We still will want a superclass/interface for BaseGenotype to handle non-genotype objects with a data tracker.
+#   - (This ability is currently unused, but we want it to be available for future use cases such as optimal agents.)
 class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     """
     A base class for anything that needs to track objectives or fitness. Formerly part of :class:`.BaseGenotype`.
@@ -75,6 +86,8 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     """The names of metrics which were submitted as objectives."""
     evaluation_ids: list[EvaluationID]
     """A list of evaluation IDs this individual participated in."""
+    opponent_trackers: dict[GenotypeID, 'BaseObjectiveTracker']
+    """A dictionary tracking metrics specific to each opponent this individual has faced."""
 
     @property
     def objectives(self) -> dict[str, float]:
@@ -100,17 +113,24 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
+        self.reset_objective_tracker()
+
+    def reset_objective_tracker(self):
+        """Reset and clear all metrics and statistics."""
         self.metrics = {}
         self.metric_statistics = {}
         self.metric_histories = {}
         self._objective_names = []
         self.evaluation_ids = []
+        self.opponent_trackers = {}
 
-    def submit_metric(self, submission: MetricSubmission) -> None:
+    def submit_metric(self, submission: MetricSubmission, prevent_recursion: bool = False) -> None:
         """Submit a metric value. This should typically be handled by :class:`.BaseObjectiveGenerator`.
 
         Args:
             submission: A :class:`.MetricSubmission` describing the metric to submit.
+            prevent_recursion: Set to true if this method is being called from a parent :class:`.BaseObjectiveTracker`
+                to prevent infinite recursion.
 
         """
         metric = submission['name']
@@ -183,6 +203,13 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
             if submission['log_history']:
                 self.metric_histories[metric].append(value)
 
+        # Update opponent-specific metrics
+        if not prevent_recursion and 'opponents' in submission:
+            for opponent in submission['opponents']:
+                if opponent not in self.opponent_trackers:
+                    self.opponent_trackers[opponent] = BaseObjectiveTracker()
+                self.opponent_trackers[opponent].submit_metric(submission, prevent_recursion=True)
+
     def set_objectives(self, objectives: dict[str, float]) -> None:
         raise NotImplementedError("This method has been removed. Use submit_metric instead.")
 
@@ -226,3 +253,63 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
 
         """
         self.evaluation_ids.append(evaluation_id)
+
+    def get_opponents(self) -> list[GenotypeID]:
+        """Return a list of genotype IDs of opponents this individual has been evaluated against."""
+        return list(self.opponent_trackers.keys())
+
+    def get_opponent_metrics(self, opponent: GenotypeID) -> dict[str, float]:
+        """Return the metrics of this individual against a specific opponent.
+
+        Args:
+            opponent: The genotype ID of the opponent.
+
+        Returns:
+            A dictionary of metric values, by metric name.
+
+        """
+        if opponent not in self.opponent_trackers:
+            raise KeyError(f"This individual has no evaluations against individual {opponent}.")
+        return self.opponent_trackers[opponent].metrics
+
+
+def compute_shared_objectives(individuals: list[BaseObjectiveTracker], opponent_id: GenotypeID, objective: str = 'fitness', total: float = 1) -> list[float]:
+    """Compute the shared fitness, or the equivalent for another objective,
+    for a group of individuals against a common opponent.
+
+    Shared fitness assigns a "bounty" to an opponent, which is split among individuals that score against it.
+    In this implementation, the bounty is split proportionally to the objective score,
+    scaled so that the worst individual gets a score of zero.
+
+    Args:
+        individuals: A list of individuals to compute shared objective score for.
+        opponent_id: The genotype ID of the opponent.
+        objective: The name of the base objective to compute shared objective score for.
+        total: The total amount of shared objective score to distribute.
+
+    Returns:
+        A list of shared objective scores, one for each individual.
+    """
+    objective_values = []
+    min_value = None
+    for individual in individuals:
+        if objective not in individual.metrics or opponent_id not in individual.opponent_trackers:
+            objective_values.append(math.nan)
+        else:
+            objective_value = individual.get_opponent_metrics(opponent_id)[objective]
+            objective_values.append(objective_value)
+            if min_value is None or objective_value < min_value:
+                min_value = objective_value
+    if min_value is None:
+        min_value = 0
+    for index, value in enumerate(objective_values):
+        if math.isnan(value):
+            objective_values[index] = min_value
+    weights = [value - min_value for value in objective_values]
+    weight_sum = sum(weights)
+    if weight_sum == 0:
+        weight_sum = 1  # Prevent division by zero; this doesn't change the result because all weights are zero
+    scores = [total * weight / weight_sum for weight in weights]
+    return scores
+
+
