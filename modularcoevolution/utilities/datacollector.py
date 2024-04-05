@@ -84,11 +84,21 @@ class DataCollector:
     evaluation_logging: bool
     """If True, evaluation data from :meth:`set_evaluation_data` will be stored in the log.
     Otherwise, it will be discarded. Disable this to save disk space if you don't need evaluation data."""
+    metric_history_logging: bool
+    """If True, metric history data from :class:BaseObjectiveTracker will be stored in the log.
+    Otherwise, it will be discarded. Disable this to save disk space if you don't need evaluation data."""
 
-    def __init__(self, split_generations: bool = True, compress: bool = True, evaluation_logging: bool = True):
+    def __init__(
+            self,
+            split_generations: bool = True,
+            compress: bool = True,
+            evaluation_logging: bool = True,
+            metric_history_logging: bool = True
+    ):
         self.split_generations = split_generations
         self.compress = compress
         self.evaluation_logging = evaluation_logging
+        self.metric_history_logging = metric_history_logging
 
         self.data = {
             "experiment": {
@@ -165,6 +175,8 @@ class DataCollector:
         """
         if population_name not in self.data["individuals"]:
             self.data["individuals"][population_name] = {}
+        if not self.metric_history_logging:
+            metric_histories = {}
         individual_data: IndividualData = {
             "genotype": genotype,
             "evaluation_ids": evaluation_ids,

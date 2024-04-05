@@ -265,7 +265,9 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         if parallel:
             if evaluation_pool is None:
                 evaluation_pool: multiprocessing.Pool = parallelutils.create_pool()
-            result_iterator = evaluation_pool.imap(evaluate, agent_groups)
+            chunks = parallelutils.cores_available() * 8
+            chunksize = max(1, len(agent_groups) // chunks)
+            result_iterator = evaluation_pool.imap(evaluate, agent_groups, chunksize=chunksize)
         else:
             result_iterator = map(evaluate, agent_groups)
 
@@ -336,7 +338,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 statistics_file.write('\n')
 
     @staticmethod
-    def _set_config_value(config: dict, keys: Sequence[str], value: Any) -> None:
+    def set_config_value(config: dict, keys: Sequence[str], value: Any) -> None:
         current_dict = config
         for key in keys[:-1]:
             if key not in current_dict:
