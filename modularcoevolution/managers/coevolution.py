@@ -1,5 +1,6 @@
 import heapq
 import multiprocessing
+from enum import Enum
 
 from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.managers.baseevolutionmanager import EvolutionEndedException
@@ -14,6 +15,16 @@ from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.utilities.datacollector import DataCollector
 from modularcoevolution.generators.basegenerator import BaseGenerator
 
+
+class EvaluationType(Enum):
+    """An enumeration of the types of evaluations that can be performed.
+    Used for :attr:`.Coevolution.evaluation_types`."""
+    OTHER = 0
+    """Evaluations with no defined type."""
+    EVOLUTION = 1
+    """An evaluation that is part of the main evolutionary algorithm."""
+    TOURNAMENT = 2
+    """An evaluation for constructing a master tournament matrix."""
 
 
 class Coevolution:
@@ -31,8 +42,13 @@ class Coevolution:
 
     evaluation_table: dict[EvaluationID, tuple[GenotypeID]]
     """A table of evaluations which have been assigned, mapped to the IDs of the agents in the evaluation."""
+    evaluation_types: dict[EvaluationID, EvaluationType]
+    """The type of evaluation that each evaluation ID represents."""
     remaining_evolution_evaluations: list[EvaluationID]
     """A list of main evolution evaluations which have not yet received results."""
+    completed_evolution_evaluations: set[EvaluationID]
+    """A set of main evolution evaluations which have received results since the last time
+    :attr:`remaining_evolution_evaluations` was updated."""
     evaluation_results: dict[EvaluationID, dict[GenotypeID, dict[str, Any]]]
     """A table of evaluation results, mapped to the evaluation ID and the genotype ID."""
 
@@ -100,7 +116,9 @@ class Coevolution:
 
         self.evaluation_table = {}
         self.evaluation_results = {}
+        self.evaluation_types = {}
         self.remaining_evolution_evaluations = []
+        self.completed_evolution_evaluations = set()
         self.remaining_tournament_evaluations = []
         self.run_tournament = run_tournament
         self.tournament_buffer = []
@@ -179,6 +197,7 @@ class Coevolution:
             evaluation_id = claim_evaluation_id()
             self.evaluation_table[evaluation_id] = group
             self.remaining_evolution_evaluations.append(evaluation_id)
+            self.evaluation_types[evaluation_id] = EvaluationType.EVOLUTION
 
     def build_evaluation_groups_careful(self) -> list[tuple[GenotypeID, ...]]:
         """Builds groups of agents to evaluate together, and returns them as a list of tuples of agent ids.
@@ -258,9 +277,16 @@ class Coevolution:
     def get_remaining_evaluations(self) -> list[EvaluationID]:
         """Gets a list of evaluations that need to be run.
         Used together with :meth:`get_agent_pair` to run evaluations.
+        Completed evaluations are only cleared from :attr:`remaining_evolution_evaluations` when this method is called,
+        as repeatedly modifying the list is too costly.
 
         Returns: A list of evaluation IDs that have not yet been completed.
         """
+        if len(self.completed_evolution_evaluations) > 0:
+            updated_remaining = set(self.remaining_evolution_evaluations) - self.completed_evolution_evaluations
+            self.remaining_evolution_evaluations = list(updated_remaining)
+            self.completed_evolution_evaluations.clear()
+
         remaining_evaluations = self.remaining_evolution_evaluations.copy()
         remaining_evaluations.extend(self.remaining_tournament_evaluations)
         return remaining_evaluations
@@ -326,7 +352,7 @@ class Coevolution:
             #TODO: Refactor how the data collector is written to for evaluations.
             pass
 
-        if evaluation_id in self.remaining_evolution_evaluations:
+        if self.evaluation_types[evaluation_id] == EvaluationType.EVOLUTION:
             agent_ids = self.evaluation_table[evaluation_id]
             for i, agent_id in enumerate(agent_ids):
                 if agent_id not in self.opponents_this_generation:
@@ -345,14 +371,15 @@ class Coevolution:
 
         """
         agent_group = self.evaluation_table[evaluation_id]
-        if evaluation_id in self.remaining_evolution_evaluations:
+        if self.evaluation_types[evaluation_id] == EvaluationType.EVOLUTION:
             for generator, agent_id in zip(self.get_generator_order(), agent_group):
                 opponents = list(agent_group)
                 opponents.remove(agent_id)
                 generator.submit_evaluation(agent_id, evaluation_results[agent_id], opponents)
             self.evaluated_groups[agent_group] = self.evaluated_groups.setdefault(agent_group, 0) + 1
-            self.remaining_evolution_evaluations.remove(evaluation_id)
-        elif evaluation_id in self.remaining_tournament_evaluations:
+            self.completed_evolution_evaluations.add(evaluation_id)
+            # The evaluation is removed from the list of remaining evaluations when get_remaining_evaluations is called.
+        elif self.evaluation_types[evaluation_id] == EvaluationType.TOURNAMENT:
             # TODO: Redesign tournament to work in multiple dimensions
 
             self.remaining_tournament_evaluations.remove(evaluation_id)

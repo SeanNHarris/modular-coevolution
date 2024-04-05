@@ -297,39 +297,36 @@ class GPNode(metaclass=GPNodeTypeRegistry):
     # Generates a table describing how deep it's possible to construct a tree with a given type.
     @classmethod
     def build_depth_table(cls, max_height, forbidden_nodes=None):
-        # It's clearly impossible to go more than this depth without hitting a dead end or loop
-        # max_height = len(cls.DATA_TYPES)
-
         if forbidden_nodes is None:
             forbidden_nodes = []
         type_tables = dict()
         type_depths = dict()
-        for type in cls.DATA_TYPES:
-            type_tables[type] = {1: {type}}
-            type_depths[type] = 1
+        for data_type in cls.DATA_TYPES:
+            type_tables[data_type] = {1: {data_type}}
+            type_depths[data_type] = 1
         # Construct the type tables describing which types can be present at each depth by taking the list of children of possible types at the previous depth
         for depth in range(2, max_height + 1):
-            for type in cls.DATA_TYPES:
+            for data_type in cls.DATA_TYPES:
                 children_types = set()
-                for parent_type in type_tables[type][depth - 1]:
+                for parent_type in type_tables[data_type][depth - 1]:
                     edge_functions = [function for function in cls.functions if
                                       function in cls.type_functions[parent_type] and function not in forbidden_nodes]
                     for function in edge_functions:
                         children_types |= set(cls.get_function_data(function)[2])
-                type_tables[type][depth] = children_types
+                type_tables[data_type][depth] = children_types
         # Construct the depth table, listing the highest depth that can be reached from a type.
         for depth in range(2, max_height + 1):
-            for type in cls.DATA_TYPES:
+            for data_type in cls.DATA_TYPES:
                 # Loops indicate that infinite depth can be reached
-                if type in type_tables[type][depth]:
-                    type_depths[type] = 1000000
+                if data_type in type_tables[data_type][depth]:
+                    type_depths[data_type] = 1000000
                     continue
                 # If anything can be reached at the current depth, then that depth can be reached
-                if len(type_tables[type][depth]) > 0:
-                    type_depths[type] = max(type_depths[type], depth)
+                if len(type_tables[data_type][depth]) > 0:
+                    type_depths[data_type] = max(type_depths[data_type], depth)
                 # If a type can be reached is known to have an even higher max depth (usually due to a loop) then that higher depth can be reached
-                for childType in type_tables[type][depth]:
-                    type_depths[type] = max(type_depths[type], type_depths[childType])
+                for childType in type_tables[data_type][depth]:
+                    type_depths[data_type] = max(type_depths[data_type], type_depths[childType])
         return type_depths
 
     @classmethod

@@ -308,7 +308,11 @@ class GPTree(BaseGenotype):
         node = self._random_node()
         node_height = node.get_height()
         node_depth = node.get_depth()
-        new_node = self.node_type(self.node_type.random_function(node.output_type), fixed_context=self.fixed_context)
+        if node_depth >= MAXIMUM_HEIGHT - 1:
+            # Generating a non-terminal node at the maximum depth would exceed the maximum height
+            new_node = self.node_type(self.node_type.random_function(node.output_type, terminal=True), fixed_context=self.fixed_context)
+        else:
+            new_node = self.node_type(self.node_type.random_function(node.output_type), fixed_context=self.fixed_context)
         children_per_type = {input_type: [] for input_type in node.input_types}
         for child in node.input_nodes:
             children_per_type[child.output_type].append(child)

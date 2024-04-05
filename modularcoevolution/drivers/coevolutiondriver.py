@@ -61,12 +61,6 @@ class CoevolutionDriver:
 
     use_data_collector: bool
     """Whether to use a data collector to store results. This will result in a lot of logged data."""
-    data_collector_split_generations: bool
-    """If True, each generation will be stored in a separate file. See :attr:`.DataCollector.split_generations`."""
-    data_collector_compress: bool
-    """If True, the data collector will compress the saved files with gzip. See :attr:`.DataCollector.compress`."""
-    data_collector_evaluation_logging: bool
-    """If True, the data collector will log the results of each evaluation. See :attr:`.DataCollector.evaluation_logging`."""
 
     parameters: list[dict]
     """For each run to be performed, the parameters for that run."""
@@ -77,9 +71,6 @@ class CoevolutionDriver:
                  run_amount: int = 30,
                  parallel: bool = True,
                  use_data_collector: bool = True,
-                 data_collector_split_generations: bool = True,
-                 data_collector_compress: bool = True,
-                 data_collector_evaluation_logging: bool = True,
                  run_exhibition: bool = True,
                  exhibition_rate: int = 1,
                  merge_parameters: dict = None):
@@ -91,9 +82,6 @@ class CoevolutionDriver:
             run_amount: The number of runs to perform.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
             use_data_collector: Whether to use a data collector to store results. This will result in a lot of logged data.
-            data_collector_split_generations: If True, each generation will be stored in a separate file. See :attr:`.DataCollector.split_generations`.
-            data_collector_compress: If True, the data collector will compress the saved files with gzip. See :attr:`.DataCollector.compress`.
-            data_collector_evaluation_logging: If True, the data collector will log the results of each evaluation. See :attr:`.DataCollector.evaluation_logging`.
             run_exhibition: Whether to run and log exhibition evaluations between the best individuals of each generation.
             exhibition_rate: The rate at which to run exhibition evaluations, e.g. every 5 generations.
             merge_parameters: A dictionary of parameters to merge into the configuration file.
@@ -104,9 +92,6 @@ class CoevolutionDriver:
         
         self.parallel = parallel
         self.use_data_collector = use_data_collector
-        self.data_collector_split_generations = data_collector_split_generations
-        self.data_collector_compress = data_collector_compress
-        self.data_collector_evaluation_logging = data_collector_evaluation_logging
         if not self.use_data_collector:
             # TODO: Support disabling the data collector again
             raise Warning("Disabling the data collector is not currently supported.")
@@ -175,9 +160,13 @@ class CoevolutionDriver:
             * Store random seeds, propagate to threads.
         """
         log_subfolder = run_parameters['log_subfolder']
+        if 'logging' in run_parameters:
+            logging_parameters = run_parameters['logging']
+        else:
+            logging_parameters = {}
 
         if self.use_data_collector:
-            data_collector = DataCollector(self.data_collector_split_generations, self.data_collector_compress, self.data_collector_evaluation_logging)
+            data_collector = DataCollector(**logging_parameters)
         else:
             data_collector = None
 
@@ -248,7 +237,7 @@ class CoevolutionDriver:
                         coevolution_manager.submit_evaluation(evaluation, results_per_agent)
 
                 coevolution_manager.next_generation()
-                if self.use_data_collector and self.data_collector_split_generations:
+                if self.use_data_collector and data_collector.split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
@@ -258,7 +247,7 @@ class CoevolutionDriver:
                 print("Run complete.")
                 if self.run_exhibition:
                     experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
-                if self.use_data_collector and not self.data_collector_split_generations:
+                if self.use_data_collector and not data_collector.split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 break
@@ -285,9 +274,6 @@ class CoevolutionDriver:
         parser.add_argument('-r', '--runs', dest='run_amount', type=int, default=30)
         parser.add_argument('-np', '--no-parallel', dest='parallel', action='store_false')
         parser.add_argument('-nd', '--no-data-collector', dest='use_data_collector', action='store_false')
-        parser.add_argument('--no-split-generations', dest='data_collector_split_generations', action='store_false')
-        parser.add_argument('--no-compress', dest='data_collector_compress', action='store_false')
-        parser.add_argument('--no-evaluation-logs', dest='data_collector_evaluation_logging', action='store_false')
         parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false')
         parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1)
         return parser

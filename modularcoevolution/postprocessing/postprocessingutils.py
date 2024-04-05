@@ -2,6 +2,7 @@ import functools
 import itertools
 import json
 import re
+import warnings
 from functools import partial
 from typing import Type, Sequence
 
@@ -47,8 +48,8 @@ def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseEx
         config = json.load(config_file)
 
     if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
-        raise ValueError(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
-                         f'match specified experiment_type ({experiment_type.__name__})')
+        warnings.warn(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
+                      f'match specified experiment_type ({experiment_type.__name__})')
 
     experiment = experiment_type(config)
     return experiment
@@ -263,7 +264,8 @@ def round_robin_evaluation(
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]
-            generator.submit_evaluation(agent.genotype.id, result[player_index])
+            opponents = [opponent.genotype.id for opponent in agents if opponent != agent]
+            generator.submit_evaluation(agent.genotype.id, result[player_index], opponents)
 
 
 def round_robin_homogenous_evaluation(
@@ -303,7 +305,8 @@ def round_robin_homogenous_evaluation(
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]
-            generator.submit_evaluation(agent.genotype.id, result[player_index])
+            opponents = [opponent.genotype.id for opponent in agents if opponent != agent]
+            generator.submit_evaluation(agent.genotype.id, result[player_index], opponents)
 
 
 def round_robin_team_evaluation(
@@ -342,7 +345,8 @@ def round_robin_team_evaluation(
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]
-            generator.submit_evaluation(agent.genotype.id, result[player_index])
+            opponents = [opponent.genotype.id for opponent in agents if opponent != agent]
+            generator.submit_evaluation(agent.genotype.id, result[player_index], opponents)
 
 
 def compare_populations(populations: dict[str, ArchiveGenerator], experiment_definition: BaseExperiment) -> list[float]:
