@@ -164,17 +164,24 @@ class GPNode(metaclass=GPNodeTypeRegistry):
 
         return node_list
 
-    def tree_string(self, max_height, depth) -> str:
+    def tree_string(self):
+        max_height = self.get_height()
+        depth = 0
+        return '\n'.join(self._build_tree_string(max_height, depth))
+
+    def _build_tree_string(self, max_height: int, depth: int, substring_list: list[str] = None) -> list[str]:
+        if substring_list is None:
+            substring_list = []
         string = ''
         for _ in range(depth):
             string += '|\t'
 
         string += str(self)
-        string += '\n'
+        substring_list.append(string)
         for input_node in self.input_nodes:
-            string += input_node.tree_string(max_height, depth + 1)
+            input_node._build_tree_string(max_height, depth + 1, substring_list)
 
-        return string
+        return substring_list
 
     def traverse_post_order(self) -> Generator['GPNode', None, None]:
         for child in self.input_nodes:

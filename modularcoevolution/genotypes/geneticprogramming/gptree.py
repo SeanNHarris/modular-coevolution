@@ -431,8 +431,8 @@ class GPTree(BaseGenotype):
         return id_list
 
     def __str__(self):
-        tree_string = self.root.tree_string(self.root.get_height(), 0)
-        return tree_string + "ID List: " + str(self.get_node_id_list()) + "\n"
+        tree_string = self.root.tree_string()
+        return tree_string + f"\nID List: {self.get_node_id_list()}"
 
     def __len__(self):
         return len(self.get_node_id_list())
