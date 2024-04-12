@@ -146,8 +146,12 @@ class CoevolutionDriver:
 
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
-        for parameter_set in self.parameters:
-            self._run_experiment(parameter_set)
+        try:
+            for parameter_set in self.parameters:
+                self._run_experiment(parameter_set)
+        except KeyboardInterrupt:
+            print("Keyboard interrupt received. Ending all runs.")
+            raise KeyboardInterrupt
 
 
     def _run_experiment(self, run_parameters: AugmentedParameterSchema) -> None:
@@ -251,11 +255,10 @@ class CoevolutionDriver:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 break
-            except KeyboardInterrupt:
-                print("Keyboard interrupt received. Ending run.")
+            except KeyboardInterrupt as error:
                 if evaluation_pool is not None:
                     evaluation_pool.terminate()
-                break
+                raise error
         if evaluation_pool is not None:
             evaluation_pool.terminate()
             evaluation_pool.close()
