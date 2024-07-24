@@ -7,6 +7,7 @@ import statistics
 
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, compute_shared_objectives
 from modularcoevolution.generators.basegenerator import BaseGenerator
+from modularcoevolution.utilities.dictutils import deep_update_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
 
 from typing import Any, Type, TypeVar
@@ -176,7 +177,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             default_parameters.update(self.genotype_parameters)
             if self.seed is not None and i < len(self.seed):
                 parameters = default_parameters.copy()
-                parameters.update(self.seed[i])
+                deep_update_dictionary(parameters, self.seed[i])
                 individual = self.genotype_class(parameters)
                 self.population.append(individual)
                 population_set.add(hash(individual))

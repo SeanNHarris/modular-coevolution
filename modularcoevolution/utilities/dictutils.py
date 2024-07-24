@@ -1,3 +1,6 @@
+from typing import Sequence, Any
+
+
 def deep_copy_dictionary(dictionary: dict) -> dict:
     """
     Create a deep copy of a dictionary. Unlike `copy.deepcopy`,
@@ -34,3 +37,19 @@ def deep_update_dictionary(dictionary: dict, update: dict) -> None:
             deep_update_dictionary(dictionary[key], value)
         else:
             dictionary[key] = value
+
+
+def set_config_value(config: dict, keys: Sequence[str], value: Any) -> None:
+    """
+    Set a value in a nested dictionary using a list of keys. If a sub-dictionary does not exist, it will be created.
+    Args:
+        config: The dictionary to modify.
+        keys: A sequence of keys to traverse the nested dictionary.
+        value: The value to set at the final key.
+    """
+    current_dict = config
+    for key in keys[:-1]:
+        if key not in current_dict:
+            current_dict[key] = {}
+        current_dict = current_dict[key]
+    current_dict[keys[-1]] = value

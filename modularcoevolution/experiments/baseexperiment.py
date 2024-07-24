@@ -11,8 +11,9 @@ from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguratio
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
 from modularcoevolution.generators.randomgenotypegenerator import RandomGenotypeGenerator
+from modularcoevolution.managers.coevolution import Coevolution
 from modularcoevolution.utilities import parallelutils
-from modularcoevolution.utilities.dictutils import deep_copy_dictionary
+from modularcoevolution.utilities.dictutils import deep_copy_dictionary, deep_update_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
 
@@ -32,6 +33,9 @@ class EvaluateProtocol(Protocol):
         Returns:
             A list giving each agent a dictionary of results, e.g.
             `[{'score': 0.7, 'cost': 0.3}, {'score': 0.3, 'cost': 0.5}]`
+            The nth entry in this list should contain everything needed to compute the nth agent's metrics.
+            (This may result in duplicate values between agents).
+            Optionally, an additional dictionary can be returned containing metrics for logging or visualization.
         """
         ...
 
@@ -95,6 +99,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
+    def population_generator_types(self) -> Sequence[type]:
+        """Return a list containing the generator type of each population.
+        Used for the default implementation of :meth:`_create_generators`.
+        """
+
+    @abc.abstractmethod
     def _build_metrics(self) -> Sequence['PopulationMetrics']:
         """Create a :class:`.PopulationMetrics` object for each population to define the metrics for this experiment,
         and register any metrics that should be tracked using :meth:`.PopulationMetrics.register_metric`.
@@ -105,18 +115,45 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         """
         pass
 
-    @abc.abstractmethod
     def _create_generators(self) -> Sequence[BaseGenerator]:
         """Create the generators for each population in the experiment.
+
+        The default implementation takes parameters from:
+        `config['populations'][(population name)]['generator']`,
+        `config['populations'][(population name)]['genotype']`, and
+        `config['populations'][(population name)]['agent']`
 
         Returns:
             A list containing a :class:`.BaseGenerator` object for each population in order.
         """
-        pass
+        population_names = self.population_names()
+        agent_types = self.population_agent_types()
+        generator_types = self.population_generator_types()
+        generators = []
+        for index, population_name in enumerate(population_names):
+            population_config = self.config['populations'][population_name]
+            generator_parameters: dict = population_config['generator']
+            genotype_parameters: dict = population_config['genotype']
+            agent_parameters: dict = population_config['agent']
 
-    @abc.abstractmethod
+            generator_type = generator_types[index]
+            agent_type = agent_types[index]
+
+            generator = generator_type(
+                agent_type,
+                population_name,
+                genotype_parameters=genotype_parameters,
+                agent_parameters=agent_parameters,
+                **generator_parameters
+            )
+            generators.append(generator)
+        return generators
+
     def _create_manager(self, generators: Sequence[BaseGenerator]) -> BaseEvolutionManager:
         """Create the evolution/coevolution manager for the experiment.
+
+        The default implementation uses the :class:`.Coevolution` manager, taking parameters from
+        `config['manager']`
 
         Args:
             generators: A list of generators corresponding to each population in the experiment.
@@ -124,7 +161,9 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         Returns:
             A :class:`.BaseEvolutionManager` object built with the provided `generators`.
         """
-        pass
+
+        manager_parameters = self.config['manager']
+        return Coevolution(generators, self.player_populations(), **manager_parameters)
 
     def _apply_config_defaults(self, config: dict[str, Any]):
         """Update the config for each population with any missing default values.
@@ -151,7 +190,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                     if sub_config not in population_config:
                         population_config[sub_config] = {}
                     if sub_config in override_config:
-                        population_config[sub_config].update(override_config[sub_config])
+                        deep_update_dictionary(population_config[sub_config], override_config[sub_config])
             updated_config['populations'][population] = population_config
         return updated_config
 
@@ -245,15 +284,13 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             generators.append(generator)
         return generators
 
-    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, evaluation_pool: multiprocessing.Pool = None, **kwargs) -> list[Sequence[dict[str, Any]]]:
+    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, **kwargs) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
         Args:
             agent_groups: A list of agent groups to evaluate.
             parallel: Whether to evaluate the agents using a multiprocessing pool.
-            evaluation_pool: The multiprocessing pool to use for evaluation if ``parallel`` is True.
-                If None, a new pool will be created.
             kwargs: Additional keyword arguments to pass to the evaluation function.
 
         Returns:
@@ -263,8 +300,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         evaluate = self.get_evaluate(**kwargs)
 
         if parallel:
-            if evaluation_pool is None:
-                evaluation_pool: multiprocessing.Pool = parallelutils.create_pool()
+            evaluation_pool: multiprocessing.Pool = parallelutils.create_pool()
             chunks = parallelutils.cores_available() * 8
             chunksize = max(1, len(agent_groups) // chunks)
             result_iterator = evaluation_pool.imap(evaluate, agent_groups, chunksize=chunksize)
@@ -278,11 +314,15 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             results = []
             for result in result_iterator:
                 results.append(result)
+            if parallel:
+                evaluation_pool.close()
+                evaluation_pool.join()
             return results
         except KeyboardInterrupt as interrupt:
             # If the user stops execution during evaluations, terminate the pool to kill any remaining processes.
             if parallel:
                 evaluation_pool.terminate()
+                evaluation_pool.join()
             raise interrupt
 
 
@@ -292,8 +332,8 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             amount: int,
             log_path: str,
             generation: int = -1,
-            parallel: bool = False,
-            evaluation_pool: multiprocessing.Pool = None) -> None:
+            parallel: bool = False
+    ) -> None:
         """Run exhibition evaluations between the best individuals of the current generation.
 
         Args:
@@ -308,20 +348,20 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         population_agents = [[population.build_agent_from_id(agent_id, True) for agent_id in agent_ids[population_index]] for population_index, population in enumerate(populations)]
         agents = [population_agents[population_index] for population_index in self.player_populations()]
         agent_names = [populations[population_index].population_name for population_index in self.player_populations()]
-        self._run_exhibition_games(agents, agent_names, log_path, parallel, evaluation_pool)
+        self._run_exhibition_games(agents, agent_names, log_path, parallel)
 
     def _run_exhibition_games(
             self,
             agents: Sequence[Sequence[BaseAgent]],
             agent_names: Sequence[str],
             log_path: str,
-            parallel: bool = False,
-            evaluation_pool: multiprocessing.Pool = None) -> None:
+            parallel: bool = False
+    ) -> None:
 
         agent_groups = list(itertools.product(*agents))
         agent_numbers = [range(len(agents[i])) for i in range(len(agents))]
         agent_group_numbers = list(itertools.product(*agent_numbers))
-        results = self.evaluate_all(agent_groups, parallel=False, exhibition=True, evaluation_pool=evaluation_pool)
+        results = self.evaluate_all(agent_groups, parallel=False, exhibition=True)
         for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
             self._process_exhibition_results(agent_group, agent_numbers, agent_names, result, log_path)
 

@@ -17,7 +17,7 @@ import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
-from modularcoevolution.utilities.dictutils import deep_copy_dictionary
+from modularcoevolution.utilities.dictutils import deep_copy_dictionary, set_config_value
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
@@ -69,6 +69,7 @@ class CoevolutionDriver:
                  experiment_type: type[BaseExperiment],
                  config_filename: str,
                  run_amount: int = 30,
+                 run_start: int = 0,
                  parallel: bool = True,
                  use_data_collector: bool = True,
                  run_exhibition: bool = True,
@@ -80,6 +81,8 @@ class CoevolutionDriver:
             experiment_type: The :class:`.BaseExperiment` class defining the current experiment.
             config_filename: The filename of the configuration file to use.
             run_amount: The number of runs to perform.
+            run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
+                Used for resuming experiments.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
             use_data_collector: Whether to use a data collector to store results. This will result in a lot of logged data.
             run_exhibition: Whether to run and log exhibition evaluations between the best individuals of each generation.
@@ -100,23 +103,24 @@ class CoevolutionDriver:
 
         if merge_parameters is None:
             merge_parameters = {}
-        self.parameters = self._parse_config(config_filename, run_amount, merge_parameters)
+        self.parameters = self._parse_config(config_filename, run_amount, run_start, merge_parameters)
 
         if self.parallel:
             # TODO: Behave differently on Windows and Linux, as this only works on linux
             # TODO: Run this from a static function with a check, because it maybe breaks if you run it more than once (double-check first)
             # Allows data to be shared in global variables across processes with copy-on-write memory if you don't touch it
             try:
-                multiprocessing.set_start_method('fork')
+                multiprocessing.set_start_method('forkserver')
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
 
-    def _parse_config(self, config_filename: str, run_count: int, merge_parameters: dict) -> list[dict[str, Any]]:
+    def _parse_config(self, config_filename: str, run_count: int, run_start: int, merge_parameters: dict) -> list[dict[str, Any]]:
         """Parse a configuration file and return a dictionary of parameters for each run.
 
         Args:
             config_filename: The filename of the configuration file to parse.
-            run_count: The number of runs to perform.
+            run_count: The total number of runs to perform, including runs skipped by the ``run_start`` argument.
+            run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
             merge_parameters: A dictionary of parameters to merge into the configuration file's parameters.
 
         Returns:
@@ -130,7 +134,7 @@ class CoevolutionDriver:
         base_parameters['experiment']['experiment_type'] = self.experiment_type.__name__
 
         parameters = []
-        for i in range(run_count):
+        for i in range(run_start, run_count):
             run_parameters = deep_copy_dictionary(base_parameters)
             run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
             for parameter_name, parameter in merge_parameters.items():
@@ -175,8 +179,8 @@ class CoevolutionDriver:
             data_collector = None
 
         config = deep_copy_dictionary(run_parameters)
-        config['manager']['data_collector'] = data_collector
-        config['default']['generator']['data_collector'] = data_collector
+        set_config_value(config, ('manager', 'data_collector'), data_collector)
+        set_config_value(config, ('default', 'generator', 'data_collector'), data_collector)
         experiment = self.experiment_type(config)
         coevolution_manager: Coevolution = experiment.create_experiment()
         world_kwargs = {}  # TODO: Determine if this is still needed.
@@ -210,19 +214,8 @@ class CoevolutionDriver:
             parameter_file.truncate(0)
             json.dump(run_parameters, parameter_file)
 
-        if self.parallel:
-            if 'SLURM_JOB_CPUS_PER_NODE' in os.environ:
-                num_processes = int(os.environ["SLURM_JOB_CPUS_PER_NODE"])
-            else:
-                print("Not a Slurm job, using all CPU cores.")
-                num_processes = multiprocessing.cpu_count()
-            print(f"Running with {num_processes} processes.")
-            evaluation_pool = multiprocessing.Pool(num_processes)
-        else:
-            evaluation_pool = None
-
         # Do a test evaluation to visualize what the scenario looks like
-        experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=self.parallel, evaluation_pool=evaluation_pool)
+        experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=self.parallel)
 
         while True:
             try:
@@ -230,7 +223,7 @@ class CoevolutionDriver:
                     evaluations = coevolution_manager.get_remaining_evaluations()
                     agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
 
-                    end_states = experiment.evaluate_all(agent_groups, parallel=self.parallel, evaluation_pool=evaluation_pool)
+                    end_states = experiment.evaluate_all(agent_groups, parallel=self.parallel)
 
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]
@@ -245,23 +238,18 @@ class CoevolutionDriver:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
-                    experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=self.parallel)
 
             except EvolutionEndedException:
                 print("Run complete.")
                 if self.run_exhibition:
-                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel, evaluation_pool=evaluation_pool)
+                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel)
                 if self.use_data_collector and not data_collector.split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 break
             except KeyboardInterrupt as error:
-                if evaluation_pool is not None:
-                    evaluation_pool.terminate()
                 raise error
-        if evaluation_pool is not None:
-            evaluation_pool.terminate()
-            evaluation_pool.close()
 
     @staticmethod
     def create_argument_parser() -> argparse.ArgumentParser:
@@ -274,9 +262,16 @@ class CoevolutionDriver:
         """
         parser = argparse.ArgumentParser()
         parser.add_argument('config_filename')
-        parser.add_argument('-r', '--runs', dest='run_amount', type=int, default=30)
-        parser.add_argument('-np', '--no-parallel', dest='parallel', action='store_false')
-        parser.add_argument('-nd', '--no-data-collector', dest='use_data_collector', action='store_false')
-        parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false')
-        parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1)
+        parser.add_argument('-r', '--runs', dest='run_amount', type=int, default=10,
+                            help='The number of runs to perform.')
+        parser.add_argument('--run-start', dest='run_start', type=int, default=0,
+                            help='The run number to start at. Runs will end at the number specified by the --runs argument. Used for resuming experiments.')
+        parser.add_argument('-np', '--no-parallel', dest='parallel', action='store_false',
+                            help='Disable parallel evaluations.')
+        parser.add_argument('-nd', '--no-data-collector', dest='use_data_collector', action='store_false',
+                            help='Disable the data collector.')
+        parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false',
+                            help='Disable exhibition evaluations.')
+        parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1,
+                            help='The rate at which to run exhibition evaluations, e.g. every 5 generations.')
         return parser
