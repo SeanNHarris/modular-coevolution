@@ -134,7 +134,7 @@ class GPTree(BaseGenotype):
             self.scale_parsimony_with_fitness = False
 
         if "forbidden_nodes" in parameters:
-            self.forbidden_nodes = parameters["forbidden_nodes"]
+            self.forbidden_nodes = tuple(parameters["forbidden_nodes"])
         else:
             self.forbidden_nodes = tuple()
 
@@ -385,7 +385,9 @@ class GPTree(BaseGenotype):
 
         self._replace_subtree(parent_subtree, donor_subtree)
         if self.root.get_height() > MAXIMUM_HEIGHT:
-            raise TreeInvalidError(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
+            raise TreeInvalidError(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}."
+                                   f"Parent:\n{parent_subtree}\nHeight: {parent_subtree.get_height()}, Depth: {parent_subtree.get_depth()}"
+                                   f"Donor:\n{donor_subtree}\nHeight: {donor_subtree.get_height()}, Depth: {donor_subtree.get_depth()}")
 
         self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"

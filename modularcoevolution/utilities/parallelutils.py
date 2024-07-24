@@ -17,6 +17,6 @@ def create_pool() -> multiprocessing.Pool:
     Will automatically detect if the code is being run through Slurm on an HPC cluster node.
     """
     num_processes = cores_available()
-    print(f'Running with {num_processes} processes.')
+    print(f'Creating pool with {num_processes} processes.')
     pool = multiprocessing.Pool(num_processes)
     return pool

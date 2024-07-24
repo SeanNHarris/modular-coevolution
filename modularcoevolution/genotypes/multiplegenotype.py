@@ -23,7 +23,10 @@ class MultipleGenotype(BaseGenotype, Generic[MemberType]):
             self.members = dict()
             for name in parameters['subgenotypes']:
                 genotype = parameters['subgenotypes'][name]
-                subparameters = parameters['subparameters'][name]
+                subparameters = {}
+                if 'default' in parameters:
+                    subparameters.update(parameters['default'])
+                subparameters.update(parameters['subparameters'][name])
                 self.members[name] = genotype(subparameters)
         elif 'subgenotypes' in parameters or 'subparameters' in parameters:
             raise TypeError('Must have both \'subgenotypes\' and \'subparameters\'.')

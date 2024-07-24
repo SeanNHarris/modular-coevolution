@@ -17,9 +17,30 @@ LiteralFunction = Callable[[dict[str, Any]], Any]
 FunctionEntry = tuple[NodeFunction | LiteralFunction, NodeType, tuple[NodeType, ...]]
 
 
-class GPNode(metaclass=GPNodeTypeRegistry):
+class GPNodeType(GPNodeTypeRegistry):
+    """Metaclass for GPNode classes which ensures that class members are copies, not references,
+    of the superclass members.
+
+    Needed when two GPNode subclasses are sharing primitives from a superclass."""
+    def __init__(cls: type['GPNode'], name, bases, namespace):
+        super().__init__(name, bases, namespace)
+        cls.functions = {}
+        cls.literals = set()
+        for parent in bases:
+            cls.functions.update(parent.functions)
+            cls.literals.update(parent.literals)
+
+        # Leave these uninitialized until all the primitives function decorators have been applied.
+        type_functions: dict[NodeType, list[str]] = None
+        terminal_list: list[str] = None
+        non_terminal_list: list[str] = None
+        branch_list: list[str] = None
+        semiterminal_table: dict[str, set[int]] = None
+
+
+class GPNode(metaclass=GPNodeType):
     functions: dict[str, FunctionEntry] = {}
-    literals: list[str] = []
+    literals: set[str] = []
 
     type_functions: dict[NodeType, list[str]] = None
     terminal_list: list[str] = None
@@ -427,6 +448,6 @@ class GPNode(metaclass=GPNodeTypeRegistry):
             if function_id in cls.functions:
                 raise ValueError(f"GPNode ID conflict: a function with name {function_id} was already registered!")
             cls.functions[function_id] = (function, output_type, ())
-            cls.literals.append(function_id)
+            cls.literals.add(function_id)
             return function
         return internal_decorator
