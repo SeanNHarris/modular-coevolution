@@ -3,6 +3,7 @@ Todo:
     * Figure out a more general way to implement a hall of fame.
 
 """
+import math
 import statistics
 
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, compute_shared_objectives
@@ -384,7 +385,6 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             sample.append(best_individual)
         return [individual.id for individual in sample]
 
-
     def register_metric(self, metric_configuration: MetricConfiguration, metric_function: callable) -> None:
         """Register a metric with this generator.
 
@@ -433,30 +433,14 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
         This method should be called during :meth:`end_generation`."""
         if self.data_collector is not None:
-            # Diversity measured from the best individual
-            if self.compute_diversity:
-                diversity = self.population[0].metrics["novelty"]
-            else:
-                diversity = self.get_diversity(self.population[0].id, min(100, len(self.population)))
             population_IDs = [individual.id for individual in self.population]
             metric_statistics = dict()
             for metric, configuration in self.metric_configurations.items():
                 sample_metric = self.population[0].metrics[metric]
                 if isinstance(sample_metric, (int, float)):
                     population_metrics = [individual.metrics[metric] for individual in self.population]
-                    metric_mean = statistics.mean(population_metrics)
-                    metric_standard_deviation = statistics.stdev(population_metrics)
-                    metric_minimum = min(population_metrics)
-                    metric_maximum = max(population_metrics)
-                    metric_statistics[metric] = {
-                        "mean": metric_mean,
-                        "standard deviation": metric_standard_deviation,
-                        "minimum": metric_minimum,
-                        "maximum": metric_maximum
-                    }
-            population_metrics = {
-                "diversity": diversity,
-            }
+                    metric_statistics[metric] = self.get_metric_statistics(metric, configuration, population_metrics)
+            population_metrics = self.get_population_metrics()
             self.data_collector.set_generation_data(
                 self.population_name,
                 self.generation,
@@ -478,14 +462,45 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 individual.creation_method,
             )
 
-        print("Best individual of this generation: (fitness score of " + str(self.population[0].fitness) + ")")
+        objective_string = ", ".join([f"{objective}: {self.population[0].objectives[objective]}" for objective in self.population[0].objectives])
+        print(f"Best individual of this generation: ({objective_string})")
         print(self.population[0])
 
         list_amount = min(self.population_size, 100)
-        print(str([individual.fitness for individual in self.population[:list_amount]]))
+        for objective in self.population[0].objectives:
+            print(f"{objective}: {str([individual.objectives[objective] for individual in self.population[:list_amount]])}")
 
-    def update_hall_of_fame(self) -> None:
-        pass
+    def get_population_metrics(self) -> dict[str, Any]:
+        # Diversity measured from the best individual
+        if self.compute_diversity:
+            diversity = self.population[0].metrics["novelty"]
+        else:
+            diversity = self.get_diversity(self.population[0].id, min(100, len(self.population)))
+
+        return {
+            "diversity": diversity,
+        }
+
+    def get_metric_statistics(
+            self,
+            metric: str,
+            configuration: MetricConfiguration,
+            population_metrics: list
+    ) -> dict[str, Any]:
+        finite_metrics = [value for value in population_metrics if math.isfinite(value)]
+        metric_mean = statistics.mean(population_metrics)
+        if len(finite_metrics) >= 2:
+            metric_standard_deviation = statistics.stdev(finite_metrics)
+        else:
+            metric_standard_deviation = 0
+        metric_minimum = min(population_metrics)
+        metric_maximum = max(population_metrics)
+        return {
+            "mean": metric_mean,
+            "standard_deviation": metric_standard_deviation,
+            "minimum": metric_minimum,
+            "maximum": metric_maximum
+        }
 
     def _register_novelty_metric(self) -> None:
         """Automatically register a diversity metric called ``"novelty"``."""
