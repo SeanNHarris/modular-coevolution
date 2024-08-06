@@ -85,6 +85,3 @@ class MultipleGenotype(BaseGenotype, Generic[MemberType]):
 
     def __hash__(self) -> int:
         return hash(tuple(self.members.values()))
-    
-    def __getitem__(self, item: Union[int, str]) -> MemberType:
-        return self.members[item]
