@@ -1,24 +1,35 @@
-# uncompyle6 version 2.13.2
-# Python bytecode 3.5 (3350)
-# Decompiled from: Python 3.5.2 (v3.5.2:4def2a2901a5, Jun 25 2016, 22:18:55) [MSC v.1900 64 bit (AMD64)]
-# Embedded file name: S:\My Documents\ceads\ceads\CEADS-LIN\geneticprogramming\GPNodes.py
-# Compiled at: 2017-03-21 14:16:04
-# Size of source mod 2**32: 7822 bytes
+from abc import abstractmethod
 from functools import cache
-from typing import Callable, Any, Union, Optional, Generator, Sequence
+from typing import Callable, Any, Union, Optional, Generator, Sequence, Protocol, TypeVar
 
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
 
 import random
 
-NodeType = int
+NodeType = Any
 NodeFunction = Callable[[list[Any], dict[str, Any]], Any]
 LiteralFunction = Callable[[dict[str, Any]], Any]
 FunctionEntry = tuple[NodeFunction | LiteralFunction, NodeType, tuple[NodeType, ...]]
+T = TypeVar('T')
+
+
+class GPPrimitiveProtocol(Protocol):
+    def __call__(self, input_nodes: list['GPNode'], context: dict[str, Any]) -> Any:
+        ...
+
+
+class GPLiteralProtocol(Protocol):
+    def __call__(self, fixed_context: dict[str, Any]) -> Any:
+        ...
+
+
+class GPLiteralMutatorProtocol(Protocol):
+    def __call__(self, value: T, fixed_context: dict[str, Any]) -> T:
+        ...
 
 
 class GPNodeType(GPNodeTypeRegistry):
-    """Metaclass for GPNode classes which ensures that class members are copies, not references,
+    """Metaclass for GPNode classes which ensures that subclass members are copies, not references,
     of the superclass members.
 
     Needed when two GPNode subclasses are sharing primitives from a superclass."""
@@ -40,15 +51,46 @@ class GPNodeType(GPNodeTypeRegistry):
 
 class GPNode(metaclass=GPNodeType):
     functions: dict[str, FunctionEntry] = {}
+    """A dictionary of functions usable as primitives and their properties.
+    This dictionary is keyed by the function id,
+    and stores a tuple of the function, the output type, and the input types.
+    Populated by the :meth:`gp_primitive` and :meth:`gp_literal` decorators."""
     literals: set[str] = []
+    """A set denoting which primitives are literal nodes.
+    Literal nodes store a constant value rather than a function.
+    The function associated with a literal node is used to
+    randomly generate the literal value when the node is created.
+    Populated by the :meth:`gp_literal` decorator."""
+
+    literal_mutators: dict[NodeType, 'GPLiteralMutatorProtocol'] = {}
+    """If the GP tree attempts to mutate a literal node with a given data type,
+    and that type is in this dictionary, the associated function will be used to mutate the literal value.
+    Otherwise, the normal mutation process will be used.
+    Populated by the :meth:`gp_literal_mutator` decorator."""
+    literal_serializers: dict[NodeType, Callable[[Any], Any]] = {}
+    """When the GP tree constructs a node id list and reaches a literal node with a given data type,
+    and that type is in this dictionary, the associated function will applied to the literal value.
+    Otherwise, the literal value will be used as-is.
+    This is necessary for literals that cannot be hashed or stored in JSON format.
+    Populated by the :meth:`gp_literal_serializer` decorator.
+    You must provide a matching deserializer with :meth:`gp_literal_deserializer`."""
+    literal_deserializers: dict[NodeType, Callable[[Any], Any]] = {}
+    """When the GP tree is constructed from a node id list and reaches a literal node with a given data type,
+    and that type is in this dictionary, the associated function will applied to the stored literal value.
+    Otherwise, the stored value will be used as-is.
+    This is necessary for literals that cannot be hashed or stored in JSON format.
+    Populated by the :meth:`:meth:`gp_literal_deserializer` decorator.
+    You must provide a matching serializer with :meth:`gp_literal_serializer`."""
 
     type_functions: dict[NodeType, list[str]] = None
+    """A dictionary mapping data types to lists of function IDs that output that data type."""
     terminal_list: list[str] = None
+    """A list of function IDs for terminal nodes, i.e., nodes with no inputs."""
     non_terminal_list: list[str] = None
+    """A list of function IDs for non-terminal nodes, i.e., nodes with inputs."""
     branch_list: list[str] = None
+    """A list of function IDs for nodes with more than one input."""
     semiterminal_table: dict[str, set[int]] = None
-
-    DATA_TYPES = None  # TODO: Use an abstract function for this instead.
 
     function_id: str
     """The ID of the node function, which is the string name of the Python function."""
@@ -74,6 +116,17 @@ class GPNode(metaclass=GPNodeType):
     fixed_context: dict[str, Any]
     """A dictionary of fixed context values that are used to parameterize literal generation."""
 
+    @classmethod
+    @abstractmethod
+    def data_types(cls) -> Sequence[NodeType]:
+        """Returns a list of data types to be used for this set of GP nodes.
+        These values will be passed to the :meth:`gp_primitive` and :meth:`gp_literal` decorators.
+
+        Returns:
+            A list of values representing different node types.
+        """
+        pass
+
     def __init__(self, function_id, literal=None, fixed_context=None):
         self.function_id = function_id
         func_data = type(self).get_function_data(function_id)
@@ -81,10 +134,16 @@ class GPNode(metaclass=GPNodeType):
         self.output_type = func_data[1]
         self.input_types = func_data[2]
         self.input_nodes = [None for _ in self.input_types]
-        self.literal = literal
         self.fixed_context = fixed_context
-        if function_id in type(self).literals and literal is None:
-            self.literal = self.function(fixed_context)
+
+        if function_id in type(self).literals:
+            if literal is None:
+                self.literal = self.function(fixed_context)
+            else:
+                self.literal = self._deserialize_literal(literal)
+        else:
+            self.literal = None
+
         self.parent = None
         self._depth = None
         self._height = None
@@ -217,11 +276,21 @@ class GPNode(metaclass=GPNodeType):
             for node in child.traverse_pre_order():
                 yield node
 
+    def serialize_literal(self) -> Any:
+        if self.output_type in type(self).literal_serializers:
+            return self.literal_serializers[self.output_type](self.literal)
+        return self.literal
+
+    def _deserialize_literal(self, literal: Any) -> Any:
+        if self.output_type in type(self).literal_deserializers:
+            return self.literal_deserializers[self.output_type](literal)
+        return literal
+
     def __str__(self) -> str:
         if self.function_id not in type(self).literals:
             return self.function.__name__
         else:
-            return self.function.__name__ + '(' + str(self.literal) + ')'
+            return self.function.__name__ + '(' + str(self.serialize_literal()) + ')'
 
     @classmethod
     def initialize_class(cls) -> None:
@@ -234,7 +303,7 @@ class GPNode(metaclass=GPNodeType):
     @classmethod
     def build_data_type_tables(cls) -> None:
         cls.type_functions = dict()
-        for data_type in cls.DATA_TYPES:
+        for data_type in cls.data_types():
             cls.type_functions[data_type] = list()
 
         cls.terminal_list = list()
@@ -301,7 +370,7 @@ class GPNode(metaclass=GPNodeType):
                 cls.semiterminal_table[i] = set()
                 live_functions = [function for function in cls.non_terminal_list if
                                   function not in cls.semiterminal_table[i - 1] and function not in forbidden_nodes]
-                for dataType in cls.DATA_TYPES:
+                for dataType in cls.data_types():
                     if len(set(live_functions) & set(cls.type_functions[dataType])) == 0:
                         dead_types.add(dataType)
 
@@ -329,12 +398,12 @@ class GPNode(metaclass=GPNodeType):
             forbidden_nodes = []
         type_tables = dict()
         type_depths = dict()
-        for data_type in cls.DATA_TYPES:
+        for data_type in cls.data_types():
             type_tables[data_type] = {1: {data_type}}
             type_depths[data_type] = 1
         # Construct the type tables describing which types can be present at each depth by taking the list of children of possible types at the previous depth
         for depth in range(2, max_height + 1):
-            for data_type in cls.DATA_TYPES:
+            for data_type in cls.data_types():
                 children_types = set()
                 for parent_type in type_tables[data_type][depth - 1]:
                     edge_functions = [function for function in cls.functions if
@@ -344,7 +413,7 @@ class GPNode(metaclass=GPNodeType):
                 type_tables[data_type][depth] = children_types
         # Construct the depth table, listing the highest depth that can be reached from a type.
         for depth in range(2, max_height + 1):
-            for data_type in cls.DATA_TYPES:
+            for data_type in cls.data_types():
                 # Loops indicate that infinite depth can be reached
                 if data_type in type_tables[data_type][depth]:
                     type_depths[data_type] = 1000000
@@ -433,7 +502,7 @@ class GPNode(metaclass=GPNodeType):
 
     @classmethod
     def gp_primitive(cls, output_type: Any, input_types: tuple[Any, ...]):
-        def internal_decorator(function):
+        def internal_decorator(function: 'GPPrimitiveProtocol'):
             function_id = function.__name__
             if function_id in cls.functions:
                 raise ValueError(f"GPNode ID conflict: a function with name {function_id} was already registered!")
@@ -443,11 +512,38 @@ class GPNode(metaclass=GPNodeType):
 
     @classmethod
     def gp_literal(cls, output_type: Any):
-        def internal_decorator(function):
+        def internal_decorator(function: 'GPLiteralProtocol'):
             function_id = function.__name__
             if function_id in cls.functions:
                 raise ValueError(f"GPNode ID conflict: a function with name {function_id} was already registered!")
             cls.functions[function_id] = (function, output_type, ())
             cls.literals.add(function_id)
+            return function
+        return internal_decorator
+
+    @classmethod
+    def gp_literal_mutator(cls, literal_type: Any):
+        def internal_decorator(function: 'GPLiteralMutatorProtocol'):
+            if literal_type in cls.literal_mutators:
+                raise ValueError(f"Literal mutator conflict: a mutator for type {literal_type} was already registered!")
+            cls.literal_mutators[literal_type] = function
+            return function
+        return internal_decorator
+
+    @classmethod
+    def gp_literal_serializer(cls, literal_type: Any):
+        def internal_decorator(function: Callable[[Any], Any]):
+            if literal_type in cls.literal_serializers:
+                raise ValueError(f"Literal serializer conflict: a serializer for type {literal_type} was already registered!")
+            cls.literal_serializers[literal_type] = function
+            return function
+        return internal_decorator
+
+    @classmethod
+    def gp_literal_deserializer(cls, literal_type: Any):
+        def internal_decorator(function: Callable[[Any], Any]):
+            if literal_type in cls.literal_deserializers:
+                raise ValueError(f"Literal deserializer conflict: a deserializer for type {literal_type} was already registered!")
+            cls.literal_deserializers[literal_type] = function
             return function
         return internal_decorator

@@ -27,7 +27,11 @@ TRUNCATE = True
 world_kwargs = {}
 
 
-def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseExperiment]) -> BaseExperiment:
+def load_run_experiment_definition(
+        run_folder: str,
+        experiment_type: Type[BaseExperiment],
+        override_parameters: dict = None
+) -> BaseExperiment:
     '''
     Initialize an experiment definition object based on the parameters logged for a given run.
 
@@ -35,6 +39,7 @@ def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseEx
         run_folder: The path to the folder for the run.
         experiment_type: The type of experiment used in the run.
             This should match the type logged in the parameters.json file.
+        override_parameters: Optional parameters to override the ones loaded from the file.
 
     Returns:
         BaseExperiment: The experiment definition object.
@@ -46,6 +51,8 @@ def load_run_experiment_definition(run_folder: str, experiment_type: Type[BaseEx
     config_path = f'{run_folder}/parameters.json'
     with open(config_path) as config_file:
         config = json.load(config_file)
+    if override_parameters:
+        deep_update_dictionary(config, override_parameters)
 
     if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
         warnings.warn(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
@@ -88,11 +95,15 @@ def load_experiment_data(experiment_folder, last_generation=False, load_only: Se
     return run_data_files
 
 
-def load_experiment_definition(experiment_folder: str, experiment_type: type[BaseExperiment]) -> BaseExperiment:
+def load_experiment_definition(
+        experiment_folder: str,
+        experiment_type: type[BaseExperiment],
+        override_parameters: dict = None
+) -> BaseExperiment:
     run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
     #return load_run_experiment_definition(run_folders[0], experiment_type)
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
-    return load_run_experiment_definition(run_folders[0], experiment_type)
+    return load_run_experiment_definition(run_folders[0], experiment_type, override_parameters)
 
 
 def _get_run_name(run_folder):

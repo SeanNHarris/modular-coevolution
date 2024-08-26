@@ -428,7 +428,7 @@ class GPTree(BaseGenotype):
         for node in self.root.traverse_pre_order():
             id_list.append(node.function_id)
             if node.function_id in self.node_type.literals:
-                id_list.append(node.literal)
+                id_list.append(node.serialize_literal())
         self.node_id_list = id_list
         return id_list
 
@@ -463,9 +463,6 @@ class GPTree(BaseGenotype):
         literal = None
         if primitive_function in self.node_type.literals:
             literal = id_list.pop(0)
-            if isinstance(literal, list):
-                # TODO: Consider storing a type conversion function for literals
-                literal = tuple(literal)
 
         node = self.node_type(primitive_function, literal=literal, fixed_context=self.fixed_context)
         for input_type in node.input_types:

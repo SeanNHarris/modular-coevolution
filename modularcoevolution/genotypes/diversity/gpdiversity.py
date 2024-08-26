@@ -10,7 +10,7 @@ def subtree_edit_distance(node_1, node_2):
     distance = 0
     if node_1 is None or node_2 is None:
         distance += 1
-    elif node_1.function_id != node_2.function_id or node_1.literal != node_2.literal:
+    elif node_1.function_id != node_2.function_id or node_1.serialize_literal() != node_2.serialize_literal():
         distance += 1
     node_1_inputs = 0
     if node_1 is not None:

@@ -50,6 +50,14 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
 
         super().end_generation()
 
+    def log_generation(self):
+        super().log_generation()
+        pareto_front_objectives = []
+        for individual in self.nondominated_fronts[0]:
+            pareto_front_objectives.append(tuple(individual.objectives[objective] for objective in self.population[0].objectives))
+        print(f"Pareto front: {sorted(pareto_front_objectives)}")
+
+
     def get_population_metrics(self) -> dict[str, Any]:
         population_metrics = super().get_population_metrics()
         population_metrics["front_sizes"] = [len(front) for front in self.nondominated_fronts]
