@@ -24,7 +24,7 @@ except ImportError:
 
 
 class EvaluateProtocol(Protocol):
-    def __call__(self, agents: Sequence[BaseAgent]) -> Sequence[dict[str, Any]]:
+    def __call__(self, agents: Sequence[BaseAgent], **kwargs) -> Sequence[dict[str, Any]]:
         """Evaluate the agents in the context of the experiment.
 
         Args:
