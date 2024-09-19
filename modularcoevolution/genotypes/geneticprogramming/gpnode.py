@@ -1,10 +1,14 @@
 from abc import abstractmethod
 from functools import cache
-from typing import Callable, Any, Union, Optional, Generator, Sequence, Protocol, TypeVar
+from typing import Callable, Any, Union, Optional, Generator, Sequence, Protocol, TypeVar, TYPE_CHECKING
 
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
 
 import random
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as pyplot
+
 
 NodeType = Any
 NodeFunction = Callable[[list[Any], dict[str, Any]], Any]
@@ -25,6 +29,11 @@ class GPLiteralProtocol(Protocol):
 
 class GPLiteralMutatorProtocol(Protocol):
     def __call__(self, value: T, fixed_context: dict[str, Any]) -> T:
+        ...
+
+
+class GPTypeRendererProtocol(Protocol):
+    def __call__(self, value: T, ax: 'pyplot.Axes', update: bool) -> None:
         ...
 
 
@@ -81,6 +90,9 @@ class GPNode(metaclass=GPNodeType):
     This is necessary for literals that cannot be hashed or stored in JSON format.
     Populated by the :meth:`:meth:`gp_literal_deserializer` decorator.
     You must provide a matching serializer with :meth:`gp_literal_serializer`."""
+    type_renderers: dict[NodeType, 'GPTypeRendererProtocol'] = {}
+    """A dictionary of functions that render a value of a given data type to a matplotlib Axes object.
+    Populated by the :meth:`gp_type_renderer` decorator."""
 
     type_functions: dict[NodeType, list[str]] = None
     """A dictionary mapping data types to lists of function IDs that output that data type."""
@@ -116,6 +128,11 @@ class GPNode(metaclass=GPNodeType):
     fixed_context: dict[str, Any]
     """A dictionary of fixed context values that are used to parameterize literal generation."""
 
+    saved_value = None
+    """The most recent output of this node, saved by the :meth:`GPNode.execute` method
+    when called with `save_value=True`. Used for debugging and visualization purposes."""
+
+
     @classmethod
     @abstractmethod
     def data_types(cls) -> Sequence[NodeType]:
@@ -147,22 +164,25 @@ class GPNode(metaclass=GPNodeType):
         self.parent = None
         self._depth = None
         self._height = None
+        self.saved_value = None
 
     def execute(self, context) -> Any:
         """Executes the function represented by this node, using the given context.
 
         Args:
             context: A dictionary of context values that are used to parameterize the function or its children.
+                Special keys: `save_value`: if true, the output of this node will be saved in the :attr:`GPNode.saved_value` attribute.
 
         Returns:
             The output of the function represented by this node,
             or the literal value of this node if it is a literal node.
         """
-        output = None
         if self.function_id not in type(self).literals:
             output = self.function(self.input_nodes, context)
         else:
             output = self.literal
+        if 'save_values' in context and context['save_values']:
+            self.saved_value = output
         return output
 
     def set_input(self, index: int, input_node: 'GPNode') -> None:
@@ -285,6 +305,16 @@ class GPNode(metaclass=GPNodeType):
         if self.output_type in type(self).literal_deserializers:
             return self.literal_deserializers[self.output_type](literal)
         return literal
+
+    def can_render_type(self) -> bool:
+        return self.output_type in type(self).type_renderers
+
+    def render_saved_value(self, ax: 'pyplot.Axes', update: bool = False) -> None:
+        if self.saved_value is None:
+            raise ValueError("No saved value to render.")
+        if not self.can_render_type():
+            raise ValueError(f"No rendering function for output type {self.output_type}.")
+        self.type_renderers[self.output_type](self.saved_value, ax, update)
 
     def __str__(self) -> str:
         if self.function_id not in type(self).literals:
@@ -545,5 +575,14 @@ class GPNode(metaclass=GPNodeType):
             if literal_type in cls.literal_deserializers:
                 raise ValueError(f"Literal deserializer conflict: a deserializer for type {literal_type} was already registered!")
             cls.literal_deserializers[literal_type] = function
+            return function
+        return internal_decorator
+
+    @classmethod
+    def gp_type_renderer(cls, data_type: Any):
+        def internal_decorator(function: 'GPTypeRendererProtocol'):
+            if data_type in cls.type_renderers:
+                raise ValueError(f"Type renderer conflict: a renderer for type {data_type} was already registered!")
+            cls.type_renderers[data_type] = function
             return function
         return internal_decorator

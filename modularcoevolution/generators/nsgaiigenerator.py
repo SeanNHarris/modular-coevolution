@@ -135,8 +135,14 @@ def nondominated_sort(population):
 def calculate_crowding_distances(front_population):
     crowding_distances = {individual: 0.0 for individual in front_population}
     for objective in front_population[0].objectives:
+        def sorting_comparison(individual_1, individual_2):
+            objective_difference = individual_1.objectives[objective] - individual_2.objectives[objective]
+            if objective_difference != 0:
+                return objective_difference
+            else:
+                return individual_1.id - individual_2.id
         sorted_population = list(front_population)
-        sorted_population.sort(key=lambda individual: individual.objectives[objective])
+        sorted_population.sort(key=functools.cmp_to_key(sorting_comparison))
         crowding_distances[sorted_population[0]] = math.inf
         objective_min = sorted_population[0].objectives[objective]
         crowding_distances[sorted_population[-1]] = math.inf
@@ -147,7 +153,7 @@ def calculate_crowding_distances(front_population):
             if objective_max == objective_min:
                 crowding_distances[individual] = math.inf  # Same as the boundaries?
             else:
-                crowding_distances[individual] += sorted_population[i+1].objectives[objective] - sorted_population[i-1].objectives[objective] / (objective_max - objective_min)
+                crowding_distances[individual] += (sorted_population[i+1].objectives[objective] - sorted_population[i-1].objectives[objective]) / (objective_max - objective_min)
     return crowding_distances
 
 

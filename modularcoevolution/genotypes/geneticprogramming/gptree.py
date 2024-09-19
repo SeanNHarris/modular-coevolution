@@ -177,15 +177,23 @@ class GPTree(BaseGenotype):
         self.node_id_list = None
 
     # Run the program the tree represents
-    def execute(self, context: dict[str, Any]) -> Any:
+    def execute(self, context: dict[str, Any], save_values: bool = False) -> Any:
         """Executes the tree with the given context and returns the result.
         The context is updated with the fixed context before execution.
 
         Args:
             context: A dictionary of information to be used by the tree.
-            The necessary values are defined by the node type."""
+            The necessary values are defined by the node type.
+            save_values: If True, the output values of the tree nodes will be stored in :attr:`GPNode.saved_value`.
+
+        Returns:
+            The output value of the root node.
+        """
         context = context.copy()
         context.update(self.fixed_context)
+        # Doing save_values like this so that it isn't necessary in user-defined nodes.
+        if save_values:
+            context['save_values'] = True
         return self.root.execute(context)
 
     def _replace_subtree(self, node: GPNode, replacement: GPNode) -> None:
