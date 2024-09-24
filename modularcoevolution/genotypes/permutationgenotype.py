@@ -1,9 +1,9 @@
 import random
-from typing import TypedDict, Iterable, cast
-from typing_extensions import NotRequired  # TODO: Upgrade to python 3.11 to remove dependency
+from typing import TypedDict, Iterable, cast, NotRequired
+# from typing_extensions import NotRequired  # TODO: Upgrade to python 3.11 to remove dependency
 
 from modularcoevolution.genotypes.diversity.alternatediversity import genetic_algorithm_diversity
-from modularcoevolution.evolution import BaseGenotype
+from modularcoevolution.genotypes.basegenotype import BaseGenotype
 
 try:
     import numba

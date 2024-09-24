@@ -201,7 +201,7 @@ class Coevolution:
 
     def build_evaluation_groups_careful(self) -> list[tuple[GenotypeID, ...]]:
         """Builds groups of agents to evaluate together, and returns them as a list of tuples of agent ids.
-        The minimum number of groups will be formed such that each agent is evaluated :prop:`evaluations_per_individual` times.
+        The minimum number of groups will be formed such that each agent is evaluated :attr:`evaluations_per_individual` times.
 
         Returns: A list of evaluation groups, where each group is a list of agent ids for that evaluation.
 
@@ -210,7 +210,8 @@ class Coevolution:
             The random sorting limits this some already.
             Still, Duplicate evaluations can be higher than 10% of the total with this method.
             This could be done by storing multiple candidate groups and selecting the one with the least pairwise overlap.
-            """
+
+        """
         groups = []
         agent_lists = [self.current_agents_per_generator[generator] for generator in self.agent_generators]
         # Queue entries are (evaluation count, tiebreaker value, agent ID)
@@ -292,7 +293,7 @@ class Coevolution:
         return remaining_evaluations
 
     def get_generator_order(self) -> list[BaseGenerator]:
-        """Gets a list of generators that matches the schema of :prop:`player_generators`.
+        """Gets a list of generators that matches the schema of :attr:`player_generators`.
 
         Returns: A list of generators of length ``len(self.player_generators)`` corresponding to the origin of agents in a group."""
         return [self.agent_generators[generator_index] for generator_index in self.player_generators]
@@ -314,7 +315,7 @@ class Coevolution:
 
         Args:
             evaluation_id: The ID of the evaluation.
-            active: Whether the agents should be active or inactive. See :prop:`BaseAgent.active` for more information.
+            active: Whether the agents should be active or inactive. See :attr:`BaseAgent.active` for more information.
 
         Returns: A list of genotypes used in the evaluation."""
         return [generator.build_agent_from_id(agent_id, active) for generator, agent_id in zip(self.get_generator_order(), self.evaluation_table[evaluation_id])]
