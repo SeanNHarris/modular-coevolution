@@ -1,6 +1,7 @@
 import ast
 
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
+from modularcoevolution.generators.basegenerator import BaseGenerator
 
 
 class EvolutionaryHillClimberGenerator(BaseGenerator):

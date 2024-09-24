@@ -4,21 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "modular-coevolution"
-version = "2023.6.22"
-description="Evolutionary algorithm library focusing on competitive coevolution"
+version = "2024.9.24"
+description = "Evolutionary algorithm library focusing on competitive coevolution"
 authors = [
     {name = "Sean N. Harris", email = "snh0037@auburn.edu"}
 ]
 
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = []
-
-[project.urls]
-Github = "https://github.com/SeanNHarris/modular-coevolution"
 
 [project.optional-dependencies]
 alpharank = ["open-spiel", "numpy"]
 numba = ["numba", "numpy"]
+matplotlib = ["matplotlib"]
 
-[tool.setuptools.packages.find]
-where = [""]
+[project.urls]
+Github = "https://github.com/SeanNHarris/modular-coevolution"
