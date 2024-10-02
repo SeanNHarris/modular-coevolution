@@ -10,9 +10,14 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
+# Used for AlphaRankCoevolution
 alpharank = ["open-spiel", "numpy"]
+# Experimental support for Numba compilation on some functions
 numba = ["numba", "numpy"]
+# Functionality for visualizing GP trees
 matplotlib = ["matplotlib"]
+# Optional TQDM progress bar
+tqdm = ["tqdm"]
 
 [project.urls]
 Github = "https://github.com/SeanNHarris/modular-coevolution"

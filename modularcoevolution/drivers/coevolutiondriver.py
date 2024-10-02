@@ -262,7 +262,7 @@ class CoevolutionDriver:
         """
         parser = argparse.ArgumentParser()
         parser.add_argument('config_filename')
-        parser.add_argument('-r', '--runs', dest='run_amount', type=int, default=10,
+        parser.add_argument('-r', '--runs', dest='run_amount', type=int, default=1,
                             help='The number of runs to perform.')
         parser.add_argument('--run-start', dest='run_start', type=int, default=0,
                             help='The run number to start at. Runs will end at the number specified by the --runs argument. Used for resuming experiments.')
