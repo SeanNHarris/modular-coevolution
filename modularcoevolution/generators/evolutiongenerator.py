@@ -1,3 +1,5 @@
+import warnings
+
 from modularcoevolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator, AgentType
 from modularcoevolution.utilities.specialtypes import GenotypeID
 
@@ -45,7 +47,6 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             initial_size: int,
             children_size: int,
             mutation_fraction: float = 0.25,
-            recombination_fraction: float = -1.0,
             mutate_after_recombine: bool = True,
             diversity_weight: float = 0,
             diverse_elites: bool = False,
@@ -55,14 +56,12 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         super().__init__(agent_class, population_name, initial_size, **kwargs)
         self.children_size = children_size
         self.mutation_fraction = mutation_fraction
-        self.recombination_fraction = recombination_fraction
         self.mutate_after_recombine = mutate_after_recombine
 
-        if recombination_fraction < 0:
-            if mutate_after_recombine:
-                self.recombination_fraction = 1.0
-            else:
-                self.recombination_fraction = 1.0 - mutation_fraction
+        if mutate_after_recombine:
+            self.recombination_fraction = 1.0
+        else:
+            self.recombination_fraction = 1.0 - mutation_fraction
 
         self.diversity_weight = diversity_weight
         self.diverse_elites = diverse_elites
@@ -134,10 +133,13 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                 mutate = random.random() < self.mutation_fraction
             else:
                 mutate = num_recombination <= i < num_recombination + num_mutation
+            if not recombine and not mutate:
+                raise RuntimeError("No mutation or recombination occurred. This should not happen.")
 
             # Ensure that the child is unique, to prevent duplicates in the population
             unique = False
             child = None
+            failure_count = 0
             while not unique:
                 if recombine:
                     child = self.generate_recombination()
@@ -152,6 +154,11 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                     child.mutate()
                 if hash(child) not in next_generation_set:
                     unique = True
+                else:
+                    failure_count += 1
+                    if failure_count > self.children_size:
+                        warnings.warn("Repeatedly unable to generate a unique child. Relaxing constraint.")
+                        unique = True  # A lie
             next_generation.append(child)
             next_generation_set.add(hash(child))
 
