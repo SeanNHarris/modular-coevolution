@@ -141,6 +141,13 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         if not (isinstance(value, float) or isinstance(value, numpy.ndarray)) and submission['repeat_mode'] != 'replace':
             raise ValueError(f"Metric {metric} was submitted with repeat_mode={submission['repeat_mode']}, but is not a numeric value.")
 
+        # Add fitness modifier
+        if submission['add_fitness_modifier']:
+            if not isinstance(value, float):
+                raise ValueError(
+                    f"Metric {metric} was submitted with add_fitness_modifier=True, but is not a numeric value.")
+            value += self.get_fitness_modifier(value)
+
         new_metric = metric not in self.metrics
         if new_metric:
             self.metrics[metric] = value
@@ -168,12 +175,6 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
                 raise ValueError(f"Metric {metric} was submitted with is_objective={submission['is_objective']}, but was previously submitted with is_objective={metric in self._objective_names}.")
             if submission['log_history'] != (metric in self.metric_histories):
                 raise ValueError(f"Metric {metric} was submitted with log_history={submission['log_history']}, but was previously submitted with log_history={metric in self.metric_histories}.")
-
-        # Add fitness modifier
-        if submission['add_fitness_modifier']:
-            if not isinstance(value, float):
-                raise ValueError(f"Metric {metric} was submitted with add_fitness_modifier=True, but is not a numeric value.")
-            value += self.get_fitness_modifier(value)
 
         # Update statistics
         self.metric_statistics[metric]["count"] += 1
@@ -242,7 +243,8 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
             value=fitness,
             is_objective=True,
             repeat_mode='average' if average else 'replace',
-            log_history=False
+            log_history=False,
+            add_fitness_modifier=True
         ))
 
     def log_evaluation_id(self, evaluation_id: EvaluationID) -> None:
