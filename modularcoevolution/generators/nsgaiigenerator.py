@@ -135,12 +135,24 @@ def nondominated_sort(population):
 def calculate_crowding_distances(front_population):
     crowding_distances = {individual: 0.0 for individual in front_population}
     for objective in front_population[0].objectives:
+        objective_min = min(individual.objectives[objective] for individual in front_population)
+        min_individual = [individual for individual in front_population if individual.objectives[objective] == objective_min][0]
+        objective_max = max(individual.objectives[objective] for individual in front_population)
+        max_individual = [individual for individual in front_population if individual.objectives[objective] == objective_max][0]
+
         def sorting_comparison(individual_1, individual_2):
-            objective_difference = individual_1.objectives[objective] - individual_2.objectives[objective]
+            objective_1 = individual_1.objectives[objective]
+            objective_2 = individual_2.objectives[objective]
+            objective_difference = objective_1 - objective_2
             if objective_difference != 0:
                 return objective_difference
-            else:
+            elif objective_1 == objective_max:
+                # Put the newest ID last (at the extreme)
+                # Slightly encourages genetic drift?
                 return individual_1.id - individual_2.id
+            else:
+                # Put the newest ID first (at the extreme)
+                return individual_2.id - individual_1.id
         sorted_population = list(front_population)
         sorted_population.sort(key=functools.cmp_to_key(sorting_comparison))
         crowding_distances[sorted_population[0]] = math.inf
