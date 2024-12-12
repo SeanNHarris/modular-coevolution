@@ -11,6 +11,7 @@ import random
 MIN_VALUE_DEFAULT = 0
 MAX_VALUE_DEFAULT = 10
 GENE_MUTATION_RATE_DEFAULT = 0.33
+GENE_MUTATION_SIZE_DEFAULT = 0.1
 
 
 class LinearGenotypeParameters(TypedDict, total=False):
@@ -48,6 +49,9 @@ class LinearGenotypeParameters(TypedDict, total=False):
 
     gene_mutation_rate: float
     """The probability of mutation per-gene."""
+    gene_mutation_standard_deviation: float
+    """The scale of the mutation, as a factor of the gene's range.
+    This should be in the range of 0 to 1, with 0.1 as the default."""
 
 
 class LinearGenotype(BaseGenotype):
@@ -70,6 +74,8 @@ class LinearGenotype(BaseGenotype):
 
     gene_mutation_rate: float
     """The probability of mutation per-gene."""
+    gene_mutation_standard_deviation: float
+    """The scale of the mutation, as a factor of the gene's range."""
 
     def __init__(self, parameters: LinearGenotypeParameters):
         super().__init__()
@@ -77,6 +83,11 @@ class LinearGenotype(BaseGenotype):
             self.gene_mutation_rate = parameters['gene_mutation_rate']
         else:
             self.gene_mutation_rate = GENE_MUTATION_RATE_DEFAULT
+
+        if 'gene_mutation_standard_deviation' in parameters:
+            self.gene_mutation_standard_deviation = parameters['gene_mutation_standard_deviation']
+        else:
+            self.gene_mutation_standard_deviation = GENE_MUTATION_SIZE_DEFAULT
 
         must_generate = False
         self.genes = None
@@ -144,7 +155,7 @@ class LinearGenotype(BaseGenotype):
     def mutate(self) -> None:
         for i in range(len(self.genes)):
             if random.random() < self.gene_mutation_rate:
-                self.genes[i] = self.genes[i] + random.gauss(0, (self.max_value[i] - self.min_value[i]) / 100)
+                self.genes[i] = self.genes[i] + random.gauss(0, self.gene_mutation_standard_deviation) * (self.max_value[i] - self.min_value[i])
                 if self.round_genes[i]:
                     self.genes[i] = math.floor(max(self.min_value[i], min(self.genes[i], self.max_value[i] - 1)))
                 if self.loop_genes[i]:
@@ -203,5 +214,5 @@ class LinearGenotype(BaseGenotype):
         return list(self.genes)
 
     def get_parameters(self) -> LinearGenotypeParameters:
-        parameters = {'min_value': self.min_value, 'max_value': self.max_value, 'gene_mutation_rate': self.gene_mutation_rate, 'values': self.genes, 'loop_genes': self.loop_genes, 'round_genes': self.round_genes}
+        parameters = {'min_value': self.min_value, 'max_value': self.max_value, 'gene_mutation_rate': self.gene_mutation_rate, 'gene_mutation_standard_deviation': self.gene_mutation_standard_deviation, 'values': self.genes, 'loop_genes': self.loop_genes, 'round_genes': self.round_genes}
         return parameters

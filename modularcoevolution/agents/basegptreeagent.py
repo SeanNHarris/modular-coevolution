@@ -29,7 +29,7 @@ class BaseGPTreeAgent(BaseEvolutionaryAgent, metaclass=abc.ABCMeta):
 
     def apply_parameters(self, parameters: dict[str, Any]) -> None:
         if self.genotype is None:
-            genotype_parameters = self.genotype_default_parameters()
+            genotype_parameters = self.genotype_default_parameters(parameters)
             if "id_list" in parameters:
                 genotype_parameters["id_list"] = parameters["id_list"].copy()
             if "fixed_context" in parameters:
