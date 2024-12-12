@@ -208,6 +208,7 @@ class GPTree(BaseGenotype):
         """
         if node is self.root:
             self.root = replacement
+            self.root.set_parent(None)
         else:
             parent = node.parent
             index = parent.input_nodes.index(node)
@@ -223,11 +224,12 @@ class GPTree(BaseGenotype):
             node: The node to be replaced
             replacement: A node with the same input and output types as `node`. It should not have any children yet.
         """
-        replacement.input_nodes = node.input_nodes
+        replacement.input_nodes = node.input_nodes.copy()
         for child in replacement.input_nodes:
             child.set_parent(replacement)
         if node is self.root:
             self.root = replacement
+            self.root.set_parent(None)
         else:
             parent = node.parent
             index = parent.input_nodes.index(node)
@@ -341,18 +343,22 @@ class GPTree(BaseGenotype):
             raise TreeConstraintException("Tree is too large to expand with insertion.")
         node_depth = node.get_depth()  # Don't compute this below, as it will change when the node is moved
         try:
-            new_node = self.node_type(self.node_type.random_function(node.output_type, has_child=node.output_type), fixed_context=self.fixed_context)
+            new_node = self.node_type(self.node_type.random_function(node.output_type, has_child=node.output_type),
+                                      fixed_context=self.fixed_context)
         except ValueError:
             raise TreeConstraintException(f"Output type {node.output_type} has no valid options for insertion.")
-        self._replace_subtree(node, new_node)
         valid_child_positions = [index for index, input_type in enumerate(new_node.input_types) if input_type == node.output_type]
+
+        node_clone = node.clone()
         node_position = random.choice(valid_child_positions)
         for index, input_type in enumerate(new_node.input_types):
             if index == node_position:
-                new_node.add_input(node)
+                new_node.add_input(node_clone)
             else:
                 generate_height = self._random_height(node.get_height(), node_depth + 1)  # +1 for the new parent
                 new_node.add_input(self.random_subtree(generate_height, input_type))
+
+        self._replace_subtree(node, new_node)
 
     def _delete_mutate(self) -> None:
         """Selects a random node in the tree and removes it, replacing it with one of its children.
@@ -391,11 +397,12 @@ class GPTree(BaseGenotype):
             self.mutate()
             return
 
-        self._replace_subtree(parent_subtree, donor_subtree)
+        donor_subtree_clone = donor_subtree.clone()
+        self._replace_subtree(parent_subtree, donor_subtree_clone)
         if self.root.get_height() > MAXIMUM_HEIGHT:
             raise TreeInvalidError(f"New tree exceeds maximum height of {MAXIMUM_HEIGHT}."
                                    f"Parent:\n{parent_subtree}\nHeight: {parent_subtree.get_height()}, Depth: {parent_subtree.get_depth()}"
-                                   f"Donor:\n{donor_subtree}\nHeight: {donor_subtree.get_height()}, Depth: {donor_subtree.get_depth()}")
+                                   f"Donor:\n{donor_subtree_clone}\nHeight: {donor_subtree_clone.get_height()}, Depth: {donor_subtree_clone.get_depth()}")
 
         self.parent_ids.append(donor.id)
         self.creation_method = "Recombination"
