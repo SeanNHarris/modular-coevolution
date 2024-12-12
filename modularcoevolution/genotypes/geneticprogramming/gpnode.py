@@ -194,7 +194,7 @@ class GPNode(metaclass=GPNodeType):
                 but this type constraint is not checked here.
         """
         self.input_nodes[index] = input_node
-        self._height = None  # Invalidate height cache
+        self.invalidate_height()  # Invalidate height cache
         input_node.set_parent(self)
 
     def add_input(self, input_node: 'GPNode') -> None:
@@ -207,14 +207,26 @@ class GPNode(metaclass=GPNodeType):
         next_input = self.input_nodes.index(None)
         self.set_input(next_input, input_node)
 
-    def set_parent(self, parent: 'GPNode') -> None:
+    def set_parent(self, parent: Optional['GPNode']) -> None:
         """Sets the parent of this node.
 
         Args:
             parent: The parent node to set. Does not automatically add this node as a child of the parent.
         """
         self.parent = parent
-        self._depth = None  # Invalidate depth cache
+        self.invalidate_depth()  # Invalidate depth cache
+
+    def clone(self) -> 'GPNode':
+        """Creates a deep copy of this node and its subtree.
+
+        Returns:
+            A deep copy of the subtree rooted at this node.
+        """
+        clone = type(self)(self.function_id, self.literal, self.fixed_context)
+        for i, input_node in enumerate(self.input_nodes):
+            if input_node is not None:
+                clone.set_input(i, input_node.clone())
+        return clone
 
     def get_depth(self) -> int:
         """Gets the depth of this node in the tree from the root. The root node has a depth of 0.
@@ -231,6 +243,12 @@ class GPNode(metaclass=GPNodeType):
         else:
             self._depth = self.parent.get_depth() + 1
             return self._depth
+
+    def invalidate_depth(self):
+        """Invalidates the cached depth of this node and all its children."""
+        self._depth = None
+        for child in self.input_nodes:
+            child.invalidate_depth()
 
     def get_height(self) -> int:
         """Gets the height of this node in the tree from its deepest child,
@@ -253,6 +271,12 @@ class GPNode(metaclass=GPNodeType):
 
             self._height = max_length + 1
             return self._height
+
+    def invalidate_height(self):
+        """Invalidates the cached height of this node and all of its ancestors."""
+        self._height = None
+        if self.parent is not None:
+            self.parent.invalidate_height()
 
     def get_size(self) -> int:
         return sum((1 for _ in self.traverse_post_order()))
@@ -586,3 +610,37 @@ class GPNode(metaclass=GPNodeType):
             cls.type_renderers[data_type] = function
             return function
         return internal_decorator
+
+    @classmethod
+    def build_primitive_docs(cls, note_empty: bool = True) -> dict[str, str]:
+        primitive_docs = {}
+        for function_id, function_data in cls.functions.items():
+            function, output_type, input_types = function_data
+
+            doc_parts = []
+            doc_parts.append(function_id)
+            if function_id in cls.literals:
+                doc_parts.append("Literal node")
+            doc_parts.append(f"Output type: {output_type}")
+            if len(input_types) == 0:
+                doc_parts.append("Terminal node")
+            else:
+                input_string = ', '.join(str(input_type) for input_type in input_types)
+                doc_parts.append(f"Input types: {input_string}")
+
+            docstring = function.__doc__
+            if docstring is None and note_empty:
+                docstring = "No documentation provided."
+            if docstring is not None:
+                doc_parts.append(docstring)
+
+            primitive_docs[function_id] = str.join('\n\t', doc_parts)
+        return primitive_docs
+
+    @classmethod
+    def sort_ids(cls, ids: list[str]) -> list[str]:
+        sort_data = {}
+        for function_id in ids:
+            function_data = cls.get_function_data(function_id)
+            sort_data[function_id] = (function_data[1], function_data[2], str(0 if function_id in cls.literals else 1))
+        return sorted(ids, key=lambda x: sort_data[x])
