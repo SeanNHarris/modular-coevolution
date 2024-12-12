@@ -15,6 +15,10 @@ import random
 class NSGAIIGenerator(EvolutionGenerator[AgentType]):
     """A generator that uses the NSGA-II algorithm to evolve a population of agents with multiple objectives."""
 
+    parsimony_objective: bool
+    """Whether to automatically register and calculate a parsimony pressure objective
+    (based on :meth:`BaseObjectiveTracker.get_fitness_modifier`)."""
+
     nondominated_fronts: list[list[BaseGenotype]]
     """A list of non-dominated fronts for the current generation as lists of genotypes,
     starting with the pareto front."""
@@ -24,6 +28,7 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
             agent_class: Type[AgentType],
             population_name: str,
             initial_size: int,
+            parsimony_objective: bool = False,
             **kwargs
     ):
         super().__init__(
@@ -33,13 +38,23 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
             **kwargs
         )
 
+        self.parsimony_objective = parsimony_objective
+        if self.parsimony_objective:
+            self._register_parsimony_objective()
+
         self.nondominated_fronts = list()
 
         self._register_front_metric()
         self._register_crowding_metric()
 
     def end_generation(self) -> None:
+        if self.parsimony_objective:
+            for individual in self.population:
+                # Use a fake 'raw fitness' value of 1, since some genotypes scale parsimony pressure by fitness.
+                self.submit_metric(individual.id, "parsimony", individual.get_fitness_modifier(1))
+
         self.nondominated_fronts = nondominated_sort(self.population)
+
         crowding_distances = dict()
         for index, front in enumerate(self.nondominated_fronts):
             crowding_distances.update(calculate_crowding_distances(front))
@@ -97,6 +112,18 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
         metric_configuration: MetricConfiguration = {
             "name": "crowding",
             "is_objective": False,
+            "repeat_mode": "replace",
+            "log_history": False,
+            "automatic": False,
+            "add_fitness_modifier": False,
+        }
+        self.register_metric(metric_configuration, None)
+
+    def _register_parsimony_objective(self) -> None:
+        """Automatically register a parsimony pressure objective called ``"parsimony"``."""
+        metric_configuration: MetricConfiguration = {
+            "name": "parsimony",
+            "is_objective": True,
             "repeat_mode": "replace",
             "log_history": False,
             "automatic": False,
@@ -170,24 +197,22 @@ def calculate_crowding_distances(front_population):
 
 
 def domination_comparison(individual_1: BaseGenotype, individual_2: BaseGenotype) -> int:
-    objective_count = len(individual_1.objectives)
-    greater_than_count = 0
-    equal_count = 0
-    for objective in individual_1.objectives:
-        if individual_1.objectives[objective] < individual_2.objectives[objective]:
-            greater_than_count -= 1
-        elif individual_1.objectives[objective] > individual_2.objectives[objective]:
-            greater_than_count += 1
+    comparisons = [individual_1.objectives[objective] - individual_2.objectives[objective] for objective in individual_1.objectives]
+    if all(comparison >= 0 for comparison in comparisons):
+        if any(comparison > 0 for comparison in comparisons):
+            #  No objective of individual_1 is worse, and at least one is better
+            return 1
         else:
-            equal_count += 1
-    if equal_count == objective_count:
-        return 0
-    elif greater_than_count - equal_count == -objective_count:
-        return -1
-    elif greater_than_count + equal_count == objective_count:
-        return 1
+            return 0
+    elif all(comparison <= 0 for comparison in comparisons):
+        if any(comparison < 0 for comparison in comparisons):
+            #  No objective of individual_2 is worse, and at least one is better
+            return -1
+        else:
+            return 0
     else:
         return 0
+
 
 
 def crowded_comparison(individual_1: BaseGenotype, individual_2: BaseGenotype) -> int:

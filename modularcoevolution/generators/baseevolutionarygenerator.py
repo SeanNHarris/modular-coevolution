@@ -81,6 +81,10 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     _shared_objective_map: dict[str, str]
     """A mapping from shared objective names to their original objective names.
         Only used if :attr:`competitive_fitness_sharing` is True."""
+    top_sampling_size: int
+    """If greater than zero, add this many of the top-sorted individuals from the previous generation
+    to the set of mandatory opponents.
+    Primarily intended for :class:`.NSGAIIGenerator`, but implemented here as it's technically applicable anywhere."""
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
@@ -104,6 +108,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             past_population_width: int = -1,
             competitive_fitness_sharing: bool = False,
             shared_sampling_size: int = -1,
+            top_sampling_size: int = -1,
     ):
         """
 
@@ -171,6 +176,9 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         if shared_sampling_size > 0 and not competitive_fitness_sharing:
             raise ValueError("Shared sampling requires competitive fitness sharing to be enabled.")
         self._shared_objective_map = dict()
+        self.top_sampling_size = top_sampling_size
+        if self.top_sampling_size > self.past_population_width:
+            raise ValueError("Top sampling size cannot exceed the past population width, as not enough individuals will be stored.")
 
         population_set = set()
         for i in range(self.initial_size):
@@ -250,6 +258,9 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             mandatory_list.extend(genotype.id for genotype in self.hall_of_fame)
         if self.shared_sampling_size > 0 and self.generation > 0:
             mandatory_list.extend(self._construct_shared_sample(self.shared_sampling_size))
+        if self.top_sampling_size > 0 and self.generation > 0:
+            # Use `force` to ensure the desired size is always provided.
+            mandatory_list.extend(self.get_representatives_from_generation(self.generation - 1, self.top_sampling_size, force=True))
         return mandatory_list
 
     def submit_evaluation(
