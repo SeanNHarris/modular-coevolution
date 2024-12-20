@@ -74,7 +74,7 @@ def load_run_data(run_folder, last_generation=False, load_only: Sequence[str] = 
 
 
 def load_experiment_data(experiment_folder, last_generation=False, load_only: Sequence[str] = None, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
-    run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
+    run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
     # Get folders of the form 'Run #', sorted by their number
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
     run_folders.sort(key=lambda folder: int(folder.split(' ')[-1]))
@@ -100,7 +100,7 @@ def load_experiment_definition(
         experiment_type: type[BaseExperiment],
         override_parameters: dict = None
 ) -> BaseExperiment:
-    run_folders = [folder.path for folder in os.scandir(f'Logs/{experiment_folder}') if folder.is_dir()]
+    run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
     #return load_run_experiment_definition(run_folders[0], experiment_type)
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
     return load_run_experiment_definition(run_folders[0], experiment_type, override_parameters)

@@ -1,27 +1,12 @@
 # modular-coevolution
-A competitive coevolution library by Sean Harris
+A competitive coevolution library by Sean Harris.
 
-The `modular-coevolution` repository contains general-purpose functions for evolutionary genotypes and agents, as well as the functions which coordinate evolution.
-The main script for running evolution, `CoevolutionDriver.py` is located here.
-An explanation of this repository's subdirectories follows:
+The `modular-coevolution` library contains general-purpose functions for competitive coevolutionary algorithms, including evolutionary genotypes and agents, genetic programming tools, as well as the functions which coordinate evolution and coevolution.
 
-### Evolution
-[`Evolution`](/modularcoevolution/evolution) contains the immediate components needed to run evolution or coevolution. The `Evolution` readme explains the general structure of classes used for evolution.
+Examples and tutorials are provided in the [modular-coevolution-examples](https://github.com/SeanNHarris/modular-coevolution-examples) repository.
 
-### GeneticProgramming
-[`GeneticProgramming`](/modularcoevolution/genotypes/geneticprogramming) contains the `GPTree` class used by all genetic programming trees, and the base class for `GPNode`s.
+## Documentation
 
-### AlternateGenerators
-[`AlternateGenerators`](/modularcoevolution/alternategenerators) contains some alternative genotype generators to the standard `EvolutionGenerator`.
-
-### AlternateGenotypes
-[`AlternateGenotypes`](/modularcoevolution/alternategenotypes) contains genotypes other than the standard `GPTree`, including the basic `LinearGenotype`, and `MultipleGenotype` which can contain a set of other genotypes.
-
-### Diversity
-[`Diversity`](/modularcoevolution/genotypes/diversity) contains functions related to population diversity and novelty calculation.
-
-### Postprocessing
-[`Postprocessing`](/modularcoevolution/postprocessing) contains data postprocessing functions to be run on log files, such as generating CIAO/master tournament plots.
-
-### Utilities
-[`Utilities`](/modularcoevolution/utilities) contains miscellaneous helper functions for things like debugging.
+The documentation for this project is currently not deploying properly, so until that is fixed,
+please reference the provided docstrings in the code, and the examples in the `modular-coevolution-examples` repository.
+Sorry for the inconvenience.
