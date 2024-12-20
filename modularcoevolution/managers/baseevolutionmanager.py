@@ -16,7 +16,7 @@ class BaseEvolutionManager(metaclass=abc.ABCMeta):
 
         if log_subfolder != "" and not log_subfolder.startswith("/"):
             log_subfolder = "/" + log_subfolder
-        self.log_path = "Logs" + log_subfolder
+        self.log_path = "logs" + log_subfolder
 
         if not os.path.exists(self.log_path):
             os.makedirs(self.log_path)

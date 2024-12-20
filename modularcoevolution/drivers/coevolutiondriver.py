@@ -204,9 +204,9 @@ class CoevolutionDriver:
         #         generator.register_metric(metric_configuration, metric_function)
 
         if log_subfolder != '' and not log_subfolder.startswith('/'):
-            log_path = f'Logs/{log_subfolder}'
+            log_path = f'logs/{log_subfolder}'
         else:
-            log_path = f'Logs{log_subfolder}'
+            log_path = f'logs{log_subfolder}'
 
         os.makedirs(log_path, exist_ok=True)
         data_collector.set_experiment_parameters(run_parameters)
