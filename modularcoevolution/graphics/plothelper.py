@@ -9,6 +9,11 @@ from matplotlib import pyplot
 from modularcoevolution.postprocessing import postprocessingutils
 from modularcoevolution.utilities.datacollector import DataSchema
 
+try:
+    import readline  # readline doesn't seem to work on Windows?
+except ImportError:
+    readline = None
+
 
 def load_generational_data(experiment_path: str, run_number: int = None):
     if run_number is None:
@@ -291,14 +296,40 @@ def export_csv_generational(
 def interactive_plot_generational():
     matplotlib.use('TkAgg')
 
+    if readline is not None:
+        # Auto-complete keys?
+        def completer(text: str, state: int):
+            # print(f"Text: {text}, State: {state}")
+            head, tail = os.path.split(text)
+            # print(f"Head: {head}, Tail: {tail}")
+            current_path = os.path.join("logs", head)
+            try:
+                options = os.listdir(current_path)
+            except FileNotFoundError:
+                options = []
+            # print(f"Options: {options}")
+            matches = [key for key in options if key.startswith(tail)]
+            # print(f"Matches: {matches}")
+            if state < len(matches):
+                return os.path.join(head, matches[state]) + "/"
+            else:
+                return None
+
+        readline.set_completer(completer)
+        readline.set_completer_delims("")
+        readline.parse_and_bind("tab: complete")
+
     experiment_path = None
     while experiment_path is None:
-        experiment_path = input("Input the experiment folder path: ")
+        experiment_path = input("Input the experiment folder path within the logs folder:\n")
         try:
             run_folders = postprocessingutils.get_run_folders(experiment_path)
         except FileNotFoundError:
             print("Experiment folder not found. Ensure that you are executing this script from the project root.")
             experiment_path = None
+
+    if readline is not None:
+        readline.set_completer()
 
     first_run = os.path.basename(run_folders[0])
     last_run = os.path.basename(run_folders[-1])
@@ -321,6 +352,21 @@ def interactive_plot_generational():
     print("Available keys:")
     print("\n".join(plottable_keys))
 
+    if readline is not None:
+        # Auto-complete keys?
+        def completer(text: str, state: int):
+            # quote_position = max(text.rfind('"'), text.rfind("'"))
+            # text_past_quote = text[(quote_position + 1):]  # If there is no quote, quote_position is -1, so this works
+            matches = [key for key in plottable_keys if key.startswith(text)]
+            if state < len(matches):
+                return matches[state]
+            else:
+                return None
+
+        readline.set_completer(completer)
+        readline.set_completer_delims("\"'")
+        readline.parse_and_bind("tab: complete")
+
     keys = None
     while keys is None:
         key_input = input("Input the keys to plot, or type 'help' for more information:\n")
@@ -333,6 +379,8 @@ def interactive_plot_generational():
             keys = ast.literal_eval(key_input)
         except (ValueError, SyntaxError) as error:
             print(f"Invalid input: {error}")
+            if len(key_input) >= 1 and key_input[0] != '[':
+                print("Note: lists of keys need to be enclosed in [brackets].")
             if len(key_input) >= 3 and (key_input[0] not in ('"', "'") or key_input[1] not in ('"', "'") or key_input[2] not in ('"', "'")):
                 print("Note: keys should be enclosed in quotes.")
             continue
@@ -355,6 +403,9 @@ def interactive_plot_generational():
                 print(f"Key '{key}' is invalid.")
                 keys = None
                 continue
+
+    if readline is not None:
+        readline.set_completer()
 
     skip = input("Use the default plot settings? (Y/n): ")
     if skip.lower() == "n":
