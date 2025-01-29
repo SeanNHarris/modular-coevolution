@@ -1,4 +1,6 @@
 import ast
+import csv
+import os.path
 from typing import Any
 
 import matplotlib.axes
@@ -133,6 +135,7 @@ def plot_generational(
         key_aliases: dict[str, str] = None,
         subplots_kwargs: dict[str, Any] = None,
         show_plot: bool = True,
+        save_filename: str = None,
 ):
     """
     Automatically plot one or more metrics over time from the provided experiment data.
@@ -152,6 +155,7 @@ def plot_generational(
             `.` and `-` are special characters for keys and need to be escaped in the values.
         subplots_kwargs: Additional kwargs to pass to `pyplot.subplots`.
         show_plot: If true, will call `pyplot.show()` after generating the plot.
+        save_filename: If provided, will save the plot and export the data to the specified filename.
 
     Returns: A tuple containing the figure and list of axes.
     """
@@ -197,6 +201,16 @@ def plot_generational(
     if title is not None:
         figure.suptitle(title)
     figure.tight_layout()
+
+    if save_filename is not None:
+        long_save_filename = os.path.join("logs", experiment_path, save_filename)
+        plot_filename = long_save_filename + ".png"
+        print(f"Saving plot to {plot_filename}")
+        figure.savefig(plot_filename)
+
+        csv_filename = long_save_filename + ".csv"
+        print(f"Exporting data to {csv_filename}")
+        export_csv_generational(experiment_data, data_keys, csv_filename)
 
     if show_plot:
         pyplot.show()
@@ -249,23 +263,49 @@ def plot_generational_subplot(
         axes.legend()
 
 
+def export_csv_generational(
+        experiment_data: dict[str, DataSchema],
+        keys: list[str] | list[list[str]],
+        output_path: str,
+):
+    with open(output_path, 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+
+        if isinstance(keys[0], list):
+            keys = [key for sub_list in keys for key in sub_list]
+
+        for key in keys:
+            key_parts = key.split('.')
+            population_name = key_parts[0]
+            for run_name, run_data in experiment_data.items():
+                generation_data = run_data['generations'][population_name]
+                generations = [int(generation) for generation in generation_data.keys()]
+                generation_values = [access_key(run_data, generation, key) for generation in generations]
+
+                short_run_name = run_name.split('\\')[-1]
+                short_run_name = short_run_name.split('/')[-1]
+
+                csvwriter.writerow([key, short_run_name] + generation_values)
+
+
 def interactive_plot_generational():
-    import readline
     matplotlib.use('TkAgg')
 
     experiment_path = None
     while experiment_path is None:
-        experiment_path = input("Input the experiment folder path:\n")
+        experiment_path = input("Input the experiment folder path:")
         try:
             run_folders = postprocessingutils.get_run_folders(experiment_path)
         except FileNotFoundError:
             print("Experiment folder not found. Ensure that you are executing this script from the project root.")
             experiment_path = None
 
-    print(f"Available runs: {run_folders[0]} - {run_folders[-1]}")
+    first_run = os.path.basename(run_folders[0])
+    last_run = os.path.basename(run_folders[-1])
+    print(f"Available runs: {first_run} - {last_run}")
     run_number = -1
     while run_number == -1:
-        run_number = input("Input the run number to plot, or leave blank to plot all runs:\n")
+        run_number = input("Input the run number to plot, or leave blank to plot all runs:")
         if run_number == '':
             run_number = None
         else:
@@ -293,6 +333,9 @@ def interactive_plot_generational():
             keys = ast.literal_eval(key_input)
         except (ValueError, SyntaxError) as error:
             print(f"Invalid input: {error}")
+            if len(key_input) >= 3 and (key_input[0] not in ('"', "'") or key_input[1] not in ('"', "'") or key_input[2] not in ('"', "'")):
+                print("Note: keys should be enclosed in quotes.")
+            continue
 
         key_set = set()
         if isinstance(keys, str):
@@ -316,12 +359,12 @@ def interactive_plot_generational():
     skip = input("Use the default plot settings? (Y/n): ")
     if skip.lower() == "n":
         title = input("Input the plot title: ")
-        subplot_titles = input("Input the subplot titles, separated by commas: ").split(',')
-        subplot_ylabels = input("Input the subplot y-axis labels, separated by commas: ").split(',')
+        subplot_titles = input("Input the subplot titles, separated by commas:").split(',')
+        subplot_ylabels = input("Input the subplot y-axis labels, separated by commas:").split(',')
 
         key_aliases = None
         while key_aliases is None:
-            key_aliases = input("Input key aliases as a dictionary string (or leave empty to skip):\n")
+            key_aliases = input("Input key aliases as a dictionary string (or leave empty to skip):")
             if key_aliases != "":
                 try:
                     key_aliases = ast.literal_eval(key_aliases)
@@ -337,6 +380,10 @@ def interactive_plot_generational():
         subplot_ylabels = None
         key_aliases = None
 
+    save_filename = input("Input a filename to save the plot and data, or press Enter to skip saving:")
+    if save_filename == "":
+        save_filename = None
+
     plot_generational(
         experiment_path,
         keys,
@@ -345,7 +392,8 @@ def interactive_plot_generational():
         subplot_titles=subplot_titles,
         subplot_ylabels=subplot_ylabels,
         key_aliases=key_aliases,
-        show_plot=True
+        show_plot=True,
+        save_filename=save_filename
     )
 
 
