@@ -77,7 +77,7 @@ def random_opponent_analysis(
         print("Reducing to best random individuals...")
         reduce_random_populations(experiment, random_generators, team_multiplicity=1, parallel=parallel, evaluation_pool=evaluation_pool)
     result_archives = {population_name: [] for population_name in experiment.population_names()}
-    for generation, archive_dictionary in enumerate(archive_generators):
+    for generation, archive_dictionary in archive_generators.items():
         print(f"Evaluating generation {generation}...")
         archive_populations = [archive_dictionary[population_name] for population_name in experiment.population_names()]
         evaluate_generation(experiment, archive_populations, random_generators, repeat_evaluations=repeat_evaluations, parallel=parallel, evaluation_pool=evaluation_pool)

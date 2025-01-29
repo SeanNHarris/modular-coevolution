@@ -19,8 +19,8 @@ class GenerationData(TypedDict):
     """A dictionary storing the data for a single generation in a generator."""
     individual_ids: Sequence[GenotypeID]
     """An ordered list of the genotype IDs of the individuals in this generation. Order is up to the generator."""
-    objective_statistics: dict[str, Any]
-    """Aggregate statistics about the objectives of the individuals in this generation. Keyed by metric name."""
+    metric_statistics: dict[str, Any]
+    """Aggregate statistics about the metrics of the individuals in this generation. Keyed by metric name."""
     population_metrics: dict[str, Any]
     """Additional metrics about the entire population which aren't directly derived from individual metrics."""
 
@@ -55,8 +55,9 @@ class DataSchema(TypedDict):
     """Top-level schema for the data stored by a :class:`DataCollector` object."""
     experiment: ExperimentData
     """Stores overall data for the experiment."""
-    generations: dict[str, dict[int, GenerationData]]
-    """A nested dictionary of generation data, indexed by population name and generation number."""
+    generations: dict[str, dict[str, GenerationData]]
+    """A nested dictionary of generation data, indexed by population name and generation number.
+    Note that the generation number is a string, not an integer (but can be converted to an integer)."""
     individuals: dict[str, dict[GenotypeID, IndividualData]]  # Indexed by population name
     """A nested dictionary of individual data, indexed by population name and genotype ID."""
     evaluations: dict[EvaluationID, EvaluationData]
@@ -293,6 +294,34 @@ class DataCollector:
             return
         files.sort(key=lambda file: int("".join(filter(str.isdigit, file.name))))
         self.load_from_file(files[-1].path, load_only=load_only)
+
+    def load_generation(self, pathname, generation: int, load_only: Sequence[str] = None) -> None:
+        """
+        Load a specific generation of data from a previously logged experiment to the current data collector.
+        Args:
+            pathname: The path of the directory to load from.
+            generation: The generation number to load.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
+        """
+        files = [file for file in os.scandir(pathname) if file.is_file()]
+        if len(files) == 1 and generation != 0:
+            raise ValueError("Can not load a specific generation from a single-file log.")
+        for file in files:
+            if str(generation) in file.name:
+                self.load_from_file(file.path, load_only=load_only)
+                return
+        raise FileNotFoundError(f"Log for generation {generation} is not present in {pathname}.")
+
+    def load_generations(self, pathname, generations: Sequence[int], load_only: Sequence[str] = None) -> None:
+        """
+        Load specific generations of data from a previously logged experiment to the current data collector.
+        Args:
+            pathname: The path of the directory to load from.
+            generations: A list of generation numbers to load.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
+        """
+        for generation in generations:
+            self.load_generation(pathname, generation, load_only=load_only)
 
     def __getstate__(self):
         return self.__dict__.copy()

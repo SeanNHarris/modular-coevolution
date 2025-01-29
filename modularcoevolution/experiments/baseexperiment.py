@@ -307,7 +307,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         else:
             result_iterator = map(evaluate, agent_groups)
 
-        if tqdm is not None and len(agent_groups) > 100:
+        if tqdm is not None and len(agent_groups) > 1:
             result_iterator = tqdm.tqdm(result_iterator, total=len(agent_groups), desc="Running evaluations", unit="evals", smoothing=0.0)
 
         try:

@@ -73,11 +73,16 @@ def load_run_data(run_folder, last_generation=False, load_only: Sequence[str] = 
     return data_collector.data
 
 
-def load_experiment_data(experiment_folder, last_generation=False, load_only: Sequence[str] = None, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
+def get_run_folders(experiment_folder):
     run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
     # Get folders of the form 'Run #', sorted by their number
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
     run_folders.sort(key=lambda folder: int(folder.split(' ')[-1]))
+    return run_folders
+
+
+def load_experiment_data(experiment_folder, last_generation=False, load_only: Sequence[str] = None, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
+    run_folders = get_run_folders(experiment_folder)
 
     if run_numbers is not None:
         run_folders = [run_folders[i] for i in run_numbers]
@@ -218,8 +223,9 @@ def load_generational_representatives(
     run_data: DataSchema,
     experiment_definition: BaseExperiment,
     limit_populations: Sequence[str] = None,
-    representative_size: int = -1
-) -> list[dict[str, ArchiveGenerator]]:
+    representative_size: int = -1,
+    generations: Sequence[int] = None
+) -> dict[int, dict[str, ArchiveGenerator]]:
     """
     Load the representatives from each generation of a run into :class:`.ArchiveGenerator` objects.
 
@@ -228,14 +234,17 @@ def load_generational_representatives(
         experiment_definition: The experiment definition used for this run.
         limit_populations: If provided, only the specified populations will be loaded.
         representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+        generations: The generations to load representatives from. If None, all generations will be used.
 
     Returns:
         For each generation, a dictionary mapping population names to archive generators.
     """
-    generations = _get_generation_list(run_data)
-    result = []
+    if generations is None:
+        generations = _get_generation_list(run_data)
+
+    result = {}
     for generation in generations:
-        result.append(load_best_run_individuals(run_data, experiment_definition, limit_populations, representative_size, generation))
+        result[generation] = load_best_run_individuals(run_data, experiment_definition, limit_populations, representative_size, generation)
 
     return result
 
@@ -451,3 +460,20 @@ def compare_experiments(
             run_metrics.append(population_metrics)
         experiment_metrics.append(run_metrics)
     return experiment_metrics
+
+
+def identify_last_generation(pathname: str) -> int:
+    """
+    Identify the last generation from a path to a run's log directory.
+
+    Args:
+        pathname: The path to the run's log directory.
+
+    Returns:
+        int: The last generation number.
+    """
+    data_path = os.path.join(pathname, 'data')
+    files = [file for file in os.scandir(data_path) if file.is_file()]
+    if len(files) == 1:
+        raise ValueError("This function is not supported for run data saved to a single file (i.e. with split_generations=False).")
+    return len(files) - 1
