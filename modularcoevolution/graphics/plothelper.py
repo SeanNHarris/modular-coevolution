@@ -293,7 +293,7 @@ def interactive_plot_generational():
 
     experiment_path = None
     while experiment_path is None:
-        experiment_path = input("Input the experiment folder path:")
+        experiment_path = input("Input the experiment folder path: ")
         try:
             run_folders = postprocessingutils.get_run_folders(experiment_path)
         except FileNotFoundError:
@@ -305,7 +305,7 @@ def interactive_plot_generational():
     print(f"Available runs: {first_run} - {last_run}")
     run_number = -1
     while run_number == -1:
-        run_number = input("Input the run number to plot, or leave blank to plot all runs:")
+        run_number = input("Input the run number to plot, or leave blank to plot all runs: ")
         if run_number == '':
             run_number = None
         else:
@@ -323,7 +323,7 @@ def interactive_plot_generational():
 
     keys = None
     while keys is None:
-        key_input = input("Input the keys to plot, or type 'help' for more information.")
+        key_input = input("Input the keys to plot, or type 'help' for more information:\n")
         if key_input.lower() == 'help':
             print("Input a single key to plot that key. Example: 'attacker.fitness.mean'")
             print("Input a list of keys to plot all keys on a single axes. Example: '[attacker.fitness.mean, attacker.fitness.max]'")
@@ -359,12 +359,12 @@ def interactive_plot_generational():
     skip = input("Use the default plot settings? (Y/n): ")
     if skip.lower() == "n":
         title = input("Input the plot title: ")
-        subplot_titles = input("Input the subplot titles, separated by commas:").split(',')
-        subplot_ylabels = input("Input the subplot y-axis labels, separated by commas:").split(',')
+        subplot_titles = input("Input the subplot titles, separated by commas:\n").split(',')
+        subplot_ylabels = input("Input the subplot y-axis labels, separated by commas:\n").split(',')
 
         key_aliases = None
         while key_aliases is None:
-            key_aliases = input("Input key aliases as a dictionary string (or leave empty to skip):")
+            key_aliases = input("Input key aliases as a dictionary string (or leave empty to skip):\n")
             if key_aliases != "":
                 try:
                     key_aliases = ast.literal_eval(key_aliases)
@@ -380,7 +380,7 @@ def interactive_plot_generational():
         subplot_ylabels = None
         key_aliases = None
 
-    save_filename = input("Input a filename to save the plot and data, or press Enter to skip saving:")
+    save_filename = input("Input a filename to save the plot and data, or press Enter to skip saving:\n")
     if save_filename == "":
         save_filename = None
 
