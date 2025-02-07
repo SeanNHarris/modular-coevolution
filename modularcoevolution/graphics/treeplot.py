@@ -2,6 +2,8 @@
 import warnings
 from typing import Literal
 
+import matplotlib.patches
+import matplotlib.text
 import matplotlib.transforms
 from matplotlib import pyplot
 
@@ -160,6 +162,19 @@ def _third_walk(draw_tree, shift):
         _third_walk(child, shift)
 
 
+class TreePlotData:
+    axes: pyplot.axes
+    sub_axes: list[pyplot.axes]
+    axes_map: dict[GPNode, pyplot.axes]
+    text_scales: dict[pyplot.Text, float]
+
+    def __init__(self, axes: pyplot.axes, axes_map: dict[GPNode, pyplot.axes], text_scales: dict[pyplot.Text, float]):
+        self.axes = axes
+        self.sub_axes = list(axes_map.values())
+        self.axes_map = axes_map
+        self.text_scales = text_scales
+
+
 def plot_tree(
         tree: GPTree,
         axes: pyplot.axes,
@@ -189,9 +204,8 @@ def plot_tree(
     axes.set_aspect(node_aspect)
     axes.autoscale_view()
 
-    update_tree_text(axes, axes_map)
-
-    return axes_map
+    text_scales = _initialize_tree_text(axes, axes_map)
+    return TreePlotData(axes, axes_map, text_scales)
 
 
 def _plot_node(
@@ -213,7 +227,7 @@ def _plot_node(
         node_name = sub_axes.text(0.5, 1.05, draw_node.node.function_id, ha='center', va='bottom', transform=sub_axes.transAxes)
     else:
         node_name = sub_axes.text(0.5, 0.95, draw_node.node.function_id, ha='center', va='top', transform=sub_axes.transAxes)
-    rescale_text(sub_axes, node_name)
+    # rescale_text(sub_axes, node_name)
     sub_axes.axis('off')
     _plot_node_data(draw_node.node, sub_axes)
 
@@ -268,28 +282,44 @@ def _plot_node_data(gp_node: GPNode, axes: pyplot.axes, update=False):
                 axes.texts[1].set_text(gp_node.saved_value)
             case _:
                 axes.texts[1].set_text(str(gp_node.saved_value))
-        for text in axes.texts:
-            rescale_text(axes, text)
+        # for text in axes.texts:
+        #     rescale_text(axes, text)
 
 
-def rescale_text(area, text: pyplot.Text, width_margin: float = 0.1, height_margin: float = 0.1):
+def _scale_text(area, text: pyplot.Text, width_margin: float = 0.1, height_margin: float = 0.1) -> float:
     area_extent = area.get_window_extent()
     text_extent = text.get_window_extent().expanded(1 + width_margin, 1 + height_margin)
     # TODO: Allow scaling up without also scaling text above relative default, somehow
-    scale = min(area_extent.height / text_extent.height, area_extent.width / text_extent.width, 1)
+    scale = min((area_extent.height * 0.25) / text_extent.height, area_extent.width / text_extent.width)
     text.set_size(text.get_size() * scale)
+    return scale
 
 
-def update_tree_text(axes, axes_map: dict[GPNode, pyplot.axes]):
+def _initialize_tree_text(axes, axes_map: dict[GPNode, pyplot.axes]) -> dict[pyplot.Text, float]:
+    text_scales = {}
     axes.figure.draw_without_rendering()
     for sub_axes in axes_map.values():
         for text in sub_axes.texts:
-            rescale_text(sub_axes, text)
+            scale = _scale_text(sub_axes, text)
+            text_scales[text] = scale
+    return text_scales
 
 
-def update_tree_plot(axes_map: dict[GPNode, pyplot.axes]):
-    for node, axes in axes_map.items():
+def update_tree_text(plot_data: TreePlotData):
+    plot_data.axes.figure.draw_without_rendering()
+    new_scales = {}
+    for sub_axes in plot_data.axes_map.values():
+        for text in sub_axes.texts:
+            new_scale = _scale_text(sub_axes, text)
+            new_scales[text] = new_scale
+    # print(f"Old scales: {plot_data.text_scales}")
+    # print(f"New scales: {new_scales}")
+
+
+def update_tree_plot(plot_data: TreePlotData):
+    for node, axes in plot_data.axes_map.items():
         _plot_node_data(node, axes, update=True)
+
 
 def remap_tree(axes_map: dict[GPNode, pyplot.axes], new_tree: GPTree):
     new_axes_map = {}

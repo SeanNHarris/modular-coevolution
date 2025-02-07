@@ -115,39 +115,38 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         """
         pass
 
-    def _create_generators(self) -> Sequence[BaseGenerator]:
-        """Create the generators for each population in the experiment.
+    def create_generator(self, index) -> BaseGenerator:
+        """Create a new generator for a specific population in the experiment.
 
         The default implementation takes parameters from:
         `config['populations'][(population name)]['generator']`,
         `config['populations'][(population name)]['genotype']`, and
         `config['populations'][(population name)]['agent']`
 
+        Args:
+            index: The population index to create a generator for.
+
         Returns:
-            A list containing a :class:`.BaseGenerator` object for each population in order.
+            A :class:`.BaseGenerator` subclass based on the `index`th entry in :meth:`.population_generator_types`.
+            The generator will be configured with parameters from the config file for the associated population name.
         """
-        population_names = self.population_names()
-        agent_types = self.population_agent_types()
-        generator_types = self.population_generator_types()
-        generators = []
-        for index, population_name in enumerate(population_names):
-            population_config = self.config['populations'][population_name]
-            generator_parameters: dict = population_config['generator']
-            genotype_parameters: dict = population_config['genotype']
-            agent_parameters: dict = population_config['agent']
+        population_name = self.population_names()[index]
+        generator_type = self.population_generator_types()[index]
+        agent_type = self.population_agent_types()[index]
 
-            generator_type = generator_types[index]
-            agent_type = agent_types[index]
+        population_config = self.config['populations'][population_name]
+        generator_parameters: dict = population_config['generator']
+        genotype_parameters: dict = population_config['genotype']
+        agent_parameters: dict = population_config['agent']
 
-            generator = generator_type(
-                agent_type,
-                population_name,
-                genotype_parameters=genotype_parameters,
-                agent_parameters=agent_parameters,
-                **generator_parameters
-            )
-            generators.append(generator)
-        return generators
+        generator = generator_type(
+            agent_type,
+            population_name,
+            genotype_parameters=genotype_parameters,
+            agent_parameters=agent_parameters,
+            **generator_parameters
+        )
+        return generator
 
     def _create_manager(self, generators: Sequence[BaseGenerator]) -> BaseEvolutionManager:
         """Create the evolution/coevolution manager for the experiment.
@@ -201,7 +200,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         Returns:
             A :class:`.BaseEvolutionManager` object initialized for the experiment.
         """
-        generators = self._create_generators()
+        generators = [self.create_generator(index) for index in range(len(self.population_names()))]
         expected_names = self.population_names()
         for generator, name in zip(generators, expected_names):
             if generator.population_name != name:
