@@ -1,10 +1,11 @@
 import functools
+import importlib
 import itertools
 import json
 import re
 import warnings
 from functools import partial
-from typing import Type, Sequence
+from typing import Type, Sequence, TypeVar
 
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.drivers import coevolutiondriver
@@ -27,39 +28,48 @@ TRUNCATE = True
 world_kwargs = {}
 
 
-def load_run_experiment_definition(
-        run_folder: str,
-        experiment_type: Type[BaseExperiment],
-        override_parameters: dict = None
-) -> BaseExperiment:
-    '''
-    Initialize an experiment definition object based on the parameters logged for a given run.
-
-    Args:
-        run_folder: The path to the folder for the run.
-        experiment_type: The type of experiment used in the run.
-            This should match the type logged in the parameters.json file.
-        override_parameters: Optional parameters to override the ones loaded from the file.
-
-    Returns:
-        BaseExperiment: The experiment definition object.
-
-    Raises:
-        FileNotFoundError: If the configuration file is not found.
-
-    '''
+def load_run_config(run_folder: str, override_parameters: dict = None) -> dict:
     config_path = f'{run_folder}/parameters.json'
     with open(config_path) as config_file:
         config = json.load(config_file)
+
     if override_parameters:
         deep_update_dictionary(config, override_parameters)
 
-    if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
-        warnings.warn(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
-                      f'match specified experiment_type ({experiment_type.__name__})')
+    return config
 
-    experiment = experiment_type(config)
-    return experiment
+
+class UnspecifiedExperimentError(Exception):
+    ...
+
+
+def get_experiment_type(
+        config: dict,
+        experiment_type: type[BaseExperiment] | str = None,
+        default_module_location: str = 'modularcoevolution.experiments'
+) -> Type[BaseExperiment]:
+    if experiment_type is None:
+        if 'experiment_type' in config:
+            experiment_type_string = config['experiment_type']
+        else:
+            experiment_type_string = None
+    elif isinstance(experiment_type, str):
+        experiment_type_string = experiment_type
+    else:
+        experiment_type_string = None
+
+    if not isinstance(experiment_type, BaseExperiment):
+        if experiment_type_string is not None:
+            if '.' not in experiment_type_string:
+                experiment_type_string = f"{default_module_location}.{experiment_type_string.lower()}.{experiment_type_string}"
+            experiment_type_module, experiment_type_class = experiment_type_string.rsplit('.', 1)
+            try:
+                experiment_type = getattr(importlib.import_module(experiment_type_module), experiment_type_class)
+            except (ModuleNotFoundError, AttributeError):
+                raise UnspecifiedExperimentError(f"Experiment type {experiment_type_string} could not be imported.")
+        else:
+            raise UnspecifiedExperimentError("The config file did not specify an experiment type (and is probably outdated). Please specify an experiment type manually as a parameter to this function.")
+    return experiment_type
 
 
 def load_run_data(run_folder, last_generation=False, load_only: Sequence[str] = None) -> DataSchema:
@@ -100,11 +110,45 @@ def load_experiment_data(experiment_folder, last_generation=False, load_only: Se
     return run_data_files
 
 
+EXPERIMENT = TypeVar('EXPERIMENT', bound=BaseExperiment)
+
+
+def load_run_experiment_definition(
+        run_folder: str,
+        experiment_type: Type[EXPERIMENT],
+        override_parameters: dict = None
+) -> EXPERIMENT:
+    """
+    Initialize an experiment definition object based on the parameters logged for a given run.
+
+    Args:
+        run_folder: The path to the folder for the run.
+        experiment_type: The type of experiment used in the run.
+            This should match the type logged in the parameters.json file.
+        override_parameters: Optional parameters to override the ones loaded from the file.
+
+    Returns:
+        BaseExperiment: The experiment definition object.
+
+    Raises:
+        FileNotFoundError: If the configuration file is not found.
+
+    """
+    config = load_run_config(run_folder, override_parameters)
+
+    if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
+        warnings.warn(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
+                      f'match specified experiment_type ({experiment_type.__name__})')
+
+    experiment = experiment_type(config)
+    return experiment
+
+
 def load_experiment_definition(
         experiment_folder: str,
-        experiment_type: type[BaseExperiment],
+        experiment_type: type[EXPERIMENT],
         override_parameters: dict = None
-) -> BaseExperiment:
+) -> EXPERIMENT:
     run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
     #return load_run_experiment_definition(run_folders[0], experiment_type)
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
@@ -177,24 +221,27 @@ def load_best_run_individuals(
         else:
             population_representative_size = min(representative_size, population_size)
 
-        elites = []
-        if 'front members' in run_data['generations'][population_name][str(generation)]['metric_statistics']:
-            # Multiobjective
-            front = 0
+        # Making sure to copy before sorting
+        individual_ids = list(list(run_data['generations'][population_name].values())[-1]['individual_ids'])
+        metrics = {individual_id: run_data['individuals'][population_name][str(individual_id)]['metrics'] for individual_id in individual_ids}
+        metric_list = list(metrics.values())[0].keys()
 
-            while len(elites) < population_representative_size:
-                front_elites = run_data['generations'][population_name][str(generation)]['metric_statistics']['front members'][front]
-                amount_needed = population_representative_size - len(elites)
-                if amount_needed >= len(front_elites):
-                    elites.extend(front_elites)
+        elites = []
+        if 'front' in metric_list:
+            # Multiobjective
+            def front_comparator(id_1, id_2):
+                front_difference = metrics[id_1]['front'] - metrics[id_2]['front']
+                if front_difference != 0:
+                    return front_difference
                 else:
-                    elites.extend(random.sample(front_elites, amount_needed))
-                front += 1
+                    return -(metrics[id_1]['crowding'] - metrics[id_2]['crowding'])
+
+            individual_ids.sort(key=functools.cmp_to_key(front_comparator))
         else:
             # Single objective
             # The member list is sorted the same way it's sorted in evolution's next generation function, which is more or less fitness
-            generation_members = run_data['generations'][population_name][str(generation)]['individual_ids']
-            elites.extend(generation_members[:min(population_representative_size, len(generation_members))])
+            pass
+        elites.extend(individual_ids[:min(population_representative_size, len(individual_ids))])
 
         population_genotypes = []
         population_original_ids = {}
