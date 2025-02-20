@@ -58,7 +58,7 @@ def get_experiment_type(
     else:
         experiment_type_string = None
 
-    if not isinstance(experiment_type, BaseExperiment):
+    if not isinstance(experiment_type, type) or issubclass(experiment_type, BaseExperiment):
         if experiment_type_string is not None:
             if '.' not in experiment_type_string:
                 experiment_type_string = f"{default_module_location}.{experiment_type_string.lower()}.{experiment_type_string}"
