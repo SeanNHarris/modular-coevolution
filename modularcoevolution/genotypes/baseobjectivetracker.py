@@ -5,7 +5,7 @@ import math
 
 import numpy
 
-from modularcoevolution.utilities.specialtypes import EvaluationID, GenotypeID
+from modularcoevolution.utilities.specialtypes import EvaluationID, GenotypeID, claim_genotype_id
 
 MetricTypes = Union[float, str, list, dict, numpy.ndarray]
 
@@ -76,6 +76,10 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     Other metrics are only logged by the :class:`.DataCollector` or other logging tools.
     """
 
+    id: GenotypeID
+    """The ID associated with this objective tracker. ID values are unique across all objective trackers
+    (assuming no transfer between multiple python processes)."""
+
     metrics: dict[str, MetricTypes]
     """A dictionary of metric values tracked by this individual, by name."""
     metric_statistics: dict[str, MetricStatistics]
@@ -113,6 +117,8 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
+
+        self.id = claim_genotype_id()
         self.reset_objective_tracker()
 
     def reset_objective_tracker(self):
@@ -130,7 +136,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         Args:
             submission: A :class:`.MetricSubmission` describing the metric to submit.
             prevent_recursion: Set to true if this method is being called from a parent :class:`.BaseObjectiveTracker`
-                to prevent infinite recursion.
+                to prevent infinite recursion (such as for submitting to the opponent trackers).
 
         """
         metric = submission['name']
@@ -273,6 +279,17 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         if opponent not in self.opponent_trackers:
             raise KeyError(f"This individual has no evaluations against individual {opponent}.")
         return self.opponent_trackers[opponent].metrics
+
+    def share_metrics_from(self, other: 'BaseObjectiveTracker') -> None:
+        """Shallow-copy all metrics from another objective tracker.
+        Submitted metrics will apply to both trackers.
+        Don't use this with :meth:`.reset_objective_tracker`, as it will break the references."""
+        self.metrics = other.metrics
+        self.metric_statistics = other.metric_statistics
+        self.metric_histories = other.metric_histories
+        self._objective_names = other._objective_names
+        self.evaluation_ids = other.evaluation_ids
+        self.opponent_trackers = other.opponent_trackers
 
 
 def compute_shared_objectives(individuals: list[BaseObjectiveTracker], opponent_id: GenotypeID, objective: str = 'fitness', total: float = 1) -> list[float]:
