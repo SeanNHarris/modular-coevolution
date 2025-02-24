@@ -18,10 +18,6 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
 
     """
 
-    id: GenotypeID
-    """The ID associated with this genotype. ID values are unique across all genotypes (assuming no transfer between
-    multiple python processes)."""
-
     parent_ids: list["GenotypeID"]
     """A list of genotypes used as parents for this one. Could be empty for random genotypes, or have a size
     of 1 for genotypes produced through mutation only."""
@@ -30,7 +26,6 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.id = claim_genotype_id()
 
         self.parent_ids = list()
         self.creation_method = "Parthenogenesis"

@@ -1,3 +1,4 @@
+from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
 from modularcoevolution.utilities.agenttyperegistry import AgentTypeRegistry
 
 from typing import Any, ClassVar
@@ -30,6 +31,28 @@ class BaseAgent(metaclass=AgentTypeRegistry):
     """The agent type name for this specific instance.
     Uses the class-defined agent type name by default, or can be overridden by an argument to :meth:`__init__`.
     """
+
+    @property
+    @abc.abstractmethod
+    def objective_tracker(self) -> BaseObjectiveTracker:
+        """Returns the :class:`.BaseObjectiveTracker` associated with this agent.
+        This is usually a :class:`.BaseGenotype`, but for non-evolving agents it may not be.
+
+        Returns:
+            The objective tracker associated with this agent.
+        """
+
+        ...
+
+    @property
+    def id(self) -> Any:
+        """Returns the ID associated with this agent's objective tracker.
+        ID is unique between objective trackers (e.g. genotypes), but not necessarily between agents.
+
+        Returns:
+            The ID of this agent's objective tracker.
+        """
+        return self.objective_tracker.id
 
     @abc.abstractmethod
     def get_parameters(self) -> dict[str, Any]:

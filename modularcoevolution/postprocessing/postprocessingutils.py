@@ -331,8 +331,8 @@ def round_robin_evaluation(
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]
-            opponents = [opponent.genotype.id for opponent in agents if opponent != agent]
-            generator.submit_evaluation(agent.genotype.id, result[player_index], opponents)
+            opponents = [opponent.id for opponent in agents if opponent != agent]
+            generator.submit_evaluation(agent.id, result[player_index], opponents)
     return results
 
 
@@ -373,8 +373,8 @@ def round_robin_homogenous_evaluation(
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]
-            opponents = [opponent.genotype.id for opponent in agents if opponent != agent]
-            generator.submit_evaluation(agent.genotype.id, result[player_index], opponents)
+            opponents = [opponent.id for opponent in agents if opponent != agent]
+            generator.submit_evaluation(agent.id, result[player_index], opponents)
 
 
 def round_robin_team_evaluation(
@@ -413,8 +413,8 @@ def round_robin_team_evaluation(
     for agents, result in zip(agent_groups, results):
         for player_index, agent in enumerate(agents):
             generator = populations[player_populations[player_index]]
-            opponents = [opponent.genotype.id for opponent in agents if opponent != agent]
-            generator.submit_evaluation(agent.genotype.id, result[player_index], opponents)
+            opponents = [opponent.id for opponent in agents if opponent != agent]
+            generator.submit_evaluation(agent.id, result[player_index], opponents)
 
 
 def compare_experiments_symmetric(experiment_1_populations: list[ArchiveGenerator],

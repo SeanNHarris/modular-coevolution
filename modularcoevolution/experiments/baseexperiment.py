@@ -5,6 +5,7 @@ import multiprocessing
 from functools import partial
 from typing import Sequence, Any, Union, Literal, Callable, Protocol
 
+from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
@@ -371,19 +372,34 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             statistics_file.truncate(0)
             for player_index, agent in enumerate(agent_group):
                 agent_name = agent_names[player_index]
-                statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
+
+                if isinstance(agent, BaseEvolutionaryAgent):
+                    statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
+                else:
+                    statistics_file.write(f'{agent_name}:\nNo genotype\n')
                 for metric_name, metric_value in result[player_index].items():
                     statistics_file.write(f'{metric_name}:\n{metric_value}\n')
                 statistics_file.write('\n')
 
     @staticmethod
-    def set_config_value(config: dict, keys: Sequence[str], value: Any) -> None:
+    def set_config_value(config: dict, keys: Sequence[str], value: Any, overwrite: bool = False, update: bool = False) -> None:
         current_dict = config
         for key in keys[:-1]:
             if key not in current_dict:
                 current_dict[key] = {}
             current_dict = current_dict[key]
-        current_dict[keys[-1]] = value
+
+        if keys[-1] in current_dict:
+            if update:
+                if not isinstance(current_dict[keys[-1]], dict):
+                    raise ValueError(f"Key {'.'.join(keys)} is not a dictionary and cannot be updated.")
+                current_dict[keys[-1]].update(value)
+            elif overwrite:
+                current_dict[keys[-1]] = value
+            else:
+                raise ValueError(f"Key {'.'.join(keys)} already exists, and overwriting was not set.")
+        else:
+            current_dict[keys[-1]] = value
 
 
 

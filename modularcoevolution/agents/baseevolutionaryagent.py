@@ -28,6 +28,10 @@ class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCM
     Initialize this through :meth:`initialize_genotype`.
     """
 
+    @property
+    def objective_tracker(self) -> GenotypeType:
+        return self.genotype
+
     @classmethod
     @abc.abstractmethod
     def genotype_class(cls) -> Type[GenotypeType]:
