@@ -110,8 +110,8 @@ class GPTree(BaseGenotype):
 
         if "return_type" in parameters:
             self.return_type = parameters["return_type"]
-        else:
-            raise TypeError("A return type must be supplied as a parameter.")
+        elif "id_list" not in parameters:
+            raise TypeError("A return_type must be supplied as a parameter if an id_list is not provided.")
 
         if "min_height" in parameters:
             self.min_height = parameters["min_height"]
@@ -169,6 +169,10 @@ class GPTree(BaseGenotype):
 
         if "id_list" in parameters:
             self.root = self._generate_from_list(list(parameters["id_list"]))
+            if "return_type" not in parameters:
+                self.return_type = self.root.output_type
+            elif self.root.output_type != self.return_type:
+                raise ValueError("The supplied id_list does not match the required return_type.")
         else:
             height = random.randint(self.min_height, self.max_height)
             self.root = self.random_subtree(height, self.return_type)
