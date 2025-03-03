@@ -5,7 +5,7 @@ import json
 import re
 import warnings
 from functools import partial
-from typing import Type, Sequence, TypeVar
+from typing import Type, Sequence, TypeVar, Any
 
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.drivers import coevolutiondriver
@@ -29,6 +29,16 @@ world_kwargs = {}
 
 
 def load_run_config(run_folder: str, override_parameters: dict = None) -> dict:
+    """
+    Load the configuration parameters logged for a run from the parameters.json file.
+
+    Args:
+        run_folder: The path to the run folder.
+        override_parameters: Optional parameters to override the ones loaded from the file.
+
+    Returns:
+        A dictionary containing the configuration parameters, as if loaded from the original config file.
+    """
     config_path = f'{run_folder}/parameters.json'
     with open(config_path) as config_file:
         config = json.load(config_file)
@@ -45,45 +55,88 @@ class UnspecifiedExperimentError(Exception):
 
 def get_experiment_type(
         config: dict,
-        experiment_type: type[BaseExperiment] | str = None,
+        experiment_type_string: str = None,
         default_module_location: str = 'modularcoevolution.experiments'
 ) -> Type[BaseExperiment]:
-    if experiment_type is None:
-        if 'experiment_type' in config:
-            experiment_type_string = config['experiment_type']
-        else:
-            experiment_type_string = None
-    elif isinstance(experiment_type, str):
-        experiment_type_string = experiment_type
-    else:
-        experiment_type_string = None
+    """
+    Infer and import the experiment type specified in the given configuration file.
+    Includes fallback options for old-style config files that omit this information.
 
-    if not isinstance(experiment_type, type) or issubclass(experiment_type, BaseExperiment):
-        if experiment_type_string is not None:
-            if '.' not in experiment_type_string:
-                experiment_type_string = f"{default_module_location}.{experiment_type_string.lower()}.{experiment_type_string}"
-            experiment_type_module, experiment_type_class = experiment_type_string.rsplit('.', 1)
-            try:
-                experiment_type = getattr(importlib.import_module(experiment_type_module), experiment_type_class)
-            except (ModuleNotFoundError, AttributeError):
-                raise UnspecifiedExperimentError(f"Experiment type {experiment_type_string} could not be imported.")
-        else:
-            raise UnspecifiedExperimentError("The config file did not specify an experiment type (and is probably outdated). Please specify an experiment type manually as a parameter to this function.")
+    Args:
+        config: The loaded configuration dictionary.
+        experiment_type_string: A string specifying the experiment type to use if it is not specified in the config.
+        default_module_location: A default module location to use if the experiment type string is not fully qualified.
+            This is intended for use with manual input; the config file should always specify the full module path.
+
+    Returns:
+        A subclass of :class:`BaseExperiment` corresponding to the config file or the provided string.
+
+    Raises:
+        UnspecifiedExperimentError: If the experiment type is not specified in the config or as a parameter.
+    """
+    if 'experiment_type' in config:
+        config_experiment_type = config['experiment_type']
+        if experiment_type_string is not None and config_experiment_type != experiment_type_string:
+            warnings.warn(f"Using the experiment type specified in the config file ({config_experiment_type}), which differs from the type specified as a parameter ({experiment_type_string}).")
+        experiment_type_string = config_experiment_type
+
+    if experiment_type_string is not None:
+        if '.' not in experiment_type_string:
+            experiment_type_string = f"{default_module_location}.{experiment_type_string.lower()}.{experiment_type_string}"
+        experiment_type_module, experiment_type_class = experiment_type_string.rsplit('.', 1)
+        try:
+            experiment_type = getattr(importlib.import_module(experiment_type_module), experiment_type_class)
+        except (ModuleNotFoundError, AttributeError):
+            raise UnspecifiedExperimentError(f"Experiment type {experiment_type_string} could not be imported.")
+    else:
+        raise UnspecifiedExperimentError("The config file did not specify an experiment type (and is probably outdated). Please specify an experiment type manually as a parameter to this function.")
     return experiment_type
 
 
-def load_run_data(run_folder, last_generation=False, load_only: Sequence[str] = None) -> DataSchema:
+def load_run_data(
+        run_folder: str,
+        last_generation: bool = False,
+        generations: Sequence[int] = None,
+        load_only: Sequence[str] = None
+) -> DataSchema:
+    """
+    Load the logged :class:`DataCollector` data for a specific run.
+
+    Args:
+        run_folder: The path to the run folder.
+        last_generation: If true, only the last generation will be loaded.
+        generations: A list of specific generations to load. Cannot be used with `last_generation`.
+        load_only: A list of specific sub-dictionaries to load from the logged data. If None, everything will be loaded.
+
+    Returns:
+        A dictionary of loaded data in the format used by the :class:`DataCollector`.
+    """
+    if generations is not None and last_generation:
+        raise ValueError("Can't set both \"last_generation\" and \"generations\" parameters.")
+
     data_path = f'{run_folder}/data'
     print(f'Reading experiment run data from {data_path}')
     data_collector = DataCollector()
     if last_generation:
         data_collector.load_last_generation(data_path, load_only=load_only)
+    elif generations:
+        data_collector.load_generations(data_path, generations, load_only=load_only)
     else:
         data_collector.load_directory(data_path, load_only=load_only)
     return data_collector.data
 
 
-def get_run_folders(experiment_folder):
+def get_run_folders(experiment_folder: str) -> list[str]:
+    """
+    Get a list of run folders within a given experiment folder.
+    Only includes folders of the form `Run #`, sorted by run number.
+
+    Args:
+        experiment_folder: The path to the experiment folder within the logs directory.
+
+    Returns:
+        A list of paths to the run folders within `experiment_folder`.
+    """
     run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
     # Get folders of the form 'Run #', sorted by their number
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
@@ -91,22 +144,44 @@ def get_run_folders(experiment_folder):
     return run_folders
 
 
-def load_experiment_data(experiment_folder, last_generation=False, load_only: Sequence[str] = None, parallel=True, run_numbers=None) -> dict[str, DataSchema]:
+def load_experiment_data(
+        experiment_folder: str,
+        last_generation: bool = False,
+        generations: Sequence[int] = None,
+        load_only: Sequence[str] = None,
+        parallel: bool = True,
+        run_numbers: Sequence[int] = None
+) -> dict[str, DataSchema]:
+    """
+    Load the logged :class:`DataCollector` data for all runs within a given experiment folder.
+
+    Args:
+        experiment_folder: The path to the experiment folder within the logs directory.
+        last_generation: If true, only the last generation will be loaded.
+        generations: A list of specific generations to load. Cannot be used with `last_generation`.
+        load_only: A list of specific sub-dictionaries to load from the logged data. If None, everything will be loaded.
+        parallel: If true, each run will be loaded in parallel.
+        run_numbers: A list of specific run numbers to load. If None, all runs will be loaded.
+
+    Returns:
+        A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
+    """
     run_folders = get_run_folders(experiment_folder)
 
     if run_numbers is not None:
         run_folders = [run_folders[i] for i in run_numbers]
 
+    load_run_data_partial = partial(load_run_data, last_generation=last_generation, generations=generations, load_only=load_only)
+
     if parallel:
         pool = parallelutils.create_pool()
-        load_run_data_partial = partial(load_run_data, last_generation=last_generation, load_only=load_only)
         data_files = pool.map(load_run_data_partial, run_folders)
         pool.close()
         pool.join()
         run_data_files = {_get_run_name(run_folder): data_file for run_folder, data_file in
                           zip(run_folders, data_files)}
     else:
-        run_data_files = {_get_run_name(run_folder): load_run_data(run_folder, last_generation, load_only) for run_folder in run_folders}
+        run_data_files = {_get_run_name(run_folder): load_run_data_partial(run_folder) for run_folder in run_folders}
     return run_data_files
 
 
@@ -115,26 +190,30 @@ EXPERIMENT = TypeVar('EXPERIMENT', bound=BaseExperiment)
 
 def load_run_experiment_definition(
         run_folder: str,
-        experiment_type: Type[EXPERIMENT],
+        experiment_type: Type[EXPERIMENT] = None,
         override_parameters: dict = None
 ) -> EXPERIMENT:
     """
-    Initialize an experiment definition object based on the parameters logged for a given run.
+    Initialize a :class:`BaseExperiment` subclass based on the parameters logged for a given run.
 
     Args:
         run_folder: The path to the folder for the run.
         experiment_type: The type of experiment used in the run.
             This should match the type logged in the parameters.json file.
+            If None, the experiment type will be inferred from the parameters.json file.
         override_parameters: Optional parameters to override the ones loaded from the file.
 
     Returns:
-        BaseExperiment: The experiment definition object.
+        The initialized experiment object.
 
     Raises:
-        FileNotFoundError: If the configuration file is not found.
-
+        FileNotFoundError: If the run folder or its `parameters.json` file could not be found.
+        UnspecifiedExperimentError: If the experiment type is not specified in the loaded config file or as a parameter.
     """
     config = load_run_config(run_folder, override_parameters)
+
+    if experiment_type is None:
+        experiment_type = get_experiment_type(config)
 
     if 'experiment_type' in config['experiment'] and config['experiment']['experiment_type'] != experiment_type.__name__:
         warnings.warn(f'Experiment type in parameters.json ({config["experiment"]["experiment_type"]}) does not '
@@ -146,20 +225,38 @@ def load_run_experiment_definition(
 
 def load_experiment_definition(
         experiment_folder: str,
-        experiment_type: type[EXPERIMENT],
+        experiment_type: type[EXPERIMENT] = None,
         override_parameters: dict = None
 ) -> EXPERIMENT:
+    """
+    Initialize a :class:`BaseExperiment` subclass based on the parameters logged for a given experiment.
+    Uses the parameters from the first run in the experiment folder.
+
+    Args:
+        experiment_folder: The path to the experiment folder within the logs directory.
+        experiment_type: The type of experiment used in the run.
+            This should match the type logged in the parameters.json file.
+            If None, the experiment type will be inferred from the parameters.json file.
+        override_parameters: Optional parameters to override the ones loaded from the file.
+
+    Returns:
+        The initialized experiment object.
+
+    Raises:
+        FileNotFoundError: If the experiment folder or the first run's `parameters.json` file could not be found.
+        UnspecifiedExperimentError: If the experiment type is not specified in the loaded config file or as a parameter.
+    """
     run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
     #return load_run_experiment_definition(run_folders[0], experiment_type)
     run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
     return load_run_experiment_definition(run_folders[0], experiment_type, override_parameters)
 
 
-def _get_run_name(run_folder):
+def _get_run_name(run_folder: str) -> str:
     return str(run_folder).split('/')[-1]
 
 
-def _get_generation_list(run_data: DataSchema):
+def _get_generation_list(run_data: DataSchema) -> list[int]:
     population_name = run_data['generations'].keys().__iter__().__next__()
     return [int(generation) for generation in run_data['generations'][population_name].keys()]
 
@@ -178,13 +275,13 @@ def load_best_run_individuals(
     Parameters:
         run_data: The run data containing information about the generations.
         experiment_definition: The experiment definition used for this run.
-        limit_populations: If provided, only the specified populations will be loaded.
+        limit_populations: If provided, only the specified population names will be loaded.
         representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
         generation: The generation to load the individuals from. If -1, the last generation will be used.
         load_metrics: Whether to populate individuals' objective trackers with their metric data from the logs.
 
     Returns:
-        dict[str, ArchiveGenerator]: A dictionary mapping population names to archive generators.
+        A dictionary mapping population names to archive generators containing the loaded individuals.
 
     Raises:
         ValueError: If a population name is not found in the experiment definition.
@@ -279,12 +376,12 @@ def load_generational_representatives(
     Parameters:
         run_data: The run data containing information about the generations.
         experiment_definition: The experiment definition used for this run.
-        limit_populations: If provided, only the specified populations will be loaded.
+        limit_populations: If provided, only the specified population names will be loaded.
         representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
         generations: The generations to load representatives from. If None, all generations will be used.
 
     Returns:
-        For each generation, a dictionary mapping population names to archive generators.
+        For each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
     if generations is None:
         generations = _get_generation_list(run_data)
@@ -294,6 +391,37 @@ def load_generational_representatives(
         result[generation] = load_best_run_individuals(run_data, experiment_definition, limit_populations, representative_size, generation)
 
     return result
+
+
+def easy_load_experiment_results(
+        experiment_folder: str,
+        run_numbers: Sequence[int] = None,
+        limit_populations: Sequence[str] = None,
+        representative_size: int = -1,
+        generations: Sequence[int] = None,
+        override_parameters: dict = None
+) -> tuple[BaseExperiment, dict[str, DataSchema], dict[int, dict[str, ArchiveGenerator]]]:
+    """
+    Load the experiment definition, logged data, and population archives from a given experiment folder.
+
+    Args:
+        experiment_folder: The path to the experiment folder within the logs directory.
+        run_numbers: A list of specific run numbers to load. If None, all runs will be loaded.
+        limit_populations: If provided, only the specified population names will be loaded.
+        representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+        generations: The generations to load representatives from. If None, all generations will be used.
+        override_parameters: Optional parameters to override the ones loaded from the file.
+
+    Returns:
+        A tuple containing:
+        - The initialized experiment object.
+        - A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
+        - For each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
+    """
+    experiment = load_experiment_definition(experiment_folder, override_parameters=override_parameters)
+    experiment_data = load_experiment_data(experiment_folder, run_numbers=run_numbers, parallel=True)
+    representatives = load_generational_representatives(experiment_data, experiment, limit_populations, representative_size, generations)
+    return experiment, experiment_data, representatives
 
 
 def round_robin_evaluation(
