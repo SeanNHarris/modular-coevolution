@@ -319,7 +319,7 @@ def load_best_run_individuals(
             population_representative_size = min(representative_size, population_size)
 
         # Making sure to copy before sorting
-        individual_ids = list(list(run_data['generations'][population_name].values())[-1]['individual_ids'])
+        individual_ids = list(list(run_data['generations'][population_name].values())[generation]['individual_ids'])
         metrics = {individual_id: run_data['individuals'][population_name][str(individual_id)]['metrics'] for individual_id in individual_ids}
         metric_list = list(metrics.values())[0].keys()
 
@@ -398,9 +398,10 @@ def easy_load_experiment_results(
         run_numbers: Sequence[int] = None,
         limit_populations: Sequence[str] = None,
         representative_size: int = -1,
+        last_generation: bool = False,
         generations: Sequence[int] = None,
         override_parameters: dict = None
-) -> tuple[BaseExperiment, dict[str, DataSchema], dict[int, dict[str, ArchiveGenerator]]]:
+) -> tuple[BaseExperiment, dict[str, DataSchema], dict[str, dict[int, dict[str, ArchiveGenerator]]]]:
     """
     Load the experiment definition, logged data, and population archives from a given experiment folder.
 
@@ -409,18 +410,20 @@ def easy_load_experiment_results(
         run_numbers: A list of specific run numbers to load. If None, all runs will be loaded.
         limit_populations: If provided, only the specified population names will be loaded.
         representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
-        generations: The generations to load representatives from. If None, all generations will be used.
+        last_generation: If true, only the last generation will be loaded.
+        generations: A list of specific generations to load. If None, all generations will be used.
+            Cannot be used with `last_generation`.
         override_parameters: Optional parameters to override the ones loaded from the file.
 
     Returns:
         A tuple containing:
         - The initialized experiment object.
         - A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
-        - For each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
+        - For each run name, for each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
     experiment = load_experiment_definition(experiment_folder, override_parameters=override_parameters)
-    experiment_data = load_experiment_data(experiment_folder, run_numbers=run_numbers, parallel=True)
-    representatives = load_generational_representatives(experiment_data, experiment, limit_populations, representative_size, generations)
+    experiment_data = load_experiment_data(experiment_folder, run_numbers=run_numbers, last_generation=last_generation, generations=generations, parallel=True)
+    representatives = {run_name: load_generational_representatives(run_data, experiment, limit_populations, representative_size, generations) for run_name, run_data in experiment_data.items()}
     return experiment, experiment_data, representatives
 
 
