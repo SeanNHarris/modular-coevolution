@@ -306,11 +306,8 @@ class DataCollector:
         files = [file for file in os.scandir(pathname) if file.is_file()]
         if len(files) == 1 and generation != 0:
             raise ValueError("Can not load a specific generation from a single-file log.")
-        for file in files:
-            if str(generation) in file.name:
-                self.load_from_file(file.path, load_only=load_only)
-                return
-        raise FileNotFoundError(f"Log for generation {generation} is not present in {pathname}.")
+        files.sort(key=lambda file: int("".join(filter(str.isdigit, file.name))))
+        self.load_from_file(files[generation].path, load_only=load_only)
 
     def load_generations(self, pathname, generations: Sequence[int], load_only: Sequence[str] = None) -> None:
         """
