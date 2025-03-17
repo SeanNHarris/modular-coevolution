@@ -300,11 +300,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         evaluate = self.get_evaluate(**kwargs)
 
         if parallel:
-            evaluation_pool: multiprocessing.Pool = parallelutils.create_pool()
+            evaluation_pool = parallelutils.create_pool()
             chunks = parallelutils.cores_available() * 8
             chunksize = max(1, len(agent_groups) // chunks)
-            result_iterator = evaluation_pool.imap(evaluate, agent_groups, chunksize=chunksize)
+            result_iterator = evaluation_pool.map(evaluate, agent_groups, chunksize=chunksize)
         else:
+            evaluation_pool = None
             result_iterator = map(evaluate, agent_groups)
 
         if tqdm is not None and len(agent_groups) > 1:
@@ -315,14 +316,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             for result in result_iterator:
                 results.append(result)
             if parallel:
-                evaluation_pool.close()
-                evaluation_pool.join()
+                evaluation_pool.shutdown()
             return results
         except KeyboardInterrupt as interrupt:
             # If the user stops execution during evaluations, terminate the pool to kill any remaining processes.
             if parallel:
-                evaluation_pool.terminate()
-                evaluation_pool.join()
+                evaluation_pool.shutdown(wait=False, cancel_futures=True)
             raise interrupt
 
 
