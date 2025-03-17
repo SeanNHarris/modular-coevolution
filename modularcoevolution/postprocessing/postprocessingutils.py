@@ -176,8 +176,7 @@ def load_experiment_data(
     if parallel:
         pool = parallelutils.create_pool()
         data_files = pool.map(load_run_data_partial, run_folders)
-        pool.close()
-        pool.join()
+        pool.shutdown()
         run_data_files = {_get_run_name(run_folder): data_file for run_folder, data_file in
                           zip(run_folders, data_files)}
     else:
@@ -432,7 +431,6 @@ def round_robin_evaluation(
     experiment_definition: BaseExperiment,
     repeat_evaluations: int = 1,
     parallel: bool = False,
-    evaluation_pool = None,
     **kwargs
 ):
     """
@@ -514,7 +512,6 @@ def round_robin_team_evaluation(
     experiment_definition: BaseExperiment,
     repeat_evaluations: int = 1,
     parallel: bool = False,
-    evaluation_pool = None,
     **kwargs
 ):
     """

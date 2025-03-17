@@ -16,7 +16,7 @@ def generate_random(experiment: BaseExperiment, generate_size: int, reduce_size:
     return generators
 
 
-def reduce_random_populations(experiment: BaseExperiment, random_generators: Sequence[RandomGenotypeGenerator], team_multiplicity: int = 1, parallel: bool = False, evaluation_pool = None):
+def reduce_random_populations(experiment: BaseExperiment, random_generators: Sequence[RandomGenotypeGenerator], team_multiplicity: int = 1, parallel: bool = False):
     # Construct teams for each generator
     player_populations = experiment.player_populations()
     population_teams = []
@@ -24,7 +24,7 @@ def reduce_random_populations(experiment: BaseExperiment, random_generators: Seq
         team_size = player_populations.count(population_index)
         population_teams.append(build_teams(generator, team_size, team_multiplicity))
     # Evaluate the teams
-    postprocessingutils.round_robin_team_evaluation(random_generators, population_teams, experiment, parallel=parallel, evaluation_pool=evaluation_pool, analysis=True)
+    postprocessingutils.round_robin_team_evaluation(random_generators, population_teams, experiment, parallel=parallel, analysis=True)
     for generator in random_generators:
         generator.reduce_population()
 
@@ -50,13 +50,12 @@ def evaluate_generation(
         random_generators: Sequence[RandomGenotypeGenerator],
         repeat_evaluations: int = 1,
         parallel: bool = False,
-        evaluation_pool = None
 ) -> None:
     for population_index, archive_population in enumerate(archive_generators):
         # Copy the random generator list and replace one with the archive generator
         generators = list(random_generators)
         generators[population_index] = archive_population
-        postprocessingutils.round_robin_evaluation(generators, experiment, repeat_evaluations=repeat_evaluations, parallel=parallel, evaluation_pool=evaluation_pool, analysis=True)
+        postprocessingutils.round_robin_evaluation(generators, experiment, repeat_evaluations=repeat_evaluations, parallel=parallel, analysis=True)
 
 
 def random_opponent_analysis(
@@ -67,20 +66,17 @@ def random_opponent_analysis(
         random_reduce_size: int = -1,
         repeat_evaluations: int = 1,
         parallel: bool = False,
-        evaluation_pool = None
 ) -> dict[str, list[ArchiveGenerator]]:
-    if parallel and evaluation_pool is None:
-        evaluation_pool = parallelutils.create_pool()
     archive_generators = postprocessingutils.load_generational_representatives(run_data, experiment, representative_size=representative_size)
     random_generators = generate_random(experiment, random_generate_size, random_reduce_size)
     if random_reduce_size > 0 and random_reduce_size < random_generate_size:
         print("Reducing to best random individuals...")
-        reduce_random_populations(experiment, random_generators, team_multiplicity=1, parallel=parallel, evaluation_pool=evaluation_pool)
+        reduce_random_populations(experiment, random_generators, team_multiplicity=1, parallel=parallel)
     result_archives = {population_name: [] for population_name in experiment.population_names()}
     for generation, archive_dictionary in archive_generators.items():
         print(f"Evaluating generation {generation}...")
         archive_populations = [archive_dictionary[population_name] for population_name in experiment.population_names()]
-        evaluate_generation(experiment, archive_populations, random_generators, repeat_evaluations=repeat_evaluations, parallel=parallel, evaluation_pool=evaluation_pool)
+        evaluate_generation(experiment, archive_populations, random_generators, repeat_evaluations=repeat_evaluations, parallel=parallel)
         for population_name, archive_population in archive_dictionary.items():
             result_archives[population_name].append(archive_population)
     return result_archives
