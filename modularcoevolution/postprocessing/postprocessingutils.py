@@ -517,6 +517,7 @@ def round_robin_team_evaluation(
     """
     Evaluate the populations through round-robin evaluations, using fixed teams.
     The resulting objective scores are managed within the archive generators.
+
     Args:
         populations: A list containing the :class:`.ArchiveGenerator` for each population.
         population_teams: For each generator, a list of teams, where each team is a list of genotype IDs.

@@ -207,9 +207,9 @@ class Coevolution:
 
         Todo:
             * Optionally discourage duplicate evaluations, which are useless for deterministic games.
-            The random sorting limits this some already.
-            Still, Duplicate evaluations can be higher than 10% of the total with this method.
-            This could be done by storing multiple candidate groups and selecting the one with the least pairwise overlap.
+                The random sorting limits this some already.
+                Still, Duplicate evaluations can be higher than 10% of the total with this method.
+                This could be done by storing multiple candidate groups and selecting the one with the least pairwise overlap.
 
         """
         groups = []

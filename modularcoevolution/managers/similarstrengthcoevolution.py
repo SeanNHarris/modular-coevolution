@@ -49,16 +49,14 @@ class SimilarStrengthCoevolution(Coevolution, metaclass=ABCMeta):
         super().start_generation()
 
     def next_generation(self):
-        """
-        print("Attacker population:")
-        for attacker in self.current_attackers:
-            objectives = list(self.attacker_generator.get_genotype_with_id(attacker).objectives.values())
-            print(f"{objectives[0]}, {objectives[1]}")
-        print("Defender population:")
-        for defender in self.current_defenders:
-            objectives = list(self.defender_generator.get_genotype_with_id(defender).objectives.values())
-            print(f"{objectives[0]}, {objectives[1]}")
-        """
+        # print("Attacker population:")
+        # for attacker in self.current_attackers:
+        #     objectives = list(self.attacker_generator.get_genotype_with_id(attacker).objectives.values())
+        #     print(f"{objectives[0]}, {objectives[1]}")
+        # print("Defender population:")
+        # for defender in self.current_defenders:
+        #     objectives = list(self.defender_generator.get_genotype_with_id(defender).objectives.values())
+        #     print(f"{objectives[0]}, {objectives[1]}")
         super().next_generation()
 
     def update_objective_range(self, min_objectives, max_objectives):
