@@ -114,6 +114,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         else:
             self.max_novelty = 0
 
+        parent_population = list()
         next_generation = list()
         next_generation_set = set()
         for i in range(self.initial_size):
@@ -121,6 +122,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                 survivor = self.population[i]
             else:
                 survivor = self.population[i].clone()
+            parent_population.append(self.population[i])
             next_generation.append(survivor)
             next_generation_set.add(hash(survivor))
 
@@ -142,9 +144,9 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             failure_count = 0
             while not unique:
                 if recombine:
-                    child = self.generate_recombination()
+                    child = self.generate_recombination(parent_population)
                 else:
-                    child = self.generate_clone()
+                    child = self.generate_clone(parent_population)
 
                 # Special case for self-adaptive mutation rate
                 if isinstance(self.population[0], SelfAdaptiveWrapper):
@@ -201,42 +203,49 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                     best_fitness - worst_fitness):
                 return choice
 
-    def tournament_selection(self, k: int) -> BaseGenotype:
-        """Select an individual from the population using k-tournament selection.
+    def tournament_selection(self, population: list[BaseGenotype], k: int) -> BaseGenotype:
+        """Select an individual from the provided population using k-tournament selection.
         `k` individuals are selected at random from the population, and the one with the highest fitness is returned.
         Results in a very gentle selection pressure with low `k`.
 
         Args:
+            population: The population to select from.
             k: The number of individuals to compare in each tournament.
 
         Returns:
             The selected individual.
         """
-        tournament = random.sample(self.population, k)
+        tournament = random.sample(population, k)
         if self.diversity_weight > 0:
             tournament.sort(key=self.calculate_diversity_fitness, reverse=True)
         else:
             tournament = self.sorted_population(tournament)
         return tournament[0]
 
-    def generate_clone(self) -> BaseGenotype:
+    def generate_clone(self, population: list[BaseGenotype]) -> BaseGenotype:
         """Generate a new individual by cloning a selected parent.
+
+        Args:
+            population: The population to select a parent from.
 
         Returns:
             A new child individual produced through :meth:`BaseGenotype.clone`.
         """
-        parent = self.tournament_selection(self.tournament_size)
+        parent = self.tournament_selection(population, self.tournament_size)
         child = parent.clone()
         return child
 
-    def generate_recombination(self) -> BaseGenotype:
+    def generate_recombination(self, population: list[BaseGenotype]) -> BaseGenotype:
         """Generate a new individual by recombining two selected parents.
+
+        Args:
+            population: The population to select parents from.
 
         Returns:
             A new child individual produced through :meth:`BaseGenotype.recombine`.
         """
-        parent = self.tournament_selection(self.tournament_size)
-        donor = self.tournament_selection(self.tournament_size)
+        parent = self.tournament_selection(population, self.tournament_size)
+        donor = self.tournament_selection(population, self.tournament_size)
         child = parent.clone()
         child.recombine(donor)
         return child
