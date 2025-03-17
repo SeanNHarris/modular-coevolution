@@ -148,10 +148,10 @@ def plot_generational(
     Args:
         experiment_path: The path within the local logs subfolder for the experiment data.
         data_keys: Which keys to plot. If omitted, a list of available keys will be printed.
-            Providing a single key plots that key.
-            Providing a list of keys plots all of those keys on a single axes.
-            Providing a list of lists of keys produces a subplot for each of the inner lists,
-                plotting the keys in that list.
+            - Providing a single key plots that key.
+            - Providing a list of keys plots all of those keys on a single axes.
+            - Providing a list of lists of keys produces a subplot for each of the inner lists,
+            plotting the keys in that list.
         run_number: Which run within the experiment folder to plot. If omitted, all runs will be plotted together.
         title: The suptitle for the plot.
         subplot_titles: A list of titles for the subplots. If omitted, these will be generated from the keys.
