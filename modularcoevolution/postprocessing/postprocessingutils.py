@@ -367,6 +367,7 @@ def load_generational_representatives(
     experiment_definition: BaseExperiment,
     limit_populations: Sequence[str] = None,
     representative_size: int = -1,
+    last_generation: bool = False,
     generations: Sequence[int] = None
 ) -> dict[int, dict[str, ArchiveGenerator]]:
     """
@@ -377,13 +378,17 @@ def load_generational_representatives(
         experiment_definition: The experiment definition used for this run.
         limit_populations: If provided, only the specified population names will be loaded.
         representative_size: How many of the top individuals to load. If -1, all individuals will be loaded.
+        last_generation: If true, only the last generation will be loaded.
         generations: The generations to load representatives from. If None, all generations will be used.
+            Cannot be used with `last_generation`.
 
     Returns:
         For each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
     if generations is None:
         generations = _get_generation_list(run_data)
+    if last_generation:
+        generations = [max(generations)]
 
     result = {}
     for generation in generations:
@@ -421,8 +426,15 @@ def easy_load_experiment_results(
         - For each run name, for each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
     experiment = load_experiment_definition(experiment_folder, override_parameters=override_parameters)
-    experiment_data = load_experiment_data(experiment_folder, run_numbers=run_numbers, last_generation=last_generation, generations=generations, parallel=True)
-    representatives = {run_name: load_generational_representatives(run_data, experiment, limit_populations, representative_size, generations) for run_name, run_data in experiment_data.items()}
+    experiment_data = load_experiment_data(
+        experiment_folder, run_numbers=run_numbers, last_generation=last_generation,
+        generations=generations, parallel=True
+    )
+    representatives = {run_name: load_generational_representatives(
+        run_data, experiment, limit_populations=limit_populations, representative_size=representative_size,
+        last_generation=last_generation, generations=generations
+    ) for run_name, run_data in experiment_data.items()}
+
     return experiment, experiment_data, representatives
 
 
