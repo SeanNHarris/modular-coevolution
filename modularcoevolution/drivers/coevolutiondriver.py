@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import argparse
-import copy
-import itertools
 import tomllib
-from collections.abc import Callable
+import warnings
 from typing import Any, Sequence, TypedDict, Union
 
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.managers.coevolution import EvolutionEndedException, Coevolution
-from modularcoevolution.utilities.datacollector import DataCollector, StringDefaultJSONEncoder
-from modularcoevolution.utilities.agenttyperegistry import AgentTypeRegistry
+from modularcoevolution.postprocessing import postprocessingutils
+from modularcoevolution.utilities.datacollector import DataCollector
 
 import json
 import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
-from modularcoevolution.utilities.dictutils import deep_copy_dictionary, set_config_value
+from modularcoevolution.utilities import dictutils
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
@@ -66,7 +64,7 @@ class CoevolutionDriver:
     """For each run to be performed, the parameters for that run."""
 
     def __init__(self,
-                 experiment_type: type[BaseExperiment],
+                 experiment_type: type[BaseExperiment] | None,
                  config_filename: str,
                  run_amount: int = 30,
                  run_start: int = 0,
@@ -79,6 +77,8 @@ class CoevolutionDriver:
 
         Args:
             experiment_type: The :class:`.BaseExperiment` class defining the current experiment.
+                Can be set to None if the experiment type is defined in the configuration file (as `experiment_type`),
+                with a value giving the full import path to the experiment class.
             config_filename: The filename of the configuration file to use.
             run_amount: The number of runs to perform.
             run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
@@ -124,18 +124,19 @@ class CoevolutionDriver:
             merge_parameters: A dictionary of parameters to merge into the configuration file's parameters.
 
         Returns:
-
-
+            A list containing a dictionary of parameters for each run.
         """
 
         with open(config_filename, 'rb') as config_file:
             base_parameters = tomllib.load(config_file)
 
-        base_parameters['experiment']['experiment_type'] = self.experiment_type.__name__
+        if self.experiment_type is not None:
+            experiment_type_string = f"{self.experiment_type.__module__}.{self.experiment_type.__name__}"
+            dictutils.set_config_value(base_parameters, ('experiment_type',), experiment_type_string, weak=True)
 
         parameters = []
         for i in range(run_start, run_count):
-            run_parameters = deep_copy_dictionary(base_parameters)
+            run_parameters = dictutils.deep_copy_dictionary(base_parameters)
             run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
             for parameter_name, parameter in merge_parameters.items():
                 if isinstance(parameter, dict):
@@ -178,10 +179,22 @@ class CoevolutionDriver:
         else:
             data_collector = None
 
-        config = deep_copy_dictionary(run_parameters)
-        set_config_value(config, ('manager', 'data_collector'), data_collector)
-        set_config_value(config, ('default', 'generator', 'data_collector'), data_collector)
-        experiment = self.experiment_type(config)
+        config = dictutils.deep_copy_dictionary(run_parameters)
+        dictutils.set_config_value(config, ('manager', 'data_collector'), data_collector)
+        dictutils.set_config_value(config, ('default', 'generator', 'data_collector'), data_collector)
+
+        run_experiment_type = self.experiment_type
+        if 'experiment_type' in config:
+            config_experiment_type = postprocessingutils.get_experiment_type(config)
+            if self.experiment_type is None:
+                run_experiment_type = config_experiment_type
+            else:
+                if self.experiment_type != config_experiment_type:
+                    warnings.warn("The experiment type specified in the configuration file does not match the experiment type given to the driver.")
+        if run_experiment_type is None:
+            raise ValueError("No experiment type specified as a parameter or in the configuration file.")
+
+        experiment = run_experiment_type(config)
         coevolution_manager: Coevolution = experiment.create_experiment()
         world_kwargs = {}  # TODO: Determine if this is still needed.
         
@@ -275,3 +288,11 @@ class CoevolutionDriver:
         parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1,
                             help='The rate at which to run exhibition evaluations, e.g. every 5 generations.')
         return parser
+
+
+if __name__ == '__main__':
+    parser = CoevolutionDriver.create_argument_parser()
+    args = parser.parse_args()
+
+    driver = CoevolutionDriver(None, **vars(args))
+    driver.start()
