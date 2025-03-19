@@ -16,6 +16,11 @@ try:
 except ImportError:
     readline = None
 
+try:
+    import tkinter
+except ImportError:
+    tkinter = None
+
 
 def load_generational_data(experiment_path: str, run_number: int = None):
     if run_number is None:
@@ -296,7 +301,8 @@ def export_csv_generational(
 
 
 def interactive_plot_generational():
-    matplotlib.use('TkAgg')
+    if tkinter is not None:
+        matplotlib.use('TkAgg')
 
     try:
         logs_path = fileutils.get_logs_path()

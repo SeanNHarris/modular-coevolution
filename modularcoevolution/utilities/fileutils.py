@@ -67,7 +67,7 @@ def resolve_experiment_path(experiment_path_str: str) -> Path:
     if path.exists():
         return path
 
-    logs_path = Path(get_logs_path())
+    logs_path = Path(get_logs_path(strict=False))  # Non-strict, because we're reading.
     path = logs_path / experiment_path_str
     if path.exists():
         return path
