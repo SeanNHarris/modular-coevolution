@@ -6,7 +6,9 @@ from typing import Any
 import matplotlib.axes
 from matplotlib import pyplot
 
+import modularcoevolution.utilities.fileutils
 from modularcoevolution.postprocessing import postprocessingutils
+from modularcoevolution.utilities import fileutils
 from modularcoevolution.utilities.datacollector import DataSchema
 
 try:
@@ -296,13 +298,15 @@ def export_csv_generational(
 def interactive_plot_generational():
     matplotlib.use('TkAgg')
 
+    logs_path = fileutils.get_logs_path()
+
     if readline is not None:
         # Auto-complete keys?
         def completer(text: str, state: int):
             # print(f"Text: {text}, State: {state}")
             head, tail = os.path.split(text)
             # print(f"Head: {head}, Tail: {tail}")
-            current_path = os.path.join("logs", head)
+            current_path = logs_path / head
             try:
                 options = os.listdir(current_path)
             except FileNotFoundError:
@@ -323,7 +327,7 @@ def interactive_plot_generational():
     while experiment_path is None:
         experiment_path = input("Input the experiment folder path within the logs folder:\n")
         try:
-            run_folders = postprocessingutils.get_run_folders(experiment_path)
+            run_folders = modularcoevolution.utilities.fileutils.get_run_paths(experiment_path)
         except FileNotFoundError:
             print("Experiment folder not found. Ensure that you are executing this script from the project root.")
             experiment_path = None
