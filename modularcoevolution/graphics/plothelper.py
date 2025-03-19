@@ -298,9 +298,12 @@ def export_csv_generational(
 def interactive_plot_generational():
     matplotlib.use('TkAgg')
 
-    logs_path = fileutils.get_logs_path()
+    try:
+        logs_path = fileutils.get_logs_path()
+    except FileNotFoundError:
+        logs_path = None
 
-    if readline is not None:
+    if readline is not None and logs_path is not None:
         # Auto-complete keys?
         def completer(text: str, state: int):
             # print(f"Text: {text}, State: {state}")
