@@ -2,6 +2,7 @@ import abc
 import copy
 import itertools
 import multiprocessing
+import os
 from functools import partial
 from typing import Sequence, Any, Union, Literal, Callable, Protocol
 
@@ -353,7 +354,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             self,
             agents: Sequence[Sequence[BaseAgent]],
             agent_names: Sequence[str],
-            log_path: str,
+            log_path: str | os.PathLike,
             parallel: bool = False
     ) -> None:
 
