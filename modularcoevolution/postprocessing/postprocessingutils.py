@@ -5,23 +5,19 @@ import json
 import re
 import warnings
 from functools import partial
-from typing import Type, Sequence, TypeVar, Any
+from typing import Type, Sequence, TypeVar
 
-from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
-from modularcoevolution.drivers import coevolutiondriver
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
-from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
 from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.datacollector import DataCollector, DataSchema, IndividualData
 
-import multiprocessing
 import os
-import random
 
 from modularcoevolution.utilities.dictutils import deep_update_dictionary
+from modularcoevolution.utilities.fileutils import get_run_paths, resolve_experiment_path
 from modularcoevolution.utilities.specialtypes import GenotypeID
 
 TRUNCATE = True
@@ -126,24 +122,6 @@ def load_run_data(
     return data_collector.data
 
 
-def get_run_folders(experiment_folder: str) -> list[str]:
-    """
-    Get a list of run folders within a given experiment folder.
-    Only includes folders of the form `Run #`, sorted by run number.
-
-    Args:
-        experiment_folder: The path to the experiment folder within the logs directory.
-
-    Returns:
-        A list of paths to the run folders within `experiment_folder`.
-    """
-    run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
-    # Get folders of the form 'Run #', sorted by their number
-    run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
-    run_folders.sort(key=lambda folder: int(folder.split(' ')[-1]))
-    return run_folders
-
-
 def load_experiment_data(
         experiment_folder: str,
         last_generation: bool = False,
@@ -166,7 +144,7 @@ def load_experiment_data(
     Returns:
         A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
     """
-    run_folders = get_run_folders(experiment_folder)
+    run_folders = get_run_paths(experiment_folder)
 
     if run_numbers is not None:
         run_folders = [run_folders[i] for i in run_numbers]
@@ -245,9 +223,7 @@ def load_experiment_definition(
         FileNotFoundError: If the experiment folder or the first run's `parameters.json` file could not be found.
         UnspecifiedExperimentError: If the experiment type is not specified in the loaded config file or as a parameter.
     """
-    run_folders = [folder.path for folder in os.scandir(f'logs/{experiment_folder}') if folder.is_dir()]
-    #return load_run_experiment_definition(run_folders[0], experiment_type)
-    run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
+    run_folders = get_run_paths(experiment_folder)
     return load_run_experiment_definition(run_folders[0], experiment_type, override_parameters)
 
 

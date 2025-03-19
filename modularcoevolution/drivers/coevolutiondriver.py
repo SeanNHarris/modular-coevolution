@@ -15,7 +15,7 @@ import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
-from modularcoevolution.utilities import dictutils
+from modularcoevolution.utilities import dictutils, fileutils
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
@@ -126,7 +126,7 @@ class CoevolutionDriver:
         Returns:
             A list containing a dictionary of parameters for each run.
         """
-
+        config_path = fileutils.resolve_config_path(config_filename)
         with open(config_filename, 'rb') as config_file:
             base_parameters = tomllib.load(config_file)
 
@@ -216,10 +216,8 @@ class CoevolutionDriver:
         #     for metric_configuration, metric_function in self.metrics[player_index].values():
         #         generator.register_metric(metric_configuration, metric_function)
 
-        if log_subfolder != '' and not log_subfolder.startswith('/'):
-            log_path = f'logs/{log_subfolder}'
-        else:
-            log_path = f'logs{log_subfolder}'
+        logs_path = fileutils.get_logs_path()
+        log_path = logs_path / log_subfolder
 
         os.makedirs(log_path, exist_ok=True)
         data_collector.set_experiment_parameters(run_parameters)
