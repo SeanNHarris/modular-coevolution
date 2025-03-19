@@ -82,8 +82,8 @@ def get_experiment_type(
         experiment_type_module, experiment_type_class = experiment_type_string.rsplit('.', 1)
         try:
             experiment_type = getattr(importlib.import_module(experiment_type_module), experiment_type_class)
-        except (ModuleNotFoundError, AttributeError):
-            raise UnspecifiedExperimentError(f"Experiment type {experiment_type_string} could not be imported.")
+        except (ModuleNotFoundError, AttributeError) as error:
+            raise UnspecifiedExperimentError(f"Experiment type {experiment_type_string} could not be imported.\n{error}")
     else:
         raise UnspecifiedExperimentError("The config file did not specify an experiment type (and is probably outdated). Please specify an experiment type manually as a parameter to this function.")
     return experiment_type
@@ -110,7 +110,7 @@ def load_run_data(
     if generations is not None and last_generation:
         raise ValueError("Can't set both \"last_generation\" and \"generations\" parameters.")
 
-    data_path = f'{run_folder}/data'
+    data_path = os.path.join(run_folder, 'data')
     print(f'Reading experiment run data from {data_path}')
     data_collector = DataCollector()
     if last_generation:
