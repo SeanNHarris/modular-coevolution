@@ -58,3 +58,37 @@ def set_config_value(config: dict, keys: Sequence[str], value: Any, weak: bool =
 
     if not weak or keys[-1] not in current_dict:
         current_dict[keys[-1]] = value
+
+
+def strip_dictionary_layers(dictionary: Any, layers: list[int]) -> Any:
+    """
+    Remove redundant layers of a nested dictionary based on the specified layer numbers.
+
+    Args:
+        dictionary: The dictionary to strip.
+            Non-dictionary values will be returned unaltered (for recursion purposes).
+        layers: A list of layer numbers to remove.
+
+    Returns:
+        The input dictionary with the specified layers omitted.
+        This may not be a dictionary, if all layers were removed.
+
+    Raises:
+        ValueError: If one of the specified layers contains more than one key.
+    """
+    if len(layers) == 0:
+        return dictionary  # No more alterations necessary.
+    if not isinstance(dictionary, dict):
+        return dictionary  # Base case, reached the bottom of the nested dictionary.
+    if layers[0] == 0:
+        if len(dictionary) > 1:
+            raise ValueError(f"Cannot strip layer from a dictionary with {len(dictionary)} keys.")
+        subdictionary = next(iter(dictionary.values()))
+        new_layers = [layer - 1 for layer in layers[1:]]
+        return strip_dictionary_layers(subdictionary, new_layers)
+    else:
+        new_layers = [layer - 1 for layer in layers]
+        new_dictionary = {}
+        for key, value in dictionary.items():
+            new_dictionary[key] = strip_dictionary_layers(value, new_layers)
+        return new_dictionary

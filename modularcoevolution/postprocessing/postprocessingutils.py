@@ -16,7 +16,7 @@ from modularcoevolution.utilities.datacollector import DataCollector, DataSchema
 
 import os
 
-from modularcoevolution.utilities.dictutils import deep_update_dictionary
+from modularcoevolution.utilities.dictutils import deep_update_dictionary, strip_dictionary_layers
 from modularcoevolution.utilities.fileutils import get_run_paths, resolve_experiment_path
 from modularcoevolution.utilities.specialtypes import GenotypeID
 
@@ -380,7 +380,8 @@ def easy_load_experiment_results(
         representative_size: int = -1,
         last_generation: bool = False,
         generations: Sequence[int] = None,
-        override_parameters: dict = None
+        override_parameters: dict = None,
+        strip_dictionaries: bool = False
 ) -> tuple[BaseExperiment, dict[str, DataSchema], dict[str, dict[int, dict[str, ArchiveGenerator]]]]:
     """
     Load the experiment definition, logged data, and population archives from a given experiment folder.
@@ -394,6 +395,12 @@ def easy_load_experiment_results(
         generations: A list of specific generations to load. If None, all generations will be used.
             Cannot be used with `last_generation`.
         override_parameters: Optional parameters to override the ones loaded from the file.
+        strip_dictionaries: If true, outer dictionaries in the returned data will be omitted if the parameters
+            to this function would make them redundant.
+            - If `run_numbers` has only one entry, the subdictionaries for that run will be returned for the data and archives.
+            - If `generations` has only one entry or `last_generation` is true, the subdictionaries for that generation will be returned for the archives.
+            - If `limit_populations` has only one entry, the subdictionaries for that population will be returned for the archives.
+                If `limit_populations` is not set, this will not occur even if there is only one population.
 
     Returns:
         A tuple containing:
@@ -410,6 +417,19 @@ def easy_load_experiment_results(
         run_data, experiment, limit_populations=limit_populations, representative_size=representative_size,
         last_generation=last_generation, generations=generations
     ) for run_name, run_data in experiment_data.items()}
+
+    if strip_dictionaries:
+        data_strip = []
+        archive_strip = []
+        if run_numbers and len(run_numbers) == 1:
+            data_strip.append(0)  # Layer 0
+            archive_strip.append(0)  # Layer 0
+        if (generations and len(generations) == 1) or last_generation:
+            archive_strip.append(1)  # Layer 1
+        if limit_populations and len(limit_populations) == 1:
+            archive_strip.append(2)  # Layer 2
+        experiment_data = strip_dictionary_layers(experiment_data, data_strip)
+        representatives = strip_dictionary_layers(representatives, archive_strip)
 
     return experiment, experiment_data, representatives
 
