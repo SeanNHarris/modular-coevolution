@@ -198,7 +198,11 @@ class GPTree(BaseGenotype):
         # Doing save_values like this so that it isn't necessary in user-defined nodes.
         if save_values:
             context['save_values'] = True
-        return self.root.execute(context)
+        try:
+            return self.root.execute(context)
+        except Exception as error:
+            print(f"Error while executing the following tree:\n{self}")
+            raise error
 
     def _replace_subtree(self, node: GPNode, replacement: GPNode) -> None:
         """Replaces a subtree with a replacement subtree.
