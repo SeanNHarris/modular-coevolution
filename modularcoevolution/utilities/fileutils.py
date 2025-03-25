@@ -1,5 +1,6 @@
 import os
 import re
+import warnings
 from pathlib import Path
 
 
@@ -21,10 +22,13 @@ def get_nearest_path(directory: str, strict: bool = True) -> Path:
     for path in paths:
         if os.access(path / directory, os.W_OK):
             return path / directory
-    raise FileNotFoundError(f"Could not find the {directory} directory from the cwd or its parents.")
+    if strict:
+        raise FileNotFoundError(f"Could not find the {directory} directory from the cwd (strict mode).")
+    else:
+        raise FileNotFoundError(f"Could not find the {directory} directory from the cwd or its parents.")
 
 
-def get_logs_path(strict: bool = True) -> Path:
+def get_logs_path(strict: bool = True, can_create: bool = False) -> Path:
     """
     Get the path to the logs directory.
     Searches for a directory named 'logs' in the current working directory or its parents, returning the first found.
@@ -32,11 +36,24 @@ def get_logs_path(strict: bool = True) -> Path:
     Args:
         strict: If True, only searches in the current working directory.
             Use this when writing logs, to prevent accidentally writing to the wrong directory.
+        can_create: If True, creates the logs directory next to the config directory if it doesn't exist.
 
     Returns:
         The path to the logs directory.
     """
-    return get_nearest_path("logs", strict)
+    try:
+        return get_nearest_path("logs", strict)
+    except FileNotFoundError as error:
+        if can_create:
+            warnings.warn(
+                "Could not find the logs directory. Creating a new one adjacent to the config directory."
+            )
+            config_path = get_nearest_path("config", strict)
+            logs_path = config_path.parent / "logs"
+            logs_path.mkdir()
+            return logs_path
+        else:
+            raise error
 
 
 def get_config_path() -> Path:

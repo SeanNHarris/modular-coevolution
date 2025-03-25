@@ -216,7 +216,7 @@ class CoevolutionDriver:
         #     for metric_configuration, metric_function in self.metrics[player_index].values():
         #         generator.register_metric(metric_configuration, metric_function)
 
-        logs_path = fileutils.get_logs_path()
+        logs_path = fileutils.get_logs_path(can_create=True)
         log_path = logs_path / log_subfolder
 
         os.makedirs(log_path, exist_ok=True)
