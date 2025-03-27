@@ -636,7 +636,7 @@ class GPTree(BaseGenotype):
         return node
 
     def get_raw_genotype(self):
-        return {"node_type": str(self.node_type), "id_list": self.get_node_id_list()}
+        return {"node_type": self.node_type.__name__, "id_list": self.get_node_id_list()}
 
     def __hash__(self):
         return tuple(self.get_node_id_list()).__hash__()
