@@ -381,7 +381,8 @@ def easy_load_experiment_results(
         last_generation: bool = False,
         generations: Sequence[int] = None,
         override_parameters: dict = None,
-        strip_dictionaries: bool = False
+        strip_dictionaries: bool = False,
+        experiment_type: Type[BaseExperiment] = None
 ) -> tuple[BaseExperiment, dict[str, DataSchema], dict[str, dict[int, dict[str, ArchiveGenerator]]]]:
     """
     Load the experiment definition, logged data, and population archives from a given experiment folder.
@@ -401,6 +402,7 @@ def easy_load_experiment_results(
             - If `generations` has only one entry or `last_generation` is true, the subdictionaries for that generation will be returned for the archives.
             - If `limit_populations` has only one entry, the subdictionaries for that population will be returned for the archives.
                 If `limit_populations` is not set, this will not occur even if there is only one population.
+        experiment_type: The type of experiment to use. If None, the experiment type will be inferred from the parameters.json file.
 
     Returns:
         A tuple containing:
@@ -408,7 +410,7 @@ def easy_load_experiment_results(
         - A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
         - For each run name, for each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
-    experiment = load_experiment_definition(experiment_folder, override_parameters=override_parameters)
+    experiment = load_experiment_definition(experiment_folder, override_parameters=override_parameters, experiment_type=experiment_type)
     experiment_data = load_experiment_data(
         experiment_folder, run_numbers=run_numbers, last_generation=last_generation,
         generations=generations, parallel=True

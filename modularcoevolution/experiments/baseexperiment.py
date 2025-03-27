@@ -361,7 +361,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         agent_groups = list(itertools.product(*agents))
         agent_numbers = [range(len(agents[i])) for i in range(len(agents))]
         agent_group_numbers = list(itertools.product(*agent_numbers))
-        results = self.evaluate_all(agent_groups, parallel=False, exhibition=True)
+        results = self.evaluate_all(agent_groups, parallel=parallel, exhibition=True)
         for agent_group, agent_numbers, result in zip(agent_groups, agent_group_numbers, results):
             self._process_exhibition_results(agent_group, agent_numbers, agent_names, result, log_path)
 
@@ -380,6 +380,21 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 for metric_name, metric_value in result[player_index].items():
                     statistics_file.write(f'{metric_name}:\n{metric_value}\n')
                 statistics_file.write('\n')
+
+            if len(result) > len(agent_group):
+                statistics_file.write('Additional metrics:\n')
+                for metric_name, metric_value in result[-1].items():
+                    statistics_file.write(f"{metric_name}:\n")
+                    match metric_value:
+                        case dict():
+                            for key, value in metric_value.items():
+                                statistics_file.write(f'{key}:\t{value}\n')
+                        case list():
+                            for value in metric_value:
+                                statistics_file.write(f'{value}\n')
+                        case _:
+                            statistics_file.write(f'{metric_value}\n')
+                    statistics_file.write('\n')
 
     @staticmethod
     def set_config_value(config: dict, keys: Sequence[str], value: Any, overwrite: bool = False, update: bool = False) -> None:
