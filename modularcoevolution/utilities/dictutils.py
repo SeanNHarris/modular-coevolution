@@ -34,7 +34,7 @@ def deep_update_dictionary(dictionary: dict, update: dict, weak: bool = False) -
         if isinstance(value, dict):
             if key not in dictionary:
                 dictionary[key] = {}
-            deep_update_dictionary(dictionary[key], value)
+            deep_update_dictionary(dictionary[key], value, weak=weak)
         else:
             if not weak or key not in dictionary:
                 dictionary[key] = value

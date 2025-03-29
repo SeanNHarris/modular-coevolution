@@ -5,6 +5,7 @@ from typing import Sequence, Any, TypedDict
 
 import numpy
 
+from modularcoevolution.utilities import dictutils
 from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
 
 
@@ -226,6 +227,7 @@ class DataCollector:
             filename = filename + str(last_generation)
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         if compress:
+            # TODO: It was suggested to consider a compression method with a larger window size than gzip.
             with gzip.open(filename, 'wt+', encoding='UTF-8') as log_file:
                 json.dump(self.data, log_file, cls=StringDefaultJSONEncoder)
         else:
@@ -233,8 +235,20 @@ class DataCollector:
                 json.dump(self.data, log_file, cls=StringDefaultJSONEncoder)
 
         if clear_memory:
-            self.data["individuals"] = {}
-            self.data["evaluations"] = {}
+            self._clear_memory()
+
+    def _clear_memory(self) -> None:
+        """
+        Clear the memory of the data collector after saving logs by deleting past individual and evaluation data.
+        This causes each generation's log to store only the data for that generation.
+        """
+        self.data["individuals"] = {}
+        self.data["evaluations"] = {}
+        # For the `generations` dictionary, only remove the `individual_ids` field,
+        # as the metrics take up minimal space and it's useful to have in the final generation.
+        for population_name in self.data["generations"]:
+            for generation in self.data["generations"][population_name].values():
+                generation["individual_ids"] = []
 
     def load_from_file(self, filename, load_only: Sequence[str] = None) -> None:
         """
@@ -256,13 +270,7 @@ class DataCollector:
         for table in new_data:
             if load_only is not None and table not in load_only:
                 continue
-            if table in ("generations", "individuals"):
-                for population_name in new_data[table]:
-                    if population_name not in self.data[table]:
-                        self.data[table][population_name] = {}
-                    self.data[table][population_name].update(new_data[table][population_name])
-            else:
-                self.data[table].update(new_data[table])
+            dictutils.deep_update_dictionary(self.data[table], new_data[table], weak=True)
 
     def load_directory(self, pathname, load_only: Sequence[str] = None) -> None:
         """
