@@ -348,7 +348,8 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         population_agents = [[population.build_agent_from_id(agent_id, True) for agent_id in agent_ids[population_index]] for population_index, population in enumerate(populations)]
         agents = [population_agents[population_index] for population_index in self.player_populations()]
         agent_names = [populations[population_index].population_name for population_index in self.player_populations()]
-        self._run_exhibition_games(agents, agent_names, log_path, parallel)
+        self._run_exhibition_games(agents, agent_names, log_path, parallel=False)
+        # Disable parallel exhibitions, because of issues with pickling the extended result dictionary.
 
     def _run_exhibition_games(
             self,
