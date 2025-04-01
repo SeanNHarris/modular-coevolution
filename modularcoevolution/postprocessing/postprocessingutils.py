@@ -287,7 +287,19 @@ def load_best_run_individuals(
         run_genotype_parameters = experiment_definition.config['populations'][population_name]['genotype']
 
         experiment_genotypes[population_name] = {}
-        population_size = len(run_data['generations'][population_name][str(generation)]['individual_ids'])
+
+        generation_probe = run_data['generations'][population_name].keys().__iter__().__next__()
+        if isinstance(generation_probe, str):
+            str_needed = True
+            warnings.warn("Loading JSON data files is deprecated and will be removed in the future.")
+        else:
+            str_needed = False
+
+        if str_needed:
+            population_size = len(run_data['generations'][population_name][str(generation)]['individual_ids'])
+        else:
+            population_size = len(run_data['generations'][population_name][generation]['individual_ids'])
+
         if representative_size < 0:
             population_representative_size = population_size
         else:
@@ -295,7 +307,10 @@ def load_best_run_individuals(
 
         # Making sure to copy before sorting
         individual_ids = list(list(run_data['generations'][population_name].values())[generation]['individual_ids'])
-        metrics = {individual_id: run_data['individuals'][population_name][str(individual_id)]['metrics'] for individual_id in individual_ids}
+        if str_needed:
+            metrics = {individual_id: run_data['individuals'][population_name][str(individual_id)]['metrics'] for individual_id in individual_ids}
+        else:
+            metrics = {individual_id: run_data['individuals'][population_name][individual_id]['metrics'] for individual_id in individual_ids}
         metric_list = list(metrics.values())[0].keys()
 
         elites = []
@@ -318,7 +333,10 @@ def load_best_run_individuals(
         population_genotypes = []
         population_original_ids = {}
         for individual_id in elites:
-            individual_data: IndividualData = run_data['individuals'][population_name][str(individual_id)]
+            if str_needed:
+                individual_data: IndividualData = run_data['individuals'][population_name][str(individual_id)]
+            else:
+                individual_data: IndividualData = run_data['individuals'][population_name][individual_id]
             genotype_parameters = individual_data['genotype']
             default_genotype_parameters = agent_type.genotype_default_parameters(run_agent_parameters)
             deep_update_dictionary(genotype_parameters, default_genotype_parameters)
