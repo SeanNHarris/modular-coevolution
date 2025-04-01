@@ -1,6 +1,8 @@
 import gzip
 import json
 import os
+import pickle
+import pickletools
 from typing import Sequence, Any, TypedDict
 
 import numpy
@@ -228,11 +230,15 @@ class DataCollector:
         os.makedirs(os.path.dirname(filename), exist_ok=True)
         if compress:
             # TODO: It was suggested to consider a compression method with a larger window size than gzip.
-            with gzip.open(filename, 'wt+', encoding='UTF-8') as log_file:
-                json.dump(self.data, log_file, cls=StringDefaultJSONEncoder)
+            with gzip.open(filename, 'wb+') as log_file:
+                pickle_string = pickle.dumps(self.data)
+                pickletools.optimize(pickle_string)
+                log_file.write(pickle_string)
         else:
-            with open(filename, 'wt+', encoding='UTF-8') as log_file:
-                json.dump(self.data, log_file, cls=StringDefaultJSONEncoder)
+            with open(filename, 'wb+') as log_file:
+                pickle_string = pickle.dumps(self.data)
+                pickletools.optimize(pickle_string)
+                log_file.write(pickle_string)
 
         if clear_memory:
             self._clear_memory()
@@ -259,13 +265,48 @@ class DataCollector:
             load_only: A list of tables to load from the file. If None, all tables will be loaded.
         """
         try:
+            self.load_from_file_pickle(filename, load_only=load_only)
+        except pickle.UnpicklingError:
+            self.load_from_file_json(filename, load_only=load_only)
+
+    def load_from_file_pickle(self, filename, load_only: Sequence[str] = None) -> None:
+        """
+        Load data from a previously logged experiment to the current data collector.
+        To load data from multiple files (saved using `clear_memory = True`), use :meth:`load_directory` instead.
+        Args:
+            filename: The path of the file to load from.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
+        """
+        try:
+            with gzip.open(filename, 'rb') as log_file:
+                self._load_from_file_pickle(log_file, load_only=load_only)
+        except OSError:
+            with open(filename, 'rb') as log_file:
+                self._load_from_file_pickle(log_file, load_only=load_only)
+
+    def _load_from_file_pickle(self, log_file, load_only: Sequence[str] = None) -> None:
+        new_data: DataSchema = pickle.load(log_file)
+        for table in new_data:
+            if load_only is not None and table not in load_only:
+                continue
+            dictutils.deep_update_dictionary(self.data[table], new_data[table], weak=True)
+
+    def load_from_file_json(self, filename, load_only: Sequence[str] = None) -> None:
+        """
+        Load data from a previously logged experiment to the current data collector.
+        To load data from multiple files (saved using `clear_memory = True`), use :meth:`load_directory` instead.
+        Args:
+            filename: The path of the file to load from.
+            load_only: A list of tables to load from the file. If None, all tables will be loaded.
+        """
+        try:
             with gzip.open(filename, 'rt', encoding='UTF-8') as log_file:
-                self._load_from_file(log_file, load_only=load_only)
+                self._load_from_file_json(log_file, load_only=load_only)
         except OSError:
             with open(filename, 'rt', encoding='UTF-8') as log_file:
-                self._load_from_file(log_file, load_only=load_only)
+                self._load_from_file_json(log_file, load_only=load_only)
 
-    def _load_from_file(self, log_file, load_only: Sequence[str] = None) -> None:
+    def _load_from_file_json(self, log_file, load_only: Sequence[str] = None) -> None:
         new_data: DataSchema = json.load(log_file)
         for table in new_data:
             if load_only is not None and table not in load_only:
