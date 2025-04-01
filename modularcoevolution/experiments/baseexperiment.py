@@ -1,5 +1,6 @@
 import abc
 import copy
+import gc
 import itertools
 import multiprocessing
 import os
@@ -318,6 +319,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 results.append(result)
             if parallel:
                 evaluation_pool.shutdown()
+                gc.collect()  # This fixes a bug with open files when running in Pypy.
             return results
         except KeyboardInterrupt as interrupt:
             # If the user stops execution during evaluations, terminate the pool to kill any remaining processes.
