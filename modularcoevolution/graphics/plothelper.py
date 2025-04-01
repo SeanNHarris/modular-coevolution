@@ -101,11 +101,15 @@ def access_key(data: DataSchema, generation: int, key: str):
     population_name = key_parts[0]
     metric_name = key_parts[1]
     try:
+        generation_probe = data['generations'][population_name].values().__iter__().__next__()
+        if isinstance(generation_probe, str):
+            generation = str(generation)  # Compatibility while transitioning away from json.
+
         if len(key_parts) == 2:
-            return data['generations'][population_name][str(generation)]['population_metrics'][metric_name]
+            return data['generations'][population_name][generation]['population_metrics'][metric_name]
         else:
             statistic_name = key_parts[2]
-            return data['generations'][population_name][str(generation)]['metric_statistics'][metric_name][statistic_name]
+            return data['generations'][population_name][generation]['metric_statistics'][metric_name][statistic_name]
     except KeyError:
         raise KeyError(f"Key '{key}' not found in data.")
 
