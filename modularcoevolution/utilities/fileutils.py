@@ -81,6 +81,8 @@ def resolve_experiment_path(experiment_path_str: str) -> Path:
         A confirmed path to the experiment folder.
     """
     path = Path(experiment_path_str)
+    if '~' in str(path):
+        path = path.expanduser()  # ~ is not resolved by default.
     if path.exists():
         return path
 
