@@ -17,6 +17,10 @@ Stored separately to prevent circular import issues.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
+__author__ = 'Sean N. Harris'
+__copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
+__license__ = 'Apache-2.0'
+
 from typing import NewType, TypedDict
 
 GenotypeID = NewType("GenotypeID", int)
