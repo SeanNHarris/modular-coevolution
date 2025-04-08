@@ -1,19 +1,22 @@
 [project]
 name = "modular-coevolution"
-version = "2025.4.1.1"
+version = "2025.4.8"
 description = "Evolutionary algorithm library focusing on competitive coevolution and genetic programming"
 authors = [
     {name = "Sean N. Harris", email = "snh0037@auburn.edu"}
 ]
+license = "Apache-2.0"
+license-files = ["LICENSE*"]
 
 requires-python = ">=3.11"
-dependencies = []
+# TODO: Numpy is only used for special case handling in the main code, which can be worked around.
+dependencies = ["numpy"]
 
 [project.optional-dependencies]
 # Used for AlphaRankCoevolution
-alpharank = ["open-spiel", "numpy"]
+alpharank = ["open-spiel"]
 # Experimental support for Numba compilation on some functions
-numba = ["numba", "numpy"]
+numba = ["numba"]
 # Functionality for visualizing GP trees
 matplotlib = ["matplotlib"]
 # Optional TQDM progress bar
