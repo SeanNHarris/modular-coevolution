@@ -16,14 +16,10 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
-from __future__ import annotations
-
 import argparse
-import tomllib
 import warnings
 from typing import Any, Sequence, TypedDict, Union
 
-from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.managers.coevolution import EvolutionEndedException, Coevolution
 from modularcoevolution.postprocessing import postprocessingutils
 from modularcoevolution.utilities.datacollector import DataCollector
@@ -33,32 +29,11 @@ import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
-from modularcoevolution.utilities import dictutils, fileutils
+from modularcoevolution.utilities import dictutils, fileutils, configutils
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
     return function(*args, **kwargs)
-
-class ParameterSchema(TypedDict):
-    """A type defining the parameters of a config file."""
-    experiment_name: str
-    """The name of the experiment, which will be used as the name of the log folder."""
-    generators: dict[str, tuple[type[BaseGenerator], dict[str, Any]]]
-    """A dict of tuples of generator types and their parameter dictionary, keyed by the population name.
-    For example, ``{'predator': (EvolutionGenerator, {'population_size': 100, ...}), 'prey':(NSGAIIGenerator, {'population_size': 50, ...})}``."""
-    coevolution_type: type[Coevolution]
-    """The type of coevolution to use, e.g ``Coevolution``."""
-    coevolution_kwargs: dict[str, Any]
-    """The non-generator arguments to pass to the coevolution type, e.g. ``{'num_generations': 100}``.
-    The ``agent_generators`` argument should be excluded, as those will be generated based on the :attr:`generators` parameter."""
-    world_kwargs: dict[str, Any]
-    """The non-agent arguments to pass to the evaluation function as a dictionary."""
-
-
-class AugmentedParameterSchema(ParameterSchema):
-    """A type containing the parameters for a run, with additional fields added by the driver."""
-    log_subfolder: str
-    """Where to store log files within the logs folder. Includes the name of the experiment and the run number."""
 
 
 class CoevolutionDriver:
@@ -121,7 +96,7 @@ class CoevolutionDriver:
 
         if merge_parameters is None:
             merge_parameters = {}
-        self.parameters = self._parse_config(config_filename, run_amount, run_start, merge_parameters)
+        self.parameters = configutils.generate_run_parameters(config_filename, run_amount, run_start, merge_parameters, self.experiment_type)
 
         if self.parallel:
             # TODO: Behave differently on Windows and Linux, as this only works on linux
@@ -132,41 +107,6 @@ class CoevolutionDriver:
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
 
-    def _parse_config(self, config_filename: str, run_count: int, run_start: int, merge_parameters: dict) -> list[dict[str, Any]]:
-        """Parse a configuration file and return a dictionary of parameters for each run.
-
-        Args:
-            config_filename: The filename of the configuration file to parse.
-            run_count: The total number of runs to perform, including runs skipped by the ``run_start`` argument.
-            run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
-            merge_parameters: A dictionary of parameters to merge into the configuration file's parameters.
-
-        Returns:
-            A list containing a dictionary of parameters for each run.
-        """
-        config_path = fileutils.resolve_config_path(config_filename)
-        with open(config_filename, 'rb') as config_file:
-            base_parameters = tomllib.load(config_file)
-
-        if self.experiment_type is not None:
-            experiment_type_string = f"{self.experiment_type.__module__}.{self.experiment_type.__name__}"
-            dictutils.set_config_value(base_parameters, ('experiment_type',), experiment_type_string, weak=True)
-
-        parameters = []
-        for i in range(run_start, run_count):
-            run_parameters = dictutils.deep_copy_dictionary(base_parameters)
-            run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
-            for parameter_name, parameter in merge_parameters.items():
-                if isinstance(parameter, dict):
-                    run_parameters[parameter_name].update(parameter)
-                else:
-                    run_parameters[parameter_name] = parameter
-
-            # TODO: Allow merge parameters to vary per run, e.g. a list indexed by i
-            parameters.append(run_parameters)
-        return parameters
-
-
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
         try:
@@ -176,8 +116,7 @@ class CoevolutionDriver:
             print("Keyboard interrupt received. Ending all runs.")
             raise KeyboardInterrupt
 
-
-    def _run_experiment(self, run_parameters: AugmentedParameterSchema) -> None:
+    def _run_experiment(self, run_parameters: dict[str, Any]) -> None:
         """Run a single experiment.
 
         Args:
@@ -208,31 +147,16 @@ class CoevolutionDriver:
                 run_experiment_type = config_experiment_type
             else:
                 if self.experiment_type != config_experiment_type:
-                    warnings.warn("The experiment type specified in the configuration file does not match the experiment type given to the driver.")
+                    if '__main__' in run_experiment_type.__module__ and run_experiment_type.__name__ == config_experiment_type.__name__:
+                        extra_warning = "\nThis is probably because you're running the experiment file instead of running the driver directly."
+                    else:
+                        extra_warning = ""
+                    warnings.warn(f"The experiment type specified in the configuration file ({config_experiment_type}) does not match the experiment type given to the driver ({run_experiment_type}.{extra_warning}")
         if run_experiment_type is None:
             raise ValueError("No experiment type specified as a parameter or in the configuration file.")
 
         experiment = run_experiment_type(config)
         coevolution_manager: Coevolution = experiment.create_experiment()
-        world_kwargs = {}  # TODO: Determine if this is still needed.
-        
-        # for population_name, generator_parameters in generators.items():
-        #     generator_type, generator_kwargs = generator_parameters
-        #     generator_kwargs['population_name'] = population_name
-        #     generator_kwargs['data_collector'] = data_collector
-        #     agent_generators.append(generator_type(**generator_kwargs))
-        #     if population_name in population_names:
-        #         raise ValueError("Error: Multiple identical population names will cause logging conflicts.")
-        #     population_names.add(population_name)
-        # 
-        # coevolution_kwargs['agent_generators'] = agent_generators
-        # coevolution_kwargs['data_collector'] = data_collector
-        # coevolution_kwargs['log_subfolder'] = log_subfolder
-        # coevolution_manager = coevolution_type(**coevolution_kwargs)
-        # 
-        # for player_index, generator in enumerate(coevolution_manager.get_generator_order()):
-        #     for metric_configuration, metric_function in self.metrics[player_index].values():
-        #         generator.register_metric(metric_configuration, metric_function)
 
         logs_path = fileutils.get_logs_path(can_create=True)
         log_path = logs_path / log_subfolder
