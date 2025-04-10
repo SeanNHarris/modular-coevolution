@@ -17,17 +17,15 @@ __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import abc
-import copy
 import gc
 import itertools
-import multiprocessing
 import os
-from functools import partial
 from typing import Sequence, Any, Union, Literal, Callable, Protocol
 
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
+from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
 from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
@@ -345,7 +343,6 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 evaluation_pool.shutdown(wait=False, cancel_futures=True)
             raise interrupt
 
-
     def exhibition(
             self,
             populations: Sequence[BaseGenerator],
@@ -362,7 +359,6 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             log_path: The path to the current log folder.
             generation: The generation to pull individuals from. Defaults to the last completed generation.
             parallel: Whether to evaluate the agents using a multiprocessing pool.
-            evaluation_pool: The multiprocessing pool to use for evaluation.
         """
         agent_ids = [generator.get_representatives_from_generation(generation, amount) for generator in populations]
         population_agents = [[population.build_agent_from_id(agent_id, True) for agent_id in agent_ids[population_index]] for population_index, population in enumerate(populations)]
@@ -417,8 +413,119 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                             statistics_file.write(f'{metric_value}\n')
                     statistics_file.write('\n')
 
+    def _config_generator_parameters(self, population_name: str) -> dict[str, Any]:
+        return self.config['populations'][population_name]['generator']
+
+    def _config_agent_parameters(self, population_name: str) -> dict[str, Any]:
+        return self.config['populations'][population_name]['agent']
+
+    def _config_genotype_parameters(self, population_name: str) -> dict[str, Any]:
+        return self.config['populations'][population_name]['genotype']
+
+    def create_test_generator(self, population_name: str, genotypes: Sequence[BaseGenotype]) -> ArchiveGenerator:
+        """Create a generator wrapping a list of test genotypes to enable easier evaluation.
+        Test genotypes can be most easily created with :meth:`create_test_genotype`.
+
+        These generators can be evaluated with :meth:`exhibition` or :func:`postprocessingutils.round_robin_evaluation`.
+
+        Args:
+            population_name: The name of the population to base this generator on.
+            genotypes: A list of genotypes to wrap, of the type used in the given population.
+
+        Returns:
+            An :class:`.ArchiveGenerator` wrapping the given genotypes.
+        """
+        agent_class = self.agent_types_by_population_name[population_name]
+        agent_parameters = self._config_agent_parameters(population_name)
+        # Necessary to use ArchiveGenerator for this, since it wasn't made for this purpose.
+        original_ids = {genotype.id: genotype.id for genotype in genotypes}
+
+        return ArchiveGenerator(
+            population_name,
+            genotypes,
+            original_ids,
+            agent_class,
+            agent_parameters
+        )
+
+    def get_agent_parameters(self, population_name: str) -> tuple[type[BaseAgent], dict[str, Any]]:
+        """Get the class and default parameters for agents in the given population.
+
+        Args:
+            population_name: The population name for the agent.
+
+        Returns:
+            A tuple containing:
+            - The class of this population's agent.
+            - A dictionary of default parameters based on `config` and the agent class for this population.
+        """
+        agent_class = self.agent_types_by_population_name[population_name]
+        agent_parameters = self._config_agent_parameters(population_name)
+        return agent_class, agent_parameters
+
+    def create_test_agent(self, population_name: str, agent_parameters: dict[str, Any] = None, genotype: BaseGenotype = None) -> BaseAgent:
+        """Create an agent following the configuration of the given population.
+        This agent will be free-standing and will not be managed as part of the population.
+
+        Args:
+            population_name: The population name for the agent.
+            agent_parameters: A dictionary of parameters for the agent.
+                These will be applied over the default parameters.
+            genotype: If the agent accepts a genotype, the given genotype will be used for the agent.
+
+        Returns:
+            A test agent with the type and default parameters used in the given population.
+        """
+        agent_class, parameters = self.get_agent_parameters(population_name)
+        if agent_parameters is not None:
+            deep_update_dictionary(parameters, agent_parameters)
+        return agent_class(parameters, genotype=genotype)
+
+    def get_genotype_parameters(self, population_name: str) -> tuple[type[BaseGenotype], dict[str, Any]]:
+        """Get the class and default parameters for genotypes in the given population.
+
+        Args:
+            population_name: The population name for the genotype.
+
+        Returns:
+            A tuple containing:
+            - The class of this population's genotype.
+            - A dictionary of default parameters based on `config` and the agent class for this population.
+        """
+        agent_class = self.agent_types_by_population_name[population_name]
+        agent_parameters = self._config_agent_parameters(population_name)
+        if not issubclass(agent_class, BaseEvolutionaryAgent):
+            raise ValueError(f"Population \"{population_name}\" does not have a genotype.")
+        evolutionary_agent_class: type[BaseEvolutionaryAgent] = agent_class
+        genotype_class = evolutionary_agent_class.genotype_class()
+        genotype_parameters = evolutionary_agent_class.genotype_default_parameters(agent_parameters)
+        deep_update_dictionary(genotype_parameters, self._config_genotype_parameters(population_name))
+
+        return genotype_class, genotype_parameters
+
+    def create_test_genotype(self, population_name: str, genotype_parameters: dict[str, Any] = None) -> BaseGenotype:
+        """Create a genotype following the configuration of the given population.
+        This genotype will be free-standing and will not be managed as part of the population.
+
+        The easiest way to evaluate genotypes generated this way is to use :meth:`create_test_generator`,
+        followed by :meth:`exhibition` or :func:`postprocessingutils.round_robin_evaluation`.
+
+        Args:
+            population_name: The population name for the genotype.
+            genotype_parameters: A dictionary of parameters for the genotype.
+                These will be applied over the default parameters.
+
+        Returns:
+            A test genotype with the type and default parameters used in the given population.
+        """
+        genotype_class, parameters = self.get_genotype_parameters(population_name)
+        if genotype_parameters is not None:
+            deep_update_dictionary(parameters, genotype_parameters)
+        return genotype_class(parameters)
+
     @staticmethod
     def set_config_value(config: dict, keys: Sequence[str], value: Any, overwrite: bool = False, update: bool = False) -> None:
+        # TODO: Remove this and synchronize its functionality with dictutils.set_config_value.
         current_dict = config
         for key in keys[:-1]:
             if key not in current_dict:
@@ -436,7 +543,6 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 raise ValueError(f"Key {'.'.join(keys)} already exists, and overwriting was not set.")
         else:
             current_dict[keys[-1]] = value
-
 
 
 class PopulationMetrics:
