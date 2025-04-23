@@ -22,6 +22,7 @@ __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import math
+import random
 import statistics
 
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, compute_shared_objectives
@@ -60,10 +61,17 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     """A list of populations from previous generations. To save memory, the :attr:`past_population_width` parameter
     can be set to only store the top individuals from each generation."""
     hall_of_fame: list[BaseGenotype]
-    """A hall of fame storing high-quality individuals from past generations. Nothing adds to the hall of fame in this
-    abstract base class."""
-    using_hall_of_fame: bool
-    """Whether to use the hall of fame."""
+    """A hall of fame storing high-quality individuals from past generations.
+    Nothing adds to the hall of fame in this abstract base class.
+    """
+    hall_of_fame_size: int
+    """Number of individuals to include from :attr:`hall_of_fame` in the output of :meth:`get_mandatory_opponents`. 
+    Defaults to -1, in which case no hall of fame is used.
+    The exact implementation of this is left to the subclass.
+    The actual size of the hall of fame may be larger or smaller than this value.
+    If there are fewer than this many individuals, then the remainder will be made up for with regular evaluations.
+    If there are more, then a random subset will be taken. 
+    """
     genotypes_by_id: dict[GenotypeID, BaseGenotype]
     """A mapping from an ID to a genotype with that :attr:`.BaseGenotype.id`."""
     generation: int
@@ -121,7 +129,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             manager: Coevolution = None,
             copy_survivor_objectives: bool = False,
             reevaluate_per_generation: bool = True,
-            using_hall_of_fame: bool = False,
+            hall_of_fame_size: int = -1,
             compute_diversity: bool = False,
             past_population_width: int = -1,
             competitive_fitness_sharing: bool = False,
@@ -148,8 +156,9 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 previously evaluated. If False, already-evaluated individuals will be skipped. This should be True when
                 the fitness landscape can change between generations, such as for coevolution. If this is set to False,
                 `copy_survivor_objectives` should be set to True.
-            using_hall_of_fame: If True, store a hall of fame and include it in the output of
+            hall_of_fame_size: Number of individuals to include from :attr:`hall_of_fame` in the output of
                 :meth:`get_mandatory_opponents`.
+                Defaults to -1, in which case no hall of fame is used.
             compute_diversity: If True, compute the diversity of each genotype as a metric.
             past_population_width: If non-negative, only store this many of the top individuals per generation in
                 :attr:`past_populations`. Useful for saving memory.
@@ -181,7 +190,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.previous_population = list()
         self.past_populations = list()
         self.past_population_width = past_population_width
-        self.using_hall_of_fame = using_hall_of_fame
+        self.hall_of_fame_size = hall_of_fame_size
         self.hall_of_fame = list()
         self.genotypes_by_id = dict()
 
@@ -266,14 +275,20 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
     def get_mandatory_opponents(self) -> list[GenotypeID]:
         """Get a list of agent IDs which must be evaluated against all opponents.
-        This implementation returns the hall of fame if :attr:`using_hall_of_fame` is True, and an empty list otherwise.
+        Depending on which features are enabled, this can include the hall of fame, shared sampling opponents,
+        and the top individuals from the previous generation.
 
-        Returns: A list of mandatory opponent IDs.
+        If the hall of fame is too small, a smaller list will be returned.
+        If the hall of fame is too large, a random subset will be taken.
 
+        Returns: A list of mandatory opponent IDs for use in coevolution.
         """
         mandatory_list = []
-        if self.using_hall_of_fame:
-            mandatory_list.extend(genotype.id for genotype in self.hall_of_fame)
+        if self.hall_of_fame_size > 0:
+            hall_of_fame_ids = [individual.id for individual in self.hall_of_fame]
+            if len(self.hall_of_fame) > self.hall_of_fame_size:
+                hall_of_fame_ids = random.sample(hall_of_fame_ids, self.hall_of_fame_size)
+            mandatory_list.extend(hall_of_fame_ids)
         if self.shared_sampling_size > 0 and self.generation > 0:
             mandatory_list.extend(self._construct_shared_sample(self.shared_sampling_size))
         if self.top_sampling_size > 0 and self.generation > 0:

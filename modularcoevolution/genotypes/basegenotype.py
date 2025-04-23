@@ -84,7 +84,16 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def get_raw_genotype(self):
+    def get_raw_genotype(self) -> dict[str, Any]:
+        """Return a dictionary of parameters sufficient to recreate this genotype,
+        assuming the same experiment and configuration file is used.
+        Parameters that will always be implied by these can be omitted.
+
+        This is what is stored in :class:`.DataCollector` logs.
+
+        Returns:
+            A dictionary of parameters sufficient to recreate this genotype when passed to :meth:`__init__`.
+        """
         pass
 
     @abc.abstractmethod

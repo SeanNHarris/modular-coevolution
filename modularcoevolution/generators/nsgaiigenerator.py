@@ -65,6 +65,9 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
         self._register_front_metric()
         self._register_crowding_metric()
 
+        if self.hall_of_fame_size > 0:
+            raise NotImplementedError
+
     def end_generation(self) -> None:
         if self.parsimony_objective:
             for individual in self.population:

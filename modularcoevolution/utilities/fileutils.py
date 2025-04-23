@@ -129,8 +129,8 @@ def resolve_config_path(config_path_str: str) -> Path:
     if path.exists():
         return path
 
-    logs_path = Path(get_config_path())
-    path = logs_path / config_path_str
+    config_path = Path(get_config_path())
+    path = config_path / config_path_str
     if path.exists():
         return path
 
