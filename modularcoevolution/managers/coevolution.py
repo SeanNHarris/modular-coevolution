@@ -105,10 +105,7 @@ class Coevolution:
     """If true, evolution has completed, and the only remaining evaluations are for secondary measurements such as tournament evaluations."""
     evaluations_per_individual: int
     """The number of evaluations each agent will participate in per generation.
-    This relates to the fraction of opponents each agent will encounter.
-    If one of the generators is listing mandatory opponents, those evaluations will count against this value,
-    in order to ensure a predictable evaluation count.
-    An error will be raised if the number of mandatory opponents exceeds this value."""
+    This relates to the fraction of opponents each agent will encounter."""
     evaluated_groups: dict[tuple[GenotypeID], int]
     """A table of how many times each set of agents has been evaluated together. Unlisted sets have not been evaluated together."""
     opponents_this_generation: dict[GenotypeID, set[GenotypeID]]
@@ -212,12 +209,9 @@ class Coevolution:
 
     def add_coevolutionary_evaluations(self) -> None:
         """Generates and adds all coevolutionary evaluations for the current generation."""
-        evaluation_groups, mandatory_evaluations_per_individual = self.build_mandatory_evaluations()
+        evaluation_groups = self.build_mandatory_evaluations()
         if not self.mandatory_evaluations_only or len(evaluation_groups) == 0:
-            normal_evaluations_per_individual = self.evaluations_per_individual - mandatory_evaluations_per_individual
-            if normal_evaluations_per_individual < 0:
-                raise ValueError("The amount of mandatory evaluations exceeds the allowed evaluations per individual.")
-            evaluation_groups += self.build_evaluation_groups(normal_evaluations_per_individual)
+            evaluation_groups += self.build_evaluation_groups()
         for group in evaluation_groups:
             evaluation_id = claim_evaluation_id()
             self.evaluation_table[evaluation_id] = group
@@ -256,14 +250,9 @@ class Coevolution:
             minimum_evaluation_count = min(heapq.nsmallest(1, agent_queue)[0][0] for agent_queue in agent_queues)
         return groups
 
-    def build_evaluation_groups(self, evaluations_per_individual) -> list[tuple[GenotypeID, ...]]:
+    def build_evaluation_groups(self) -> list[tuple[GenotypeID, ...]]:
         """Builds groups of agents to evaluate together, and returns them as a list of tuples of agent ids.
         Groups are generated at random without the usual checks for evenness.
-
-        Args:
-            evaluations_per_individual: How many evaluations each individual should participate in.
-                Does not use :attr:`evaluations_per_individual` directly,
-                as this can be dynamically changed for some parameters.
 
         Returns: A list of evaluation groups, where each group is a list of agent ids for that evaluation.
         """
@@ -272,7 +261,7 @@ class Coevolution:
         for agent_list in agent_lists:
             random.shuffle(agent_list)
         max_length = max(len(agent_list) for agent_list in agent_lists)
-        for separation in range(evaluations_per_individual):
+        for separation in range(self.evaluations_per_individual):
             for position in range(max_length):
                 group = []
                 for player_index, agent_list in enumerate(agent_lists):
@@ -294,8 +283,7 @@ class Coevolution:
             is not the same size for each generator.
 
         Returns:
-            - A list of evaluation groups.
-            - The number of mandatory evaluations per individual which have been scheduled.
+            A list of evaluation groups.
         """
         groups = []
         mandatory_opponents = {generator: generator.get_mandatory_opponents().copy() for generator in self.agent_generators}
@@ -304,7 +292,7 @@ class Coevolution:
         mandatory_agent_lists = [mandatory_opponents[generator] for generator in self.get_generator_order()]
         max_mandatory_length = max(len(agent_list) for agent_list in mandatory_agent_lists)
         if max_mandatory_length == 0:
-            return [], 0
+            return []
 
         agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.get_generator_order()]
         for to_evaluate_index, agent_list in enumerate(agent_lists):
@@ -318,7 +306,7 @@ class Coevolution:
                             index = opponents_index % len(mandatory_agent_list)
                             group.append(mandatory_agent_list[index])
                     groups.append(tuple(group))
-        return groups, max_mandatory_length
+        return groups
 
     def get_remaining_evaluations(self) -> list[EvaluationID]:
         """Gets a list of evaluations that need to be run.
