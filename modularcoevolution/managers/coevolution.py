@@ -304,7 +304,7 @@ class Coevolution:
         mandatory_agent_lists = [mandatory_opponents[generator] for generator in self.get_generator_order()]
         max_mandatory_length = max(len(agent_list) for agent_list in mandatory_agent_lists)
         if max_mandatory_length == 0:
-            return []
+            return [], 0
 
         agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.get_generator_order()]
         for to_evaluate_index, agent_list in enumerate(agent_lists):
