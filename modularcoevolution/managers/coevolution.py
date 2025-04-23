@@ -212,9 +212,9 @@ class Coevolution:
 
     def add_coevolutionary_evaluations(self) -> None:
         """Generates and adds all coevolutionary evaluations for the current generation."""
-        evaluation_groups = self.build_mandatory_evaluations()
+        evaluation_groups, mandatory_evaluations_per_individual = self.build_mandatory_evaluations()
         if not self.mandatory_evaluations_only or len(evaluation_groups) == 0:
-            normal_evaluations_per_individual = self.evaluations_per_individual - len(evaluation_groups)
+            normal_evaluations_per_individual = self.evaluations_per_individual - mandatory_evaluations_per_individual
             if normal_evaluations_per_individual < 0:
                 raise ValueError("The amount of mandatory evaluations exceeds the allowed evaluations per individual.")
             evaluation_groups += self.build_evaluation_groups(normal_evaluations_per_individual)
@@ -281,13 +281,21 @@ class Coevolution:
                 groups.append(tuple(group))
         return groups
 
-    def build_mandatory_evaluations(self) -> list[tuple[GenotypeID, ...]]:
+    def build_mandatory_evaluations(self) -> tuple[list[tuple[GenotypeID, ...]], int]:
         """Builds evaluations which will pair each individual against all of their mandatory opponents,
         as defined each generator's :attr:`BaseGenerator.get_mandatory_opponents` method.
 
         This will schedule a number of evaluations equal to the largest list of mandatory opponents from any generator.
         For evaluation functions with more than two players, the resulting evaluations will be populated by multiple
         generators' mandatory opponent lists simultaneously.
+
+        Todo:
+            This will create unnecessary evaluations if the mandatory opponents list
+            is not the same size for each generator.
+
+        Returns:
+            - A list of evaluation groups.
+            - The number of mandatory evaluations per individual which have been scheduled.
         """
         groups = []
         mandatory_opponents = {generator: generator.get_mandatory_opponents().copy() for generator in self.agent_generators}
@@ -310,7 +318,7 @@ class Coevolution:
                             index = opponents_index % len(mandatory_agent_list)
                             group.append(mandatory_agent_list[index])
                     groups.append(tuple(group))
-        return groups
+        return groups, max_mandatory_length
 
     def get_remaining_evaluations(self) -> list[EvaluationID]:
         """Gets a list of evaluations that need to be run.
