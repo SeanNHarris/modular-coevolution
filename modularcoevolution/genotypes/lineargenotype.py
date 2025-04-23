@@ -173,16 +173,41 @@ class LinearGenotype(BaseGenotype):
     def mutate(self) -> None:
         for i in range(len(self.genes)):
             if random.random() < self.gene_mutation_rate:
-                self.genes[i] = self.genes[i] + random.gauss(0, self.gene_mutation_standard_deviation) * (self.max_value[i] - self.min_value[i])
-                if self.round_genes[i]:
-                    self.genes[i] = math.floor(max(self.min_value[i], min(self.genes[i], self.max_value[i] - 1)))
+                # Mutation size is a factor of the range of the gene!
+                self.genes[i] += random.gauss(0, self.gene_mutation_standard_deviation) * (self.max_value[i] - self.min_value[i])
                 if self.loop_genes[i]:
+                    # Modulus in python works correctly for negatives.
                     self.genes[i] = (self.genes[i] - self.min_value[i]) % (self.max_value[i] - self.min_value[i]) + self.min_value[i]
                 else:
-                    self.genes[i] = max(self.min_value[i], min(self.genes[i], self.max_value[i]))
+                    self._reflect_gene(i)
+
+                if self.round_genes[i]:
+                    self.genes[i] = round(self.genes[i])
+                    if self.loop_genes[i] and self.genes[i] == self.max_value[i]:
+                        # The above looping logic will allow genes to round to the max value, so handle this edge case.
+                        self.genes[i] = self.min_value[i]
                 # TODO: Warn if `round_genes` conflicts with non-integer min or max
 
         self.creation_method = 'Mutation'
+
+    def _reflect_gene(self, gene_index: int) -> None:
+        """
+        If the given gene is outside [min, max), reflect it at the boundary.
+
+        Args:
+            gene_index: The index of the gene to handle.
+        """
+        if self.round_genes[gene_index]:
+            # For integer genes, the max value is exclusive, so we need to move it.
+            max_reflect = self.max_value[gene_index] - 1
+        else:
+            max_reflect = self.max_value[gene_index]
+        if self.genes[gene_index] < self.min_value[gene_index]:
+            difference = self.min_value[gene_index] - self.genes[gene_index]
+            self.genes[gene_index] = self.min_value[gene_index] + difference
+        elif self.genes[gene_index] > max_reflect:
+            difference = self.genes[gene_index] - max_reflect
+            self.genes[gene_index] = max_reflect - difference
 
     def recombine_uniform(self, donor: 'LinearGenotype') -> None:
         for i in range(len(self.genes)):
