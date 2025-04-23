@@ -202,12 +202,23 @@ class LinearGenotype(BaseGenotype):
             max_reflect = self.max_value[gene_index] - 1
         else:
             max_reflect = self.max_value[gene_index]
-        if self.genes[gene_index] < self.min_value[gene_index]:
-            difference = self.min_value[gene_index] - self.genes[gene_index]
-            self.genes[gene_index] = self.min_value[gene_index] + difference
-        elif self.genes[gene_index] > max_reflect:
-            difference = self.genes[gene_index] - max_reflect
-            self.genes[gene_index] = max_reflect - difference
+
+        gene_range = max_reflect - self.min_value[gene_index]
+
+        # Repeat twice in case the gene is WAY outside the range and reflects to the other bound.
+        for _ in range(2):
+            if self.genes[gene_index] < self.min_value[gene_index]:
+                difference = self.min_value[gene_index] - self.genes[gene_index]
+                # If the gene would reflect more than twice, just cancel out the redundant reflections.
+                if difference > gene_range * 2:
+                    difference %= gene_range * 2
+                self.genes[gene_index] = self.min_value[gene_index] + difference
+            elif self.genes[gene_index] > max_reflect:
+                difference = self.genes[gene_index] - max_reflect
+                # If the gene would reflect more than twice, just cancel out the redundant reflections.
+                if difference > gene_range * 2:
+                    difference %= gene_range * 2
+                self.genes[gene_index] = max_reflect - difference
 
     def recombine_uniform(self, donor: 'LinearGenotype') -> None:
         for i in range(len(self.genes)):
