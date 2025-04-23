@@ -104,7 +104,11 @@ class Coevolution:
     finalizing: bool
     """If true, evolution has completed, and the only remaining evaluations are for secondary measurements such as tournament evaluations."""
     evaluations_per_individual: int
-    """The number of evaluations each agent will participate in per generation. This relates to the fraction of opponents each agent will encounter."""
+    """The number of evaluations each agent will participate in per generation.
+    This relates to the fraction of opponents each agent will encounter.
+    If one of the generators is listing mandatory opponents, those evaluations will count against this value,
+    in order to ensure a predictable evaluation count.
+    An error will be raised if the number of mandatory opponents exceeds this value."""
     evaluated_groups: dict[tuple[GenotypeID], int]
     """A table of how many times each set of agents has been evaluated together. Unlisted sets have not been evaluated together."""
     opponents_this_generation: dict[GenotypeID, set[GenotypeID]]
@@ -210,7 +214,10 @@ class Coevolution:
         """Generates and adds all coevolutionary evaluations for the current generation."""
         evaluation_groups = self.build_mandatory_evaluations()
         if not self.mandatory_evaluations_only or len(evaluation_groups) == 0:
-            evaluation_groups += self.build_evaluation_groups()
+            normal_evaluations_per_individual = self.evaluations_per_individual - len(evaluation_groups)
+            if normal_evaluations_per_individual < 0:
+                raise ValueError("The amount of mandatory evaluations exceeds the allowed evaluations per individual.")
+            evaluation_groups += self.build_evaluation_groups(normal_evaluations_per_individual)
         for group in evaluation_groups:
             evaluation_id = claim_evaluation_id()
             self.evaluation_table[evaluation_id] = group
@@ -249,9 +256,14 @@ class Coevolution:
             minimum_evaluation_count = min(heapq.nsmallest(1, agent_queue)[0][0] for agent_queue in agent_queues)
         return groups
 
-    def build_evaluation_groups(self) -> list[tuple[GenotypeID, ...]]:
+    def build_evaluation_groups(self, evaluations_per_individual) -> list[tuple[GenotypeID, ...]]:
         """Builds groups of agents to evaluate together, and returns them as a list of tuples of agent ids.
         Groups are generated at random without the usual checks for evenness.
+
+        Args:
+            evaluations_per_individual: How many evaluations each individual should participate in.
+                Does not use :attr:`evaluations_per_individual` directly,
+                as this can be dynamically changed for some parameters.
 
         Returns: A list of evaluation groups, where each group is a list of agent ids for that evaluation.
         """
@@ -260,7 +272,7 @@ class Coevolution:
         for agent_list in agent_lists:
             random.shuffle(agent_list)
         max_length = max(len(agent_list) for agent_list in agent_lists)
-        for separation in range(self.evaluations_per_individual):
+        for separation in range(evaluations_per_individual):
             for position in range(max_length):
                 group = []
                 for player_index, agent_list in enumerate(agent_lists):
@@ -270,6 +282,13 @@ class Coevolution:
         return groups
 
     def build_mandatory_evaluations(self) -> list[tuple[GenotypeID, ...]]:
+        """Builds evaluations which will pair each individual against all of their mandatory opponents,
+        as defined each generator's :attr:`BaseGenerator.get_mandatory_opponents` method.
+
+        This will schedule a number of evaluations equal to the largest list of mandatory opponents from any generator.
+        For evaluation functions with more than two players, the resulting evaluations will be populated by multiple
+        generators' mandatory opponent lists simultaneously.
+        """
         groups = []
         mandatory_opponents = {generator: generator.get_mandatory_opponents().copy() for generator in self.agent_generators}
         for agent_list in mandatory_opponents.values():
