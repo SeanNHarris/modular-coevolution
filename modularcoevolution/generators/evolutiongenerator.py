@@ -187,8 +187,9 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             self.genotypes_by_id[genotype.id] = genotype
 
         if self.hall_of_fame_size > 0:
-            # TODO: Manage hall of fame membership, for example using shared fitness
-            self.hall_of_fame.extend([self.population[i] for i in self.get_representatives_from_generation(self.generation, 1)])
+            # TODO: Manage hall of fame membership to limit size, for example using shared fitness
+            best_genotype_id = self.get_representatives_from_generation(self.generation, 1)[0]
+            self.hall_of_fame.append(self.genotypes_by_id[best_genotype_id])
 
         self.generation += 1
 
