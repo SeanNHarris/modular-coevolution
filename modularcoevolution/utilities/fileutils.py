@@ -137,20 +137,30 @@ def resolve_config_path(config_path_str: str) -> Path:
     raise FileNotFoundError(f"Could not find the config file at {config_path_str}")
 
 
-def get_run_paths(experiment_path_str: str) -> list[str]:
+_RUN_FOLDER_REGEX = re.compile(r'Run (\d+)')
+
+
+def get_run_paths(experiment_path_str: str) -> dict[int, str]:
     """
-    Get a list of run folders within a given experiment folder.
-    Only includes folders of the form `Run #`, sorted by run number.
+    Get a list of run paths within a given experiment path.
+    Only includes paths of the form `Run #`, sorted by run number.
 
     Args:
-        experiment_path_str: The path to the experiment folder within the logs directory.
+        experiment_path_str: The path to the experiment path within the logs directory.
 
     Returns:
-        A list of paths to the run folders within `experiment_folder`.
+        A dictionary of paths to the run folders within `experiment_path_str`, keyed by run number.
     """
     experiment_path = resolve_experiment_path(experiment_path_str)
-    run_folders = [folder.path for folder in os.scandir(experiment_path) if folder.is_dir()]
-    # Get folders of the form 'Run #', sorted by their number
-    run_folders = [folder for folder in run_folders if re.match(r'.*Run \d+', folder)]
-    run_folders.sort(key=lambda folder: int(folder.split(' ')[-1]))
-    return run_folders
+    experiment_subpaths = [path.path for path in os.scandir(experiment_path) if path.is_dir()]
+    # Get paths of the form 'Run #', sorted by their number
+    run_paths = {}
+    for subpath in experiment_subpaths:
+        match = re.search(_RUN_FOLDER_REGEX, subpath)
+        if match:
+            run_number = int(match.group(1))
+            run_paths[run_number] = subpath
+
+    # The order from os.scandir uses string ordering, which will be wrong.
+    run_paths = dict(sorted(run_paths.items()))
+    return run_paths

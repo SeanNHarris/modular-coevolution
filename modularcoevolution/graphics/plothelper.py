@@ -366,8 +366,9 @@ def interactive_plot_generational():
     if readline is not None:
         readline.set_completer()
 
-    first_run = os.path.basename(run_folders[0])
-    last_run = os.path.basename(run_folders[-1])
+    run_numbers = list(run_folders.keys())
+    first_run = run_numbers[0]
+    last_run = run_numbers[-1]
     print(f"Available runs: {first_run} - {last_run}")
     run_number = -1
     while run_number == -1:
