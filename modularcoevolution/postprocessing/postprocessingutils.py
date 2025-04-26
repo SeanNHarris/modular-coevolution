@@ -161,6 +161,10 @@ def load_experiment_data(
 
     Returns:
         A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
+
+    Todo:
+        - Key the returned dictionary by run number instead of run path.
+          Lots of files in downstream projects will need to be changed.
     """
     run_folders = get_run_paths(experiment_folder)
 
@@ -242,7 +246,8 @@ def load_experiment_definition(
         UnspecifiedExperimentError: If the experiment type is not specified in the loaded config file or as a parameter.
     """
     run_folders = get_run_paths(experiment_folder)
-    return load_run_experiment_definition(run_folders[0], experiment_type, override_parameters)
+    first_run = next(iter(run_folders))
+    return load_run_experiment_definition(run_folders[first_run], experiment_type, override_parameters)
 
 
 def _get_run_name(run_folder: str) -> str:
