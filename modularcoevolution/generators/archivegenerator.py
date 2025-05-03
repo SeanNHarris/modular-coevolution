@@ -47,8 +47,10 @@ class ArchiveGenerator(BaseGenerator):
                  genotypes: Sequence[BaseObjectiveTracker],
                  original_ids: dict[GenotypeID, int],
                  agent_class: type,
-                 agent_parameters: dict[str, Any]):
-        super().__init__(population_name)
+                 agent_parameters: dict[str, Any],
+                 **kwargs
+                 ):
+        super().__init__(population_name, **kwargs)
         # TODO: Move the ID to the BaseObjectiveTracker class to ensure that it always exists.
         self.population = list(genotypes)
         self.genotypes_by_id = {genotype.id: genotype for genotype in genotypes}
@@ -64,7 +66,7 @@ class ArchiveGenerator(BaseGenerator):
     def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
         return self.genotypes_by_id[agent_id]
 
-    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
+    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
         if agent_id not in self.genotypes_by_id:
             raise ValueError(f"The agent ID {agent_id} is not present in this generator."
                              f"Ensure the correct generator is being queried.")

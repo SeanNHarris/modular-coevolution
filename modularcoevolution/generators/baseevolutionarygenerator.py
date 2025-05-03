@@ -135,6 +135,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             competitive_fitness_sharing: bool = False,
             shared_sampling_size: int = -1,
             top_sampling_size: int = -1,
+            **kwargs
     ):
         """
 
@@ -167,7 +168,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             shared_sampling_size: If greater than zero, use shared sampling to provide mandatory opponents
                 with high competitive fitness sharing values.
         """
-        super().__init__(population_name)
+        super().__init__(population_name, **kwargs)
         self.agent_class = agent_class
         self.agent_parameters = agent_parameters
         if self.agent_parameters is None:
@@ -246,7 +247,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                              f"Ensure the correct generator is being queried.")
         return self.genotypes_by_id[agent_id]
 
-    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> BaseEvolutionaryAgent:
+    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> BaseEvolutionaryAgent:
         """Return a new instance of an agent based on the given agent ID.
 
         Args:
