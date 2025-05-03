@@ -71,7 +71,7 @@ class FixedGenerator(BaseGenerator[AgentType]):
             raise ValueError(f"ID {agent_id} does not match the ID of the fixed agent ({objective_tracker.id}).")
         return objective_tracker
 
-    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
+    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
         if self.agent.id != agent_id:
             raise ValueError(f"ID {agent_id} does not match the ID of the fixed agent ({self.agent_id}).")
 

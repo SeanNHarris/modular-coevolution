@@ -53,8 +53,9 @@ class RandomGenotypeGenerator(BaseGenerator):
             reduce_size: int = -1,
             agent_parameters: dict[str, Any] = None,
             genotype_parameters: dict[str, Any] = None,
+            **kwargs,
     ):
-        super().__init__(population_name=population_name)
+        super().__init__(population_name=population_name, **kwargs)
         self.agent_class = agent_class
         self.genotype_class = agent_class.genotype_class()
 
@@ -87,7 +88,7 @@ class RandomGenotypeGenerator(BaseGenerator):
     def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
         return self.genotypes_by_id[agent_id]
 
-    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
+    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
         if agent_id not in self.genotypes_by_id:
             raise ValueError(f"The agent ID {agent_id} is not present in this generator."
                              f"Ensure the correct generator is being queried.")

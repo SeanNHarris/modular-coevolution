@@ -22,7 +22,7 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
-from typing import Any, Callable, Generic, TypeVar, Union
+from typing import Any, Callable, Generic, TypeVar, Union, final
 
 import abc
 
@@ -57,6 +57,14 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
     """A dictionary of registered metric functions, keyed by metric name.
     A string can be used instead of a function as a shortcut to return the value of a key in the input dictionary."""
 
+    cache_agents: bool
+    """If True, the generator will cache agents for each genotype ID.
+    This may cause issues for agents that maintain state between actions."""
+    agent_cache: dict[GenotypeID, AgentType]
+    """A cache of agents, keyed by their genotype ID.
+    Agents are only cached if :attr:`cache_agents` is True.
+    The cache is cleared during :attr:`next_generation`."""
+
     @property
     @abc.abstractmethod
     def population_size(self) -> int:
@@ -67,7 +75,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         """
         pass
 
-    def __init__(self, population_name: str, *args, **kwargs):
+    def __init__(self, population_name: str, *args, cache_agents: bool = False, **kwargs):
         """
         Args:
             population_name: The name of the population being generated. Used as a primary key for logging.
@@ -75,6 +83,9 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         self.population_name = population_name
         self.metric_configurations = {}
         self.metric_functions = {}
+
+        self.cache_agents = cache_agents
+        self.agent_cache = {}
 
     @abc.abstractmethod
     def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
@@ -93,7 +104,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
+    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
         """Return a new instance of an agent based on the given agent ID.
 
         Args:
@@ -103,6 +114,31 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         Returns: A newly created agent associated with the ID ``agent_id`` and with ``active`` as its activity state.
 
         """
+        ...
+
+    @final
+    def build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
+        """Return an instance of an agent based on the given agent ID.
+        If :attr:`cache_agents` is True, this will return a cached agent if it exists.
+
+        Do not override this method in subclasses.
+        You should override :meth:`.BaseGenerator._build_agent_from_id` instead (which is called by this method).
+        This is done to allow the agent cache to apply to all generators.
+
+        Args:
+            agent_id: The ID associated with the agent being requested.
+            active: Used for the ``active`` parameter in :meth:`.BaseAgent.__init__`.
+
+        Returns: An agent associated with the ID ``agent_id`` and with ``active`` as its activity state.
+
+        """
+        if self.cache_agents and agent_id in self.agent_cache:
+            return self.agent_cache[agent_id]
+
+        agent = self._build_agent_from_id(agent_id, active)
+        if self.cache_agents:
+            self.agent_cache[agent_id] = agent
+        return agent
 
     @abc.abstractmethod
     def get_individuals_to_test(self) -> list[GenotypeID]:
@@ -182,7 +218,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         This function will only be called after :meth:`.end_generation`, so it can be assumed that the population is sorted.
 
         """
-        pass
+        self.agent_cache.clear()
 
     def generate_individual(self, parameter_string: str) -> AgentType:
         """*Deprecated*, no longer required for implementation.
