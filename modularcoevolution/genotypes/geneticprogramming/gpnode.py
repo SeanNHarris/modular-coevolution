@@ -16,6 +16,7 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import warnings
 from abc import abstractmethod
 from functools import cache
 from typing import Callable, Any, Union, Optional, Generator, Sequence, Protocol, TypeVar, TYPE_CHECKING
@@ -33,6 +34,9 @@ NodeFunction = Callable[[list[Any], dict[str, Any]], Any]
 LiteralFunction = Callable[[dict[str, Any]], Any]
 FunctionEntry = tuple[NodeFunction | LiteralFunction, NodeType, tuple[NodeType, ...]]
 T = TypeVar('T')
+
+
+STRING_INCOMPLETE_WARNING = "Operating on an incomplete tree!"
 
 
 class GPPrimitiveProtocol(Protocol):
@@ -68,7 +72,7 @@ class GPNodeType(GPNodeTypeRegistry):
             cls.functions.update(parent.functions)
             cls.literals.update(parent.literals)
 
-        # Leave these uninitialized until all the primitives function decorators have been applied.
+        # Leave these uninitialized until all the primitive function decorators have been applied.
         type_functions: dict[NodeType, list[str]] = None
         terminal_list: list[str] = None
         non_terminal_list: list[str] = None
@@ -212,8 +216,9 @@ class GPNode(metaclass=GPNodeType):
                 but this type constraint is not checked here.
         """
         self.input_nodes[index] = input_node
-        self.invalidate_height()  # Invalidate height cache
-        input_node.set_parent(self)
+        self.invalidate_height()  # Invalidate height cache (towards root)
+        if input_node is not None:
+            input_node.set_parent(self)
 
     def add_input(self, input_node: 'GPNode') -> None:
         """Adds a child to this node as an input, and sets this node as the parent of the child.
@@ -223,6 +228,7 @@ class GPNode(metaclass=GPNodeType):
                 but this type constraint is not checked here.
         """
         next_input = self.input_nodes.index(None)
+        self.invalidate_height()  # Invalidate height cache (towards root)
         self.set_input(next_input, input_node)
 
     def set_parent(self, parent: Optional['GPNode']) -> None:
@@ -232,7 +238,7 @@ class GPNode(metaclass=GPNodeType):
             parent: The parent node to set. Does not automatically add this node as a child of the parent.
         """
         self.parent = parent
-        self.invalidate_depth()  # Invalidate depth cache
+        self.invalidate_depth()  # Invalidate depth cache (towards leaves)
 
     def clone(self) -> 'GPNode':
         """Creates a deep copy of this node and its subtree.
@@ -241,9 +247,8 @@ class GPNode(metaclass=GPNodeType):
             A deep copy of the subtree rooted at this node.
         """
         clone = type(self)(self.function_id, self.literal, self.fixed_context)
-        for i, input_node in enumerate(self.input_nodes):
-            if input_node is not None:
-                clone.set_input(i, input_node.clone())
+        for child in self.iterate_input_nodes():
+            clone.add_input(child.clone())
         return clone
 
     def get_depth(self) -> int:
@@ -263,9 +268,9 @@ class GPNode(metaclass=GPNodeType):
             return self._depth
 
     def invalidate_depth(self):
-        """Invalidates the cached depth of this node and all its children."""
+        """Invalidates the cached depth of this node and all its subtrees."""
         self._depth = None
-        for child in self.input_nodes:
+        for child in self.iterate_input_nodes(warn_incomplete=False):
             child.invalidate_depth()
 
     def get_height(self) -> int:
@@ -284,14 +289,14 @@ class GPNode(metaclass=GPNodeType):
             return 1
         else:
             max_length = 0
-            for node in self.input_nodes:
-                max_length = max(max_length, node.get_height())
+            for child in self.iterate_input_nodes(warn_incomplete=False):
+                max_length = max(max_length, child.get_height())
 
             self._height = max_length + 1
             return self._height
 
     def invalidate_height(self):
-        """Invalidates the cached height of this node and all of its ancestors."""
+        """Invalidates the cached height of this node and all of its parents."""
         self._height = None
         if self.parent is not None:
             self.parent.invalidate_height()
@@ -301,8 +306,8 @@ class GPNode(metaclass=GPNodeType):
 
     def get_node_list(self) -> list['GPNode']:
         node_list = [self]
-        for input_node in self.input_nodes:
-            node_list.extend(input_node.get_node_list())
+        for child in self.iterate_input_nodes():
+            node_list.extend(child.get_node_list())
 
         return node_list
 
@@ -320,13 +325,17 @@ class GPNode(metaclass=GPNodeType):
 
         string += str(self)
         substring_list.append(string)
-        for input_node in self.input_nodes:
-            input_node._build_tree_string(max_height, depth + 1, substring_list)
+        for child in self.input_nodes:
+            if child is None:
+                warnings.warn(STRING_INCOMPLETE_WARNING)
+                substring_list.append('|\t' * (depth + 1) + '[MISSING CHILD]')
+                continue
+            child._build_tree_string(max_height, depth + 1, substring_list)
 
         return substring_list
 
     def traverse_post_order(self) -> Generator['GPNode', None, None]:
-        for child in self.input_nodes:
+        for child in self.iterate_input_nodes():
             for node in child.traverse_post_order():
                 yield node
 
@@ -334,9 +343,25 @@ class GPNode(metaclass=GPNodeType):
 
     def traverse_pre_order(self) -> Generator['GPNode', None, None]:
         yield self
-        for child in self.input_nodes:
+        for child in self.iterate_input_nodes():
             for node in child.traverse_pre_order():
                 yield node
+
+    def iterate_input_nodes(self, warn_incomplete = True) -> Generator['GPNode', None, None]:
+        """Iterates over the input nodes of this node in order.
+
+        Args:
+            warn_incomplete: If True, emits warnings if any of the input nodes don't exist.
+
+        Yields:
+            The input nodes of this node in order.
+        """
+        for child in self.input_nodes:
+            if child is None:
+                if warn_incomplete:
+                    warnings.warn(STRING_INCOMPLETE_WARNING)
+                continue
+            yield child
 
     def serialize_literal(self) -> Any:
         if self.output_type in type(self).literal_serializers:
