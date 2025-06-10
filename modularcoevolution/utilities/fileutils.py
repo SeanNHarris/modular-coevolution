@@ -40,6 +40,11 @@ def get_nearest_path(directory: str, strict: bool = True) -> Path:
     for path in paths:
         if os.access(path / directory, os.W_OK):
             return path / directory
+        if os.access(path / directory.title(), os.W_OK):
+            warnings.warn(f"A directory was unexpectedly capitalized ('{path / directory.title()}' "
+                          f"instead of '{path / directory}').\n"
+                          f"This should be renamed to prevent unexpected errors.")
+            return path / directory.title()
     if strict:
         raise FileNotFoundError(f"Could not find the {directory} directory from the cwd (strict mode).")
     else:
