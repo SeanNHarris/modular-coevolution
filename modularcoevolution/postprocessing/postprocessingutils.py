@@ -168,7 +168,9 @@ def load_experiment_data(
     """
     run_folders = get_run_paths(experiment_folder)
 
-    if run_numbers is not None:
+    if run_numbers is None:
+        run_folders = list(run_folders.values())
+    else:
         run_folders = [run_folders[i] for i in run_numbers]
 
     load_run_data_partial = partial(load_run_data, last_generation=last_generation, generations=generations, load_only=load_only)
