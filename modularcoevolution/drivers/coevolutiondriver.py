@@ -100,10 +100,11 @@ class CoevolutionDriver:
 
         if self.parallel:
             # TODO: Behave differently on Windows and Linux, as this only works on linux
-            # TODO: Run this from a static function with a check, because it maybe breaks if you run it more than once (double-check first)
             # Allows data to be shared in global variables across processes with copy-on-write memory if you don't touch it
             try:
-                multiprocessing.set_start_method('forkserver')
+                start_method = multiprocessing.get_start_method(allow_none=True)
+                if start_method is None:  # `set_start_method` can not be called twice.
+                    multiprocessing.set_start_method('forkserver')
             except ValueError:
                 print("Warning: this system does not support copy-on-write memory for global variables.")
 
