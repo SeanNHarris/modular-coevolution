@@ -111,6 +111,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     """If greater than zero, add this many of the top-sorted individuals from the previous generation
     to the set of mandatory opponents.
     Primarily intended for :class:`.NSGAIIGenerator`, but implemented here as it's technically applicable anywhere."""
+    population_log_size: int
+    """If greater than zero, limit logging of individual genotypes to this many of the top individuals."""
 
     data_collector: DataCollector
     """The :class:`.DataCollector` to be used for logging."""
@@ -135,6 +137,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             competitive_fitness_sharing: bool = False,
             shared_sampling_size: int = -1,
             top_sampling_size: int = -1,
+            population_log_size: int = -1,
             **kwargs
     ):
         """
@@ -167,6 +170,8 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 to compute alternative objective values.
             shared_sampling_size: If greater than zero, use shared sampling to provide mandatory opponents
                 with high competitive fitness sharing values.
+            population_log_size: If greater than zero, limit logging of individual genotypes
+                to this many of the top individuals.
         """
         super().__init__(population_name, **kwargs)
         self.agent_class = agent_class
@@ -207,6 +212,7 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.top_sampling_size = top_sampling_size
         if self.top_sampling_size > self.past_population_width:
             raise ValueError("Top sampling size cannot exceed the past population width, as not enough individuals will be stored.")
+        self.population_log_size = population_log_size
 
         population_set = set()
         for i in range(self.initial_size):
@@ -318,18 +324,18 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             novelty = self.get_diversity(agent_id, min(100, len(self.population)))
             self.submit_metric(agent_id, "novelty", novelty)
 
-        if self.data_collector is not None:
-            self.data_collector.set_individual_data(
-                self.population_name,
-                individual.id,
-                individual.get_raw_genotype(),
-                individual.evaluation_ids.copy(),
-                individual.metrics.copy(),
-                individual.metric_statistics.copy(),
-                individual.metric_histories.copy(),
-                individual.parent_ids.copy(),
-                individual.creation_method,
-            )
+        # if self.data_collector is not None:
+        #     self.data_collector.set_individual_data(
+        #         self.population_name,
+        #         individual.id,
+        #         individual.get_raw_genotype(),
+        #         individual.evaluation_ids.copy(),
+        #         individual.metrics.copy(),
+        #         individual.metric_statistics.copy(),
+        #         individual.metric_histories.copy(),
+        #         individual.parent_ids.copy(),
+        #         individual.creation_method,
+        #     )
 
     @abc.abstractmethod
     def end_generation(self) -> None:
@@ -494,7 +500,11 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 population_metrics
             )
 
-        for individual in self.population:
+        if self.population_log_size < 0:
+            population_to_log = self.population
+        else:
+            population_to_log = self.population[:self.population_log_size]
+        for individual in population_to_log:
             self.data_collector.set_individual_data(
                 self.population_name,
                 individual.id,
