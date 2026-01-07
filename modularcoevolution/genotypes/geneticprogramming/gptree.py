@@ -112,9 +112,7 @@ class GPTree(BaseGenotype):
 
     # Generate a tree either at random or from a list of expansions.
     def __init__(self, parameters):
-        super().__init__()
-
-        self.parameters = parameters
+        super().__init__(parameters)
         if "node_type" in parameters:
             if isinstance(parameters["node_type"], type):
                 self.node_type = parameters["node_type"]

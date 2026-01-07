@@ -96,7 +96,7 @@ class LinearGenotype(BaseGenotype):
     """The scale of the mutation, as a factor of the gene's range."""
 
     def __init__(self, parameters: LinearGenotypeParameters):
-        super().__init__()
+        super().__init__(parameters)
         if 'gene_mutation_rate' in parameters:
             self.gene_mutation_rate = parameters['gene_mutation_rate']
         else:

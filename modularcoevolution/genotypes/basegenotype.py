@@ -23,7 +23,7 @@ __license__ = 'Apache-2.0'
 from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
 from modularcoevolution.utilities.specialtypes import claim_genotype_id, GenotypeID
 
-from typing import Any, TypeVar
+from typing import Any, TypeVar, TypedDict
 
 import abc
 
@@ -35,6 +35,8 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
     """The base class of all genotypes, as used by instances of :class:`.BaseEvolutionaryGenerator`.
 
     """
+    parameters: TypedDict
+    """The parameters used to create this genotype. Used for serialization."""
 
     parent_ids: list["GenotypeID"]
     """A list of genotypes used as parents for this one. Could be empty for random genotypes, or have a size
@@ -42,8 +44,9 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
     creation_method: str
     """A string describing what method was used to create this genotype, such as "mutation", for logging purposes."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, parameters, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.parameters = parameters
 
         self.parent_ids = list()
         self.creation_method = "Parthenogenesis"
@@ -92,10 +95,47 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
         This is what is stored in :class:`.DataCollector` logs.
 
         Returns:
-            A dictionary of parameters sufficient to recreate this genotype when passed to :meth:`__init__`.
+            A dictionary of parameters sufficient to recreate this genotype when passed to :meth:`__init__`
+            in combination with the experiment configuration.
         """
         pass
 
     @abc.abstractmethod
     def diversity_function(self, population, reference=None, samples=None):
         pass
+    #
+    # def __getstate__(self):
+    #     """
+    #     NOTE: CURRENTLY BROKEN
+    #       Causes strings instead of types to be pickled for subgenotypes in MultipleGenotype.
+    #
+    #     Serializes the :class:`BaseGenotype` for pickling from its parameters and raw genotype,
+    #     rather than by directly pickling it.
+    #
+    #     Note:
+    #         Pickling will lose any temporary values stored in the genotype,
+    #         such as saved values from :meth:`GPTree.execute` with `save_values=True`.
+    #
+    #     Returns:
+    #         A dictionary containing the state of the genotype,
+    #         including parameters sufficient to recreate this genotype when passed to :meth:`__init__`.
+    #     """
+    #     parameters = dict(self.parameters)
+    #     parameters.update(self.get_raw_genotype())
+    #
+    #     local_dict = {
+    #         'parent_ids': self.parent_ids,
+    #         'creation_method': self.creation_method,
+    #     }
+    #
+    #     base_state = super().__getstate__()
+    #
+    #     return {
+    #         'parameters': parameters,
+    #         **local_dict,
+    #         **base_state,
+    #     }
+    #
+    # def __setstate__(self, state):
+    #     self.__init__(state['parameters'])
+    #     self.__dict__.update(state)

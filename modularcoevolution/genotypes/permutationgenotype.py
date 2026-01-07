@@ -40,7 +40,7 @@ class PermutationGenotype(BaseGenotype):
     genes: list[int]
 
     def __init__(self, parameters: _Parameters):
-        super().__init__()
+        super().__init__(parameters)
         if "values" in parameters:
             self.genes = list(parameters["values"])
         elif "alleles" in parameters:
