@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -31,7 +31,8 @@ from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.generators.basegenerator import MetricFunction
 from modularcoevolution.generators.randomgenotypegenerator import RandomGenotypeGenerator
 from modularcoevolution.managers.coevolution import Coevolution
-from modularcoevolution.utilities import parallelutils
+from modularcoevolution.utilities import parallelutils, dictutils
+from modularcoevolution.utilities.datacollector import DataCollector
 from modularcoevolution.utilities.dictutils import deep_copy_dictionary, deep_update_dictionary
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
@@ -73,6 +74,8 @@ class BaseExperiment(metaclass=abc.ABCMeta):
     """A dictionary of configuration parameters for the experiment from a configuration file."""
     agent_types_by_population_name: dict[str, type[BaseAgent]]
     """A dictionary of agent types, indexed by population name."""
+    data_collector: DataCollector
+    """The :class:`.DataCollector` for this experiment."""
 
     def __init__(self, config: dict[str, Any]):
         """This method creates the experiment object and fixes its parameters, but does not create any generators.
@@ -84,6 +87,10 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 in the implementation of this class.
         """
         self.config = self._apply_config_defaults(config)
+        if dictutils.has_config_value(config, ('manager', 'data_collector')):
+            self.data_collector = dictutils.get_config_value(config, ('manager', 'data_collector'))
+            self.data_collector.set_experiment_parameters(self.config)
+
         self.agent_types_by_population_name = {}
         for population_name, agent_type in zip(self.population_names(), self.population_agent_types()):
             self.agent_types_by_population_name[population_name] = agent_type

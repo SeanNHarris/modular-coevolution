@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import argparse
+import functools
+import sys
 import warnings
 from typing import Any, Sequence, TypedDict, Union
 
@@ -29,7 +31,12 @@ import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
-from modularcoevolution.utilities import dictutils, fileutils, configutils
+from modularcoevolution.utilities import dictutils, fileutils, configutils, parallelutils
+
+try:
+    import tqdm
+except ImportError:
+    tqdm = None
 
 
 def _apply_args_and_kwargs(function, args, kwargs):
@@ -45,6 +52,9 @@ class CoevolutionDriver:
 
     parallel: bool
     """Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging."""
+    parallel_runs: bool
+    """If True, parallelization will be across runs rather than across evaluations. Requires `parallel` to be True.
+    This is often much more memory-intensive than parallelization per-eval, and may not use every CPU core."""
     run_exhibition: bool
     """Whether to run and log exhibition evaluations between the best individuals of each generation."""
     exhibition_rate: int
@@ -62,6 +72,7 @@ class CoevolutionDriver:
                  run_amount: int = 30,
                  run_start: int = 0,
                  parallel: bool = True,
+                 parallel_runs: bool = False,
                  use_data_collector: bool = True,
                  run_exhibition: bool = True,
                  exhibition_rate: int = 1,
@@ -77,6 +88,9 @@ class CoevolutionDriver:
             run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
                 Used for resuming experiments.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
+            parallel_runs: If True, parallelization will be across runs rather than across evaluations.
+                Requires `parallel` to be True.
+                This is often much more memory-intensive than parallelization per-eval, and may not use every CPU core.
             use_data_collector: Whether to use a data collector to store results. This will result in a lot of logged data.
             run_exhibition: Whether to run and log exhibition evaluations between the best individuals of each generation.
             exhibition_rate: The rate at which to run exhibition evaluations, e.g. every 5 generations.
@@ -87,6 +101,7 @@ class CoevolutionDriver:
         self.experiment_type = experiment_type
         
         self.parallel = parallel
+        self.parallel_runs = parallel_runs
         self.use_data_collector = use_data_collector
         if not self.use_data_collector:
             # TODO: Support disabling the data collector again
@@ -111,13 +126,24 @@ class CoevolutionDriver:
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
         try:
-            for parameter_set in self.parameters:
-                self._run_experiment(parameter_set)
+            if self.parallel and self.parallel_runs:
+                evaluation_pool = parallelutils.create_pool(16)
+                run_experiment = functools.partial(self._run_experiment, parallel=False, redirect_output=True)
+                result_iterator = evaluation_pool.map(run_experiment, self.parameters)
+
+                if tqdm is not None and len(self.parameters) > 1:
+                    result_iterator = tqdm.tqdm(result_iterator, total=len(self.parameters), desc="Running experiment", unit="runs", smoothing=0.0)
+                for result in result_iterator:
+                    result.result()  # Make the iterator track completed results.
+            else:
+                for parameter_set in self.parameters:
+                    self._run_experiment(parameter_set, parallel=self.parallel)
+
         except KeyboardInterrupt:
             print("Keyboard interrupt received. Ending all runs.")
             raise KeyboardInterrupt
 
-    def _run_experiment(self, run_parameters: dict[str, Any]) -> None:
+    def _run_experiment(self, run_parameters: dict[str, Any], parallel: bool = False, redirect_output: bool = False) -> None:
         """Run a single experiment.
 
         Args:
@@ -136,6 +162,16 @@ class CoevolutionDriver:
             data_collector = DataCollector(**logging_parameters)
         else:
             data_collector = None
+
+        logs_path = fileutils.get_logs_path(can_create=True)
+        log_path = logs_path / log_subfolder
+        os.makedirs(log_path, exist_ok=True)
+
+        # TODO: Use a fancier logging tool for the entire library to prevent doing this
+        if redirect_output:
+            output_file = open(log_path / "output.txt", "w")
+            sys.stdout = output_file
+            sys.stderr = output_file
 
         config = dictutils.deep_copy_dictionary(run_parameters)
         dictutils.set_config_value(config, ('manager', 'data_collector'), data_collector)
@@ -159,17 +195,12 @@ class CoevolutionDriver:
         experiment = run_experiment_type(config)
         coevolution_manager: Coevolution = experiment.create_experiment()
 
-        logs_path = fileutils.get_logs_path(can_create=True)
-        log_path = logs_path / log_subfolder
-
-        os.makedirs(log_path, exist_ok=True)
-        data_collector.set_experiment_parameters(run_parameters)
         with open(f'{log_path}/parameters.json', 'a+') as parameter_file:
             parameter_file.truncate(0)
             json.dump(run_parameters, parameter_file)
 
         # Do a test evaluation to visualize what the scenario looks like
-        experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=self.parallel)
+        experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=parallel)
 
         while True:
             try:
@@ -177,7 +208,7 @@ class CoevolutionDriver:
                     evaluations = coevolution_manager.get_remaining_evaluations()
                     agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
 
-                    end_states = experiment.evaluate_all(agent_groups, parallel=self.parallel)
+                    end_states = experiment.evaluate_all(agent_groups, parallel=parallel)
 
                     for i, results in enumerate(end_states):
                         evaluation = evaluations[i]
@@ -192,18 +223,27 @@ class CoevolutionDriver:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
-                    experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=self.parallel)
+                    experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=parallel)
 
             except EvolutionEndedException:
                 print("Run complete.")
                 if self.run_exhibition:
-                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=self.parallel)
+                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=parallel)
                 if self.use_data_collector and not data_collector.split_generations:
                     log_filename = f'{log_path}/data/data'
                     data_collector.save_to_file(log_filename)
                 break
             except KeyboardInterrupt as error:
+                if redirect_output:
+                    output_file.close()
+                    sys.stdout = sys.__stdout__
+                    sys.stderr = sys.__stderr__
                 raise error
+
+        if redirect_output:
+            output_file.close()
+            sys.stdout = sys.__stdout__
+            sys.stderr = sys.__stderr__
 
     @staticmethod
     def create_argument_parser() -> argparse.ArgumentParser:
@@ -222,6 +262,8 @@ class CoevolutionDriver:
                             help='The run number to start at. Runs will end at the number specified by the --runs argument. Used for resuming experiments.')
         parser.add_argument('-np', '--no-parallel', dest='parallel', action='store_false',
                             help='Disable parallel evaluations.')
+        parser.add_argument('-pr', '--parallel-runs', dest='parallel_runs', action='store_true',
+                            help='Parallelize over runs instead of evaluations.')
         parser.add_argument('-nd', '--no-data-collector', dest='use_data_collector', action='store_false',
                             help='Disable the data collector.')
         parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false',

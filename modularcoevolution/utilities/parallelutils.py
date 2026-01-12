@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ def cores_available() -> int:
     return num_processes
 
 
-def create_pool() -> concurrent.futures.Executor:
+def create_pool(num_processes: int = -1) -> concurrent.futures.Executor:
     """Create an Executor pool configured with the number of available CPU cores.
     If the GIL is disabled, uses a ThreadPoolExecutor instead of a ProcessPoolExecutor.
     Will automatically detect if the code is being run through Slurm on an HPC cluster node
@@ -42,7 +42,9 @@ def create_pool() -> concurrent.futures.Executor:
     """
     # `sys._is_gil_enabled` was added in Python 3.13, but we want to use multiprocessing in earlier versions anyway.
     use_multiprocessing = not hasattr(sys, '_is_gil_enabled') or sys._is_gil_enabled()
-    num_processes = cores_available()
+
+    if num_processes == -1:
+        num_processes = cores_available()
 
     if use_multiprocessing:
         print(f'Creating pool with {num_processes} processes.')

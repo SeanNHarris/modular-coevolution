@@ -1,4 +1,28 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -28,8 +52,9 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import itertools
 import tomllib
-from typing import Any
+from typing import Any, Sequence
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
 from modularcoevolution.postprocessing import postprocessingutils
@@ -92,19 +117,75 @@ def generate_run_parameters(
     # Note: we don't pass in merge_parameters here, because we want to merge them separately per-run.
     base_parameters = parse_config(config_filename, experiment_type=experiment_type)
 
+    treatment_merge_parameters = _process_metaparameters(base_parameters)
+
     if merge_parameters is None:
         merge_parameters = {}
     if isinstance(merge_parameters, dict):
         merge_parameters = [merge_parameters] * run_count
 
     parameter_list = []
-    for i in range(run_start, run_count):
-        run_parameters = dictutils.deep_copy_dictionary(base_parameters)
-        run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
-        dictutils.deep_update_dictionary(run_parameters, merge_parameters[i])
 
-        parameter_list.append(run_parameters)
+    if treatment_merge_parameters is None:
+        for i in range(run_start, run_count):
+            run_parameters = dictutils.deep_copy_dictionary(base_parameters)
+            run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
+            dictutils.deep_update_dictionary(run_parameters, merge_parameters[i])
+
+            parameter_list.append(run_parameters)
+    else:
+        for treatment in treatment_merge_parameters:
+            meta_run_parameters = dictutils.deep_copy_dictionary(base_parameters)
+            dictutils.deep_update_dictionary(meta_run_parameters, treatment)
+            treatment_string = treatment['treatment_string']
+            for i in range(run_count):
+                run_parameters = dictutils.deep_copy_dictionary(meta_run_parameters)
+                run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/{treatment_string}/Run {i}"
+                dictutils.deep_update_dictionary(run_parameters, merge_parameters[i])
+
+                parameter_list.append(run_parameters)
+        print(f"Note: metaparameters in the config file are requesting {len(treatment_merge_parameters)} treatments.")
+        print(f"This will result in {len(parameter_list)} total runs.")
     return parameter_list
+
+
+def _process_metaparameters(config: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Handle metaparameters such as combinations of parameter values to vary across runs."""
+
+    if 'meta_values' not in config:
+        return None
+
+    meta_values = config['meta_values']
+    flat_values = dictutils.flatten_dictionary(meta_values)
+
+    for key, value in flat_values.items():
+        if not isinstance(value, Sequence):
+            path = ".".join(key)
+            raise TypeError(f"Could not parse config metaparameters. {path} is not a list of values.")
+
+    combinations = itertools.product(*flat_values.values())
+    result = []
+    for combination in combinations:
+        value_strings = ['treatment']
+        for index, value in enumerate(combination):
+            if isinstance(value, str):
+                value_strings.append(value)
+            elif isinstance(value, int):
+                value_strings.append(str(value))
+            elif isinstance(value, float):
+                value_strings.append(str(value).replace('.', '_'))
+            else:
+                value_index = list(flat_values.values()).index(value)
+                value_strings.append(str(value_index))
+        treatment_string = "-".join(value_strings)
+
+        merge_config = {}
+        dictutils.set_config_value(merge_config, ('treatment_string',), treatment_string)
+        for key, value in zip(flat_values.keys(), combination):
+            dictutils.set_config_value(merge_config, key, value)
+        result.append(merge_config)
+
+    return result
 
 
 def experiment_from_config(config_parameters: dict[str, Any]) -> BaseExperiment:

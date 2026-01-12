@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ def deep_copy_dictionary(dictionary: dict) -> dict:
             new_dictionary[key] = value
     return new_dictionary
 
+
 def deep_update_dictionary(dictionary: dict, update: dict, weak: bool = False) -> None:
     """
     Update a dictionary with another dictionary, recursively.
@@ -78,6 +79,66 @@ def set_config_value(config: dict, keys: Sequence[str], value: Any, weak: bool =
         current_dict[keys[-1]] = value
 
 
+def has_config_value(config: dict, keys: Sequence[str]) -> bool:
+    """
+    Check if a value in a nested dictionary exists.
+    Args:
+        config: The dictionary to read.
+        keys: A sequence of keys to traverse the nested dictionary.
+    Returns:
+        True if a value exists at the given key sequence, False otherwise.
+    """
+    current = config
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            return False
+        else:
+            current = current[key]
+    return True
+
+
+def get_config_value(config: dict, keys: Sequence[str]) -> Any:
+    """
+    Get a value in a nested dictionary using a list of keys.
+    Args:
+        config: The dictionary to read.
+        keys: A sequence of keys to traverse the nested dictionary.
+    Returns:
+        The value of the nested dictionary at the given key sequence.
+    Raises:
+        ValueError: If one of the specified keys does not exist.
+    """
+    current = config
+    for key in keys:
+        if not isinstance(current, dict) or key not in current:
+            raise ValueError(f"Key {key} could not be found.")
+        else:
+            current = current[key]
+    return current
+
+
+def flatten_dictionary(config: dict[str, Any]) -> dict[tuple[str, ...], Any]:
+    """
+    Flatten a nested dictionary.
+    The resulting dictionary keys correspond to the paths of values in the nested dictionary structure.
+    Args:
+        config: The dictionary to flatten.
+    Returns:
+        A flat dictionary, where keys are a tuple of strings such that `result[(a, b, c)] == config[a][b][c]`.
+    """
+    result = {}
+    for key, value in config.items():
+        if isinstance(value, dict):
+            sub_result = flatten_dictionary(value)
+            for sub_key, sub_value in sub_result.items():
+                new_key = (key, *sub_key)
+                result[new_key] = sub_value
+        else:
+            new_key = (key,)
+            result[new_key] = value
+    return result
+
+
 def strip_dictionary_layers(dictionary: Any, layers: list[int]) -> Any:
     """
     Remove redundant layers of a nested dictionary based on the specified layer numbers.
@@ -110,3 +171,21 @@ def strip_dictionary_layers(dictionary: Any, layers: list[int]) -> Any:
         for key, value in dictionary.items():
             new_dictionary[key] = strip_dictionary_layers(value, new_layers)
         return new_dictionary
+
+
+def purge_dictionary_by_type(dictionary: dict, purge_type: type) -> dict:
+    """
+    Return a copy of a nested dictionary which omits values of a given type.
+    Args:
+        dictionary: The dictionary to process.
+        purge_type: The type of value to omit from the returned dictionary.
+    Returns:
+        A copy of the dictionary with values of the specified type omitted.
+    """
+    result = {}
+    for key, value in dictionary.items():
+        if isinstance(value, dict):
+            result[key] = purge_dictionary_by_type(value, purge_type)
+        elif not isinstance(value, purge_type):
+            result[key] = value
+    return result

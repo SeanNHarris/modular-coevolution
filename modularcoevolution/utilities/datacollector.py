@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -145,7 +145,9 @@ class DataCollector:
         Args:
             parameters: A dictionary of parameters for the experiment. No specific format is specified.
         """
-        self.data["experiment"]["parameters"] = parameters
+        # Don't store yourself!
+        safe_parameters = dictutils.purge_dictionary_by_type(parameters, DataCollector)
+        self.data["experiment"]["parameters"] = safe_parameters
         self.update_experiment()
 
     def set_experiment_master_tournament_objective(self, objective: str, matrix: Any):
