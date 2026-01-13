@@ -125,11 +125,19 @@ class CoevolutionDriver:
 
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
+        run_experiment = functools.partial(
+            _run_experiment,
+            experiment_type=self.experiment_type,
+            use_data_collector=self.use_data_collector,
+            run_exhibition=self.run_exhibition,
+            exhibition_rate=self.exhibition_rate
+        )
+
         try:
             if self.parallel and self.parallel_runs:
                 evaluation_pool = parallelutils.create_pool(16)
-                run_experiment = functools.partial(self._run_experiment, parallel=False, redirect_output=True)
-                result_iterator = evaluation_pool.map(run_experiment, self.parameters)
+                run_experiment_parallel = functools.partial(run_experiment, parallel=False, redirect_output=True)
+                result_iterator = evaluation_pool.map(run_experiment_parallel, self.parameters)
 
                 if tqdm is not None and len(self.parameters) > 1:
                     result_iterator = tqdm.tqdm(result_iterator, total=len(self.parameters), desc="Running experiment", unit="runs", smoothing=0.0)
@@ -137,113 +145,11 @@ class CoevolutionDriver:
                     result.result()  # Make the iterator track completed results.
             else:
                 for parameter_set in self.parameters:
-                    self._run_experiment(parameter_set, parallel=self.parallel)
+                    run_experiment(parameter_set, parallel=self.parallel)
 
         except KeyboardInterrupt:
             print("Keyboard interrupt received. Ending all runs.")
             raise KeyboardInterrupt
-
-    def _run_experiment(self, run_parameters: dict[str, Any], parallel: bool = False, redirect_output: bool = False) -> None:
-        """Run a single experiment.
-
-        Args:
-            run_parameters: A dictionary of parameters for the experiment.
-
-        Todo:
-            * Store random seeds, propagate to threads.
-        """
-        log_subfolder = run_parameters['log_subfolder']
-        if 'logging' in run_parameters:
-            logging_parameters = run_parameters['logging']
-        else:
-            logging_parameters = {}
-
-        if self.use_data_collector:
-            data_collector = DataCollector(**logging_parameters)
-        else:
-            data_collector = None
-
-        logs_path = fileutils.get_logs_path(can_create=True)
-        log_path = logs_path / log_subfolder
-        os.makedirs(log_path, exist_ok=True)
-
-        # TODO: Use a fancier logging tool for the entire library to prevent doing this
-        if redirect_output:
-            output_file = open(log_path / "output.txt", "w")
-            sys.stdout = output_file
-            sys.stderr = output_file
-
-        config = dictutils.deep_copy_dictionary(run_parameters)
-        dictutils.set_config_value(config, ('manager', 'data_collector'), data_collector)
-        dictutils.set_config_value(config, ('default', 'generator', 'data_collector'), data_collector)
-
-        run_experiment_type = self.experiment_type
-        if 'experiment_type' in config:
-            config_experiment_type = postprocessingutils.get_experiment_type(config)
-            if self.experiment_type is None:
-                run_experiment_type = config_experiment_type
-            else:
-                if self.experiment_type != config_experiment_type:
-                    if '__main__' in run_experiment_type.__module__ and run_experiment_type.__name__ == config_experiment_type.__name__:
-                        extra_warning = "\nThis is probably because you're running the experiment file instead of running the driver directly."
-                    else:
-                        extra_warning = ""
-                    warnings.warn(f"The experiment type specified in the configuration file ({config_experiment_type}) does not match the experiment type given to the driver ({run_experiment_type}.{extra_warning}")
-        if run_experiment_type is None:
-            raise ValueError("No experiment type specified as a parameter or in the configuration file.")
-
-        experiment = run_experiment_type(config)
-        coevolution_manager: Coevolution = experiment.create_experiment()
-
-        with open(f'{log_path}/parameters.json', 'a+') as parameter_file:
-            parameter_file.truncate(0)
-            json.dump(run_parameters, parameter_file)
-
-        # Do a test evaluation to visualize what the scenario looks like
-        experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=parallel)
-
-        while True:
-            try:
-                while len(coevolution_manager.get_remaining_evaluations()) > 0:
-                    evaluations = coevolution_manager.get_remaining_evaluations()
-                    agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
-
-                    end_states = experiment.evaluate_all(agent_groups, parallel=parallel)
-
-                    for i, results in enumerate(end_states):
-                        evaluation = evaluations[i]
-
-                        agent_ids = coevolution_manager.evaluation_table[evaluation]
-                        results_per_agent = {agent_id: results[index] for index, agent_id in enumerate(agent_ids)}
-
-                        coevolution_manager.submit_evaluation(evaluation, results_per_agent)
-
-                coevolution_manager.next_generation()
-                if self.use_data_collector and data_collector.split_generations:
-                    log_filename = f'{log_path}/data/data'
-                    data_collector.save_to_file(log_filename)
-                if self.run_exhibition and coevolution_manager.generation % self.exhibition_rate == (self.exhibition_rate - 1):
-                    experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=parallel)
-
-            except EvolutionEndedException:
-                print("Run complete.")
-                if self.run_exhibition:
-                    experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=parallel)
-                if self.use_data_collector and not data_collector.split_generations:
-                    log_filename = f'{log_path}/data/data'
-                    data_collector.save_to_file(log_filename)
-                break
-            except KeyboardInterrupt as error:
-                if redirect_output:
-                    output_file.close()
-                    sys.stdout = sys.__stdout__
-                    sys.stderr = sys.__stderr__
-                raise error
-
-        if redirect_output:
-            output_file.close()
-            sys.stdout = sys.__stdout__
-            sys.stderr = sys.__stderr__
 
     @staticmethod
     def create_argument_parser() -> argparse.ArgumentParser:
@@ -271,6 +177,116 @@ class CoevolutionDriver:
         parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1,
                             help='The rate at which to run exhibition evaluations, e.g. every 5 generations.')
         return parser
+
+
+def _run_experiment(
+        run_parameters: dict[str, Any],
+        experiment_type: type,
+        parallel: bool = False,
+        use_data_collector: bool = True,
+        run_exhibition: bool = True,
+        exhibition_rate: int = 1,
+        redirect_output: bool = False) -> None:
+    """Run a single experiment.
+
+    Args:
+        run_parameters: A dictionary of parameters for the experiment.
+
+    Todo:
+        * Store random seeds, propagate to threads.
+    """
+    log_subfolder = run_parameters['log_subfolder']
+    if 'logging' in run_parameters:
+        logging_parameters = run_parameters['logging']
+    else:
+        logging_parameters = {}
+
+    if use_data_collector:
+        data_collector = DataCollector(**logging_parameters)
+    else:
+        data_collector = None
+
+    logs_path = fileutils.get_logs_path(can_create=True)
+    log_path = logs_path / log_subfolder
+    os.makedirs(log_path, exist_ok=True)
+
+    # TODO: Use a fancier logging tool for the entire library to prevent doing this
+    if redirect_output:
+        output_file = open(log_path / "output.txt", "w")
+        sys.stdout = output_file
+        sys.stderr = output_file
+
+    config = dictutils.deep_copy_dictionary(run_parameters)
+    dictutils.set_config_value(config, ('manager', 'data_collector'), data_collector)
+    dictutils.set_config_value(config, ('default', 'generator', 'data_collector'), data_collector)
+
+    run_experiment_type = experiment_type
+    if 'experiment_type' in config:
+        config_experiment_type = postprocessingutils.get_experiment_type(config)
+        if experiment_type is None:
+            run_experiment_type = config_experiment_type
+        else:
+            if experiment_type != config_experiment_type:
+                if '__main__' in run_experiment_type.__module__ and run_experiment_type.__name__ == config_experiment_type.__name__:
+                    extra_warning = "\nThis is probably because you're running the experiment file instead of running the driver directly."
+                else:
+                    extra_warning = ""
+                warnings.warn(f"The experiment type specified in the configuration file ({config_experiment_type}) does not match the experiment type given to the driver ({run_experiment_type}.{extra_warning}")
+    if run_experiment_type is None:
+        raise ValueError("No experiment type specified as a parameter or in the configuration file.")
+
+    experiment = run_experiment_type(config)
+    coevolution_manager: Coevolution = experiment.create_experiment()
+
+    with open(f'{log_path}/parameters.json', 'a+') as parameter_file:
+        parameter_file.truncate(0)
+        json.dump(run_parameters, parameter_file)
+
+    # Do a test evaluation to visualize what the scenario looks like
+    # experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=parallel)
+
+    while True:
+        try:
+            while len(coevolution_manager.get_remaining_evaluations()) > 0:
+                evaluations = coevolution_manager.get_remaining_evaluations()
+                agent_groups = [coevolution_manager.build_agent_group(evaluation) for evaluation in evaluations]
+
+                end_states = experiment.evaluate_all(agent_groups, parallel=parallel)
+
+                for i, results in enumerate(end_states):
+                    evaluation = evaluations[i]
+
+                    agent_ids = coevolution_manager.evaluation_table[evaluation]
+                    results_per_agent = {agent_id: results[index] for index, agent_id in enumerate(agent_ids)}
+
+                    coevolution_manager.submit_evaluation(evaluation, results_per_agent)
+
+            coevolution_manager.next_generation()
+            if use_data_collector and data_collector.split_generations:
+                log_filename = f'{log_path}/data/data'
+                data_collector.save_to_file(log_filename)
+            if run_exhibition and coevolution_manager.generation % exhibition_rate == (exhibition_rate - 1):
+                experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=parallel)
+
+        except EvolutionEndedException:
+            print("Run complete.")
+            if run_exhibition:
+                experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=parallel)
+            if use_data_collector and not data_collector.split_generations:
+                log_filename = f'{log_path}/data/data'
+                data_collector.save_to_file(log_filename)
+            break
+        except KeyboardInterrupt as error:
+            if redirect_output:
+                output_file.close()
+                sys.stdout = sys.__stdout__
+                sys.stderr = sys.__stderr__
+            raise error
+
+    if redirect_output:
+        output_file.close()
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
 
 
 if __name__ == '__main__':
