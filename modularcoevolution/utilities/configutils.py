@@ -47,12 +47,25 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import itertools
+import logging
 import tomllib
 from typing import Any, Sequence
 
@@ -144,8 +157,10 @@ def generate_run_parameters(
                 dictutils.deep_update_dictionary(run_parameters, merge_parameters[i])
 
                 parameter_list.append(run_parameters)
-        print(f"Note: metaparameters in the config file are requesting {len(treatment_merge_parameters)} treatments.")
-        print(f"This will result in {len(parameter_list)} total runs.")
+
+        logger = logging.getLogger(__name__)
+        logger.info(f"Note: metaparameters in the config file are requesting {len(treatment_merge_parameters)} treatments.")
+        logger.info(f"This will result in {len(parameter_list)} total runs.")
     return parameter_list
 
 

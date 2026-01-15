@@ -18,6 +18,7 @@ __license__ = 'Apache-2.0'
 
 import gzip
 import json
+import logging
 import os
 import pickle
 import pickletools
@@ -344,8 +345,10 @@ class DataCollector:
         """
         files = [file for file in os.scandir(pathname) if file.is_file()]
         files.sort(key=lambda file: int("".join(filter(str.isdigit, file.name))))
+
+        logger = logging.getLogger(__name__)
         for file in files:
-            print(f"Loading {file.name}")
+            logger.info(f"Loading {file.name}")
             self.load_from_file(file.path, load_only=load_only)
 
     def load_last_generation(self, pathname, load_only: Sequence[str] = None) -> None:

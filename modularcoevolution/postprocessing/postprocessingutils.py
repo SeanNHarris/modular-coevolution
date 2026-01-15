@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import functools
 import importlib
 import itertools
 import json
+import logging
+import os
 import re
 import warnings
 from functools import partial
@@ -32,14 +34,12 @@ from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.utilities import parallelutils
 from modularcoevolution.utilities.datacollector import DataCollector, DataSchema, IndividualData
 
-import os
-
 from modularcoevolution.utilities.dictutils import deep_update_dictionary, strip_dictionary_layers
 from modularcoevolution.utilities.fileutils import get_run_paths, resolve_experiment_path
 from modularcoevolution.utilities.specialtypes import GenotypeID
 
-TRUNCATE = True
-world_kwargs = {}
+
+_logger = logging.getLogger(__name__)
 
 
 def load_run_config(run_folder: str, override_parameters: dict = None) -> dict:
@@ -129,7 +129,7 @@ def load_run_data(
         raise ValueError("Can't set both \"last_generation\" and \"generations\" parameters.")
 
     data_path = os.path.join(run_folder, 'data')
-    print(f'Reading experiment run data from {data_path}')
+    _logger.info(f'Reading experiment run data from {data_path}')
     data_collector = DataCollector()
     if last_generation:
         data_collector.load_last_generation(data_path, load_only=load_only)
@@ -302,7 +302,7 @@ def load_best_run_individuals(
             raise ValueError(f'Population name {population_name} not found in experiment definition.')
         agent_type = experiment_definition.agent_types_by_population_name[population_name]
 
-        print(f'Processing population \'{population_name}\'...')
+        _logger.info(f'Processing population \'{population_name}\'...')
 
         #parameters: coevolutiondriver.ParameterSchema = run_data['experiment']['parameters']
         #run_agent_parameters = parameters['generators'][population_name][1]['agent_parameters']

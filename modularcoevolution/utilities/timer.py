@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -16,7 +16,11 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import logging
 import time
+
+
+_logger = logging.getLogger(__name__)
 
 
 class Timer:
@@ -40,7 +44,7 @@ class Timer:
 
         time_elapsed = self.get_time_elapsed()
         time_format = format_function(time_elapsed)
-        print(f"{self.name} - Time elapsed: {time_format}")
+        _logger.debug(f"{self.name} - Time elapsed: {time_format}")
 
     def predict_time_remaining(self, completed, total):
         completion = completed / total
@@ -54,7 +58,7 @@ class Timer:
         if display_steps is None or completed % (total // (display_steps+1)) == 0:
             time_remaining = self.predict_time_remaining(completed, total)
             time_format = format_function(time_remaining)
-            print(f"{self.name} - {completed / total:.2%} complete. Estimated time remaining: {time_format}")
+            _logger.debug(f"{self.name} - {completed / total:.2%} complete. Estimated time remaining: {time_format}")
 
     def record_segment(self):
         time_elapsed = self.get_time_elapsed()
@@ -70,7 +74,7 @@ class Timer:
 
         average = self.get_average_segment_time()
         time_format = format_function(average)
-        print(f"{self.name} - Average time: {time_format} ({self.segment_count} samples)")
+        _logger.debug(f"{self.name} - Average time: {time_format} ({self.segment_count} samples)")
 
     @staticmethod
     def format_minutes(time_seconds):

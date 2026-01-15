@@ -3,7 +3,7 @@ Todo:
     * Figure out a more general way to implement a hall of fame.
 
 """
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import logging
 import math
 import random
 import statistics
@@ -517,13 +518,15 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
                 individual.creation_method,
             )
 
+        logger = logging.getLogger(__name__)
+
         objective_string = ", ".join([f"{objective}: {self.population[0].objectives[objective]}" for objective in self.population[0].objectives])
-        print(f"Best individual of this generation: ({objective_string})")
-        print(self.population[0])
+        logger.info(f"Best individual of this generation: ({objective_string})")
+        logger.info(self.population[0])
 
         list_amount = min(self.population_size, 100)
         for objective in self.population[0].objectives:
-            print(f"{objective}: {str([individual.objectives[objective] for individual in self.population[:list_amount]])}")
+            logger.info(f"{objective}: {str([individual.objectives[objective] for individual in self.population[:list_amount]])}")
 
     def get_population_metrics(self) -> dict[str, Any]:
         # Diversity measured from the best individual

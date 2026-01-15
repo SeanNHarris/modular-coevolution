@@ -17,10 +17,14 @@ __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import concurrent.futures
+import logging
 import multiprocessing
 import os
 import sys
 import warnings
+
+
+_logger = logging.getLogger(__name__)
 
 
 def cores_available() -> int:
@@ -47,9 +51,9 @@ def create_pool(num_processes: int = -1) -> concurrent.futures.Executor:
         num_processes = cores_available()
 
     if use_multiprocessing:
-        print(f'Creating pool with {num_processes} processes.')
+        _logger.info(f'Creating pool with {num_processes} processes.')
         # TODO: ProcessPoolExecutor handles failure much worse than multiprocessing.Pool.
         return concurrent.futures.ProcessPoolExecutor(max_workers=num_processes)
     else:
-        print(f'Creating pool with {num_processes} threads (GIL is disabled).')
+        _logger.info(f'Creating pool with {num_processes} threads (GIL is disabled).')
         return concurrent.futures.ThreadPoolExecutor(max_workers=num_processes)

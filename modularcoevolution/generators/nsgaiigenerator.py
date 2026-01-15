@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import logging
 import statistics
 from typing import Type, Any
 
@@ -91,7 +92,8 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
         pareto_front_objectives = []
         for individual in self.nondominated_fronts[0]:
             pareto_front_objectives.append(tuple(individual.objectives[objective] for objective in self.population[0].objectives))
-        print(f"Pareto front: {sorted(pareto_front_objectives)}")
+        logger = logging.getLogger(__name__)
+        logger.info(f"Pareto front: {sorted(pareto_front_objectives)}")
 
 
     def get_population_metrics(self) -> dict[str, Any]:

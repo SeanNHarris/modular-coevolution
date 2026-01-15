@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import logging
 # Represents a genetic programming tree. Nodes for the tree are in GPNodes.py.
 from warnings import warn
 
@@ -26,6 +27,9 @@ from modularcoevolution.genotypes.diversity.gpdiversity import *
 from typing import Any, TypedDict, Union, Callable, Literal
 
 import random
+
+
+_logger = logging.getLogger(__name__)
 
 # TODO: Rename variables
 
@@ -217,7 +221,7 @@ class GPTree(BaseGenotype):
         try:
             return self.root.execute(context)
         except Exception as error:
-            print(f"Error while executing the following tree:\n{self}")
+            _logger.error(f"Error while executing the following tree:\n{self}")
             raise error
 
     def _replace_subtree(self, node: GPNode, replacement: GPNode) -> None:
@@ -588,7 +592,7 @@ class GPTree(BaseGenotype):
 
             # This can only happen if it is literally impossible to build a tree of the desired height. Relax height limit. #Todo: Incorporate more detailed checks into depth table
             if len(deepChildren) == 0:
-                print("Failure in full table (type 1). Relaxing restrictions.")
+                _logger.warning("Failure in full table (type 1). Relaxing restrictions.")
                 return self.generateGrow(height, outputType)
 
             # Select a random function
@@ -616,7 +620,7 @@ class GPTree(BaseGenotype):
         # Use terminal nodes at the depth limit
         else:
             if self.node_type.random_function(outputType, terminal=True, forbidden_nodes=self.forbidden_nodes) is None:
-                print("Failure in full table (type 2). Relaxing restrictions.")
+                _logger.warning("Failure in full table (type 2). Relaxing restrictions.")
                 return self.generateGrow(height, outputType)
             node = self.node_type(outputType, terminal=True, forbidden_nodes=self.forbidden_nodes, fixed_context=self.fixed_context)
 
@@ -637,12 +641,12 @@ class GPTree(BaseGenotype):
                     node = self.node_type(outputType, function, fixed_context=self.fixed_context)
                     break
             if node is None:
-                print("Failure in grow table (type 1). Relaxing restrictions.")
+                _logger.warning("Failure in grow table (type 1). Relaxing restrictions.")
                 return self.generateGrow(height + 1, outputType)
 
         else:
             if self.node_type.random_function(outputType, terminal=True, forbidden_nodes=self.forbidden_nodes) is None:
-                print("Failure in grow table (type 2). Relaxing restrictions.")
+                _logger.warning("Failure in grow table (type 2). Relaxing restrictions.")
                 return self.generateGrow(height + 1, outputType)
             node = self.node_type(outputType, terminal=True, forbidden_nodes=self.forbidden_nodes, fixed_context=self.fixed_context)
 

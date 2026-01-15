@@ -32,7 +32,7 @@ import multiprocessing
 import os
 
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
-from modularcoevolution.utilities import dictutils, fileutils, configutils, parallelutils
+from modularcoevolution.utilities import dictutils, fileutils, configutils, parallelutils, loggingutils
 
 try:
     import tqdm
@@ -181,51 +181,6 @@ class CoevolutionDriver:
         return parser
 
 
-def _initialize_logger(log_path: str = None, console_output: bool = True, debug: bool = False) -> None:
-    """Initialize the root `logging.Logger` for this experiment.
-
-    Args:
-        log_path: If provided, log messages will be saved to this file.
-        console_output: If true, log messages will be printed to the console.
-        debug: If true, log messages will include debug messages.
-    """
-    logger = logging.getLogger()
-
-    if debug:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
-
-    if console_output:
-        console_formatter = logging.Formatter('%(message)s')
-
-        console_stderr_handler = logging.StreamHandler(sys.stderr)
-        console_stderr_handler.setLevel(logging.WARNING)
-        console_stderr_handler.setFormatter(console_formatter)
-        logger.addHandler(console_stderr_handler)
-
-        console_stdout_handler = logging.StreamHandler(sys.stdout)
-        console_stdout_handler.setLevel(level)
-        console_stdout_handler.setFormatter(console_formatter)
-        console_stderr_handler.addFilter(lambda record: record.levelno <= logging.INFO)
-        logger.addHandler(console_stdout_handler)
-
-    if log_path is not None:
-        file_formatter = logging.Formatter('%(asctime)s - %(process)d - %(levelname)s - %(message)s')
-        file_handler = logging.FileHandler(log_path, mode='a')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
-
-    def except_hook(exc_type, exc_value, exc_traceback):
-        if issubclass(exc_type, KeyboardInterrupt):
-            sys.__excepthook__(exc_type, exc_value, exc_traceback)
-            return
-        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
-    sys.excepthook = except_hook
-    logging.captureWarnings(True)
-
-
 def _run_experiment(
         run_parameters: dict[str, Any],
         experiment_type: type,
@@ -257,11 +212,8 @@ def _run_experiment(
     log_path = logs_path / log_subfolder
     os.makedirs(log_path, exist_ok=True)
 
-    if redirect_output:
-        console_path = log_path / "console.txt"
-    else:
-        console_path = None
-    _initialize_logger(log_path=console_path, console_output=not redirect_output, debug=True)
+    console_path = log_path / "console.txt"
+    loggingutils.initialize_logger(log_path=console_path, console_output=not redirect_output, debug=True)
     logger = logging.getLogger(__name__)
 
     config = dictutils.deep_copy_dictionary(run_parameters)

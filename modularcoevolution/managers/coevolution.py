@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import heapq
+import logging
 import multiprocessing
 from enum import Enum
 
@@ -170,8 +171,9 @@ class Coevolution:
         if self.finalizing:
             raise EvolutionEndedException
 
-        # TODO: Handle debug printing better.
-        print(f"End of generation {self.generation}----------------------------------")
+        logger = logging.getLogger(__name__)
+        logger.info(f"End of generation {self.generation}----------------------------------")
+
         for generator in self.agent_generators:
             generator.end_generation()
         if self.generation >= self.num_generations:

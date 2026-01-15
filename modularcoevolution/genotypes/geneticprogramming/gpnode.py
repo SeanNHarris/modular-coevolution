@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -485,7 +485,6 @@ class GPNode(metaclass=GPNodeType):
                 if not modify:
                     break
 
-            print(cls.semiterminal_table)
         return cls.semiterminal_table
 
     # Generates a table describing how deep it's possible to construct a tree with a given type.
