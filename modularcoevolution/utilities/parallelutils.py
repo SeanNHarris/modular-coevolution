@@ -48,6 +48,7 @@ def create_pool(num_processes: int = -1) -> concurrent.futures.Executor:
 
     if use_multiprocessing:
         print(f'Creating pool with {num_processes} processes.')
+        # TODO: ProcessPoolExecutor handles failure much worse than multiprocessing.Pool.
         return concurrent.futures.ProcessPoolExecutor(max_workers=num_processes)
     else:
         print(f'Creating pool with {num_processes} threads (GIL is disabled).')
