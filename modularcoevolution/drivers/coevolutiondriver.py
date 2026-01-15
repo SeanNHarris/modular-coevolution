@@ -18,6 +18,7 @@ __license__ = 'Apache-2.0'
 
 import argparse
 import functools
+import logging
 import sys
 import warnings
 from typing import Any, Sequence, TypedDict, Union
@@ -52,8 +53,9 @@ class CoevolutionDriver:
 
     parallel: bool
     """Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging."""
-    parallel_runs: bool
-    """If True, parallelization will be across runs rather than across evaluations. Requires `parallel` to be True.
+    parallel_runs: int
+    """If greater than one, parallelization will be across runs rather than across evaluations.
+    Requires `parallel` to be True.
     This is often much more memory-intensive than parallelization per-eval, and may not use every CPU core."""
     run_exhibition: bool
     """Whether to run and log exhibition evaluations between the best individuals of each generation."""
@@ -72,7 +74,7 @@ class CoevolutionDriver:
                  run_amount: int = 30,
                  run_start: int = 0,
                  parallel: bool = True,
-                 parallel_runs: bool = False,
+                 parallel_runs: bool = 1,
                  use_data_collector: bool = True,
                  run_exhibition: bool = True,
                  exhibition_rate: int = 1,
@@ -88,7 +90,7 @@ class CoevolutionDriver:
             run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
                 Used for resuming experiments.
             parallel: Whether to run the evaluations in parallel using a multiprocessing pool. Disable this for debugging.
-            parallel_runs: If True, parallelization will be across runs rather than across evaluations.
+            parallel_runs: If greater than 1, parallelization will be across runs rather than across evaluations.
                 Requires `parallel` to be True.
                 This is often much more memory-intensive than parallelization per-eval, and may not use every CPU core.
             use_data_collector: Whether to use a data collector to store results. This will result in a lot of logged data.
@@ -121,7 +123,7 @@ class CoevolutionDriver:
                 if start_method is None:  # `set_start_method` can not be called twice.
                     multiprocessing.set_start_method('forkserver')
             except ValueError:
-                print("Warning: this system does not support copy-on-write memory for global variables.")
+                warnings.warn("Warning: this system does not support copy-on-write memory for global variables.")
 
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
@@ -134,15 +136,15 @@ class CoevolutionDriver:
         )
 
         try:
-            if self.parallel and self.parallel_runs:
-                evaluation_pool = parallelutils.create_pool(16)
-                run_experiment_parallel = functools.partial(run_experiment, parallel=False, redirect_output=True)
-                result_iterator = evaluation_pool.map(run_experiment_parallel, self.parameters)
+            if self.parallel and self.parallel_runs > 1:
+                with parallelutils.create_pool(self.parallel_runs) as evaluation_pool:
+                    run_experiment_parallel = functools.partial(run_experiment, parallel=False, redirect_output=True)
+                    result_iterator = evaluation_pool.map(run_experiment_parallel, self.parameters)
 
-                if tqdm is not None and len(self.parameters) > 1:
-                    result_iterator = tqdm.tqdm(result_iterator, total=len(self.parameters), desc="Running experiment", unit="runs", smoothing=0.0)
-                for result in result_iterator:
-                    result.result()  # Make the iterator track completed results.
+                    if tqdm is not None and len(self.parameters) > 1:
+                        result_iterator = tqdm.tqdm(result_iterator, total=len(self.parameters), desc="Running experiment", unit="runs", smoothing=0.0)
+                    for result in result_iterator:
+                        result.result()  # Make the iterator track completed results.
             else:
                 for parameter_set in self.parameters:
                     run_experiment(parameter_set, parallel=self.parallel)
@@ -168,8 +170,8 @@ class CoevolutionDriver:
                             help='The run number to start at. Runs will end at the number specified by the --runs argument. Used for resuming experiments.')
         parser.add_argument('-np', '--no-parallel', dest='parallel', action='store_false',
                             help='Disable parallel evaluations.')
-        parser.add_argument('-pr', '--parallel-runs', dest='parallel_runs', action='store_true',
-                            help='Parallelize over runs instead of evaluations.')
+        parser.add_argument('-pr', '--parallel-runs', dest='parallel_runs', type=int, default=1,
+                            help='If greater than 1, parallelize over runs instead of evaluations. Sets the number of runs to execute in parallel.')
         parser.add_argument('-nd', '--no-data-collector', dest='use_data_collector', action='store_false',
                             help='Disable the data collector.')
         parser.add_argument('-ne', '--no-exhibition', dest='run_exhibition', action='store_false',
@@ -177,6 +179,51 @@ class CoevolutionDriver:
         parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1,
                             help='The rate at which to run exhibition evaluations, e.g. every 5 generations.')
         return parser
+
+
+def _initialize_logger(log_path: str = None, console_output: bool = True, debug: bool = False) -> None:
+    """Initialize the root `logging.Logger` for this experiment.
+
+    Args:
+        log_path: If provided, log messages will be saved to this file.
+        console_output: If true, log messages will be printed to the console.
+        debug: If true, log messages will include debug messages.
+    """
+    logger = logging.getLogger()
+
+    if debug:
+        level = logging.DEBUG
+    else:
+        level = logging.INFO
+
+    if console_output:
+        console_formatter = logging.Formatter('%(message)s')
+
+        console_stderr_handler = logging.StreamHandler(sys.stderr)
+        console_stderr_handler.setLevel(logging.WARNING)
+        console_stderr_handler.setFormatter(console_formatter)
+        logger.addHandler(console_stderr_handler)
+
+        console_stdout_handler = logging.StreamHandler(sys.stdout)
+        console_stdout_handler.setLevel(level)
+        console_stdout_handler.setFormatter(console_formatter)
+        console_stderr_handler.addFilter(lambda record: record.levelno <= logging.INFO)
+        logger.addHandler(console_stdout_handler)
+
+    if log_path is not None:
+        file_formatter = logging.Formatter('%(asctime)s - %(process)d - %(levelname)s - %(message)s')
+        file_handler = logging.FileHandler(log_path, mode='a')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+
+    def except_hook(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.excepthook = except_hook
+    logging.captureWarnings(True)
 
 
 def _run_experiment(
@@ -210,11 +257,12 @@ def _run_experiment(
     log_path = logs_path / log_subfolder
     os.makedirs(log_path, exist_ok=True)
 
-    # TODO: Use a fancier logging tool for the entire library to prevent doing this
     if redirect_output:
-        output_file = open(log_path / "output.txt", "w")
-        sys.stdout = output_file
-        sys.stderr = output_file
+        console_path = log_path / "console.txt"
+    else:
+        console_path = None
+    _initialize_logger(log_path=console_path, console_output=not redirect_output, debug=True)
+    logger = logging.getLogger(__name__)
 
     config = dictutils.deep_copy_dictionary(run_parameters)
     dictutils.set_config_value(config, ('manager', 'data_collector'), data_collector)
@@ -269,7 +317,7 @@ def _run_experiment(
                 experiment.exhibition(coevolution_manager.agent_generators, 2, log_path, parallel=parallel)
 
         except EvolutionEndedException:
-            print("Run complete.")
+            logger.info("Run complete.")
             if run_exhibition:
                 experiment.exhibition(coevolution_manager.agent_generators, 3, log_path, parallel=parallel)
             if use_data_collector and not data_collector.split_generations:
@@ -277,16 +325,7 @@ def _run_experiment(
                 data_collector.save_to_file(log_filename)
             break
         except KeyboardInterrupt as error:
-            if redirect_output:
-                output_file.close()
-                sys.stdout = sys.__stdout__
-                sys.stderr = sys.__stderr__
             raise error
-
-    if redirect_output:
-        output_file.close()
-        sys.stdout = sys.__stdout__
-        sys.stderr = sys.__stderr__
 
 
 if __name__ == '__main__':
