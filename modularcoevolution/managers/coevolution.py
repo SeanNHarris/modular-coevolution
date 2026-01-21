@@ -68,8 +68,6 @@ class Coevolution:
     completed_evolution_evaluations: set[EvaluationID]
     """A set of main evolution evaluations which have received results since the last time
     :attr:`remaining_evolution_evaluations` was updated."""
-    evaluation_results: dict[EvaluationID, dict[GenotypeID, dict[str, Any]]]
-    """A table of evaluation results, mapped to the evaluation ID and the genotype ID."""
 
     run_tournament: bool
     """Whether to run the master tournament, which performs additional evaluations to measure intergenerational fitness.
@@ -135,7 +133,6 @@ class Coevolution:
         self.player_generators = tuple(player_generators)
 
         self.evaluation_table = {}
-        self.evaluation_results = {}
         self.evaluation_types = {}
         self.remaining_evolution_evaluations = []
         self.completed_evolution_evaluations = set()
@@ -382,8 +379,6 @@ class Coevolution:
             evaluation_results: A dictionary of results from the evaluation, indexed by genotype ID.
 
         """
-        self.evaluation_results[evaluation_id] = evaluation_results
-
         if self.data_collector is not None:
             #TODO: Refactor how the data collector is written to for evaluations.
             pass
