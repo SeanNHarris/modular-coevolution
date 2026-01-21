@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -80,8 +80,7 @@ class FixedGenerator(BaseGenerator[AgentType]):
         else:
             objective_tracker = self.agent.objective_tracker
             new_agent = self.agent_class(self.agent_parameters, active=active)
-            new_agent.objective_tracker.id = objective_tracker.id
-            new_agent.objective_tracker.share_metrics_from(objective_tracker)
+            new_agent.objective_tracker = objective_tracker
             return new_agent
 
     def get_individuals_to_test(self) -> list[GenotypeID]:

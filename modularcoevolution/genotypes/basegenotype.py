@@ -2,7 +2,7 @@
 Todo:
     * For all genotypes, accept a parameter list as keywords rather than strings.
 """
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -20,8 +20,10 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
-from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
-from modularcoevolution.utilities.specialtypes import claim_genotype_id, GenotypeID
+import warnings
+
+from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker, MetricStatistics, MetricSubmission
+from modularcoevolution.utilities.specialtypes import claim_genotype_id, GenotypeID, EvaluationID
 
 from typing import Any, TypeVar, TypedDict
 
@@ -31,10 +33,13 @@ import abc
 Parameters = TypeVar("Parameters", bound=dict[str, Any])
 
 
-class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
-    """The base class of all genotypes, as used by instances of :class:`.BaseEvolutionaryGenerator`.
+class BaseGenotype(metaclass=abc.ABCMeta):
+    """The base class of all genotypes, as used by instances of :class:`.BaseEvolutionaryGenerator`."""
+    id: GenotypeID
+    """The ID associated with this genotype. ID values are unique across all genotypes created in the same process."""
+    objective_tracker: BaseObjectiveTracker
+    """The :class:`.BaseObjectiveTracker` for this genotype, which tracks objective values and metrics."""
 
-    """
     parameters: TypedDict
     """The parameters used to create this genotype. Used for serialization."""
 
@@ -46,6 +51,9 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
 
     def __init__(self, parameters, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.id = claim_genotype_id()
+        self.objective_tracker = BaseObjectiveTracker()
+
         self.parameters = parameters
 
         self.parent_ids = list()
@@ -139,3 +147,49 @@ class BaseGenotype(BaseObjectiveTracker, metaclass=abc.ABCMeta):
     # def __setstate__(self, state):
     #     self.__init__(state['parameters'])
     #     self.__dict__.update(state)
+
+    # ObjectiveTracker wrappers
+    @property
+    def objectives(self) -> dict[str, float]:
+        """See :meth:`.BaseObjectiveTracker.objectives`."""
+        return self.objective_tracker.objectives
+
+    @property
+    def is_evaluated(self) -> bool:
+        """See :meth:`.BaseObjectiveTracker.is_evaluated`."""
+        return self.objective_tracker.is_evaluated
+
+    @property
+    def fitness(self) -> float:
+        """See :meth:`.BaseObjectiveTracker.fitness`."""
+        return self.objective_tracker.fitness
+
+    @property
+    def metrics(self) -> dict[str, float]:
+        """See :meth:`.BaseObjectiveTracker.metrics`."""
+        return self.objective_tracker.metrics
+
+    @property
+    def metric_statistics(self) -> dict[str, MetricStatistics]:
+        """See :meth:`.BaseObjectiveTracker.metric_statistics`."""
+        return self.objective_tracker.metric_statistics
+
+    @property
+    def metric_histories(self) -> dict[str, list[float]]:
+        """See :meth:`.BaseObjectiveTracker.metric_histories`."""
+        return self.objective_tracker.metric_histories
+
+    @property
+    def evaluation_ids(self) -> list[EvaluationID]:
+        """See :meth:`.BaseObjectiveTracker.evaluation_ids`."""
+        return self.objective_tracker.evaluation_ids
+
+    def reset_objective_tracker(self):
+        """See :meth:`.BaseObjectiveTracker.reset_objective_tracker`."""
+        self.objective_tracker.reset_objective_tracker()
+
+    def submit_metric(self, submission: MetricSubmission, prevent_recursion: bool = False) -> None:
+        """See :meth:`.BaseObjectiveTracker.submit_metric`."""
+        self.objective_tracker.submit_metric(submission, prevent_recursion)
+
+

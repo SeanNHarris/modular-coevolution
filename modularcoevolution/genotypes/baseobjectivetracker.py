@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -16,14 +16,15 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import dataclasses
+from dataclasses import dataclass
 from typing import Literal, TypedDict, Union
 
-import abc
 import math
 
 import numpy
 
-from modularcoevolution.utilities.specialtypes import EvaluationID, GenotypeID, claim_genotype_id
+from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
 
 MetricTypes = Union[float, str, list, dict, numpy.ndarray]
 
@@ -45,7 +46,11 @@ class MetricConfiguration(TypedDict):
     - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
     - ``'sum'``: Record the sum of all submitted values. Must be a numeric type."""
     log_history: bool
-    """If true, store a history of all submitted values for this metric. Avoid using this unnecessarily, as it can impact the size of the log file."""
+    """If true, store a history of all submitted values for this metric.
+    Avoid using this unnecessarily, as it can impact the size of the log file."""
+    log_opponents: bool
+    """If true, maintain :class:`.OpponentTracker` data for this metric.
+    This is necessary for some configurations like opponent sampling, but greatly increases memory usage."""
     automatic: bool
     """If true, this metric will be automatically computed by the :class:`.BaseGenerator` and does not need to be submitted manually."""
     add_fitness_modifier: bool
@@ -60,20 +65,49 @@ class MetricSubmission(MetricConfiguration, TypedDict, total=False):
     """The genotype IDs of the opponents this metric was evaluated against, if applicable."""
 
 
-class MetricStatistics(TypedDict, total=False):
-    """A `TypedDict` storing running statistics about submitted metric values."""
-    count: int
+@dataclass(slots=True)
+class MetricStatistics:
+    """A dataclass storing running statistics about submitted metric values."""
+    count: int = 0
     """The number of times this metric has been submitted."""
-    mean: float
+
+
+@dataclass(slots=True)
+class MetricStatisticsFloat(MetricStatistics):
+    """A dataclass storing running statistics about submitted float metric values."""
+    mean: float = 0.0
     """The mean value of submitted metric values."""
-    std_dev_intermediate: float
+    std_dev_intermediate: float = 0.0
     """An intermediate value used to calculate the standard deviation as a running total via Welford's Algorithm."""
-    standard_deviation: float
+    standard_deviation: float = 0.0
     """The standard deviation of this metric."""
-    minimum: float
+    minimum: float = math.inf
     """The minimum observed value of this metric."""
-    maximum: float
+    maximum: float = -math.inf
     """The maximum observed value of this metric."""
+
+
+@dataclass(slots=True)
+class OpponentTracker:
+    """A dataclass storing average objectives for an opponent."""
+    objective_counts: dict[str, int] = dataclasses.field(default_factory=dict)
+    """The number of times each objective has been logged against this opponent."""
+    total_objectives: dict[str, float] = dataclasses.field(default_factory=dict)
+    """The total objective values accumulated against this opponent."""
+
+    def submit_metric(self, metric: MetricSubmission) -> None:
+        if not metric['repeat_mode'] == 'average':
+            raise ValueError("Objectives must use repeat_mode='average'.")
+
+        if metric['name'] in self.objective_counts:
+            self.objective_counts[metric['name']] += 1
+            self.total_objectives[metric['name']] += metric['value']
+        else:
+            self.objective_counts[metric['name']] = 1
+            self.total_objectives[metric['name']] = metric['value']
+
+    def __getitem__(self, item):
+        return self.total_objectives[item] / self.objective_counts[item]
 
 
 # TODO: Consider refactoring the objective tracker into a property of a genotype, rather than a superclass.
@@ -85,7 +119,7 @@ class MetricStatistics(TypedDict, total=False):
 # - Accessing objective tracker properties will be slightly more verbose.
 # - We still will want a superclass/interface for BaseGenotype to handle non-genotype objects with a data tracker.
 #   - (This ability is currently unused, but we want it to be available for future use cases such as optimal agents.)
-class BaseObjectiveTracker(metaclass=abc.ABCMeta):
+class BaseObjectiveTracker:
     """
     A base class for anything that needs to track objectives or fitness. Formerly part of :class:`.BaseGenotype`.
 
@@ -93,6 +127,14 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     Objectives are used by :class:`.BaseObjectiveGenerator` to calculate fitness values.
     Other metrics are only logged by the :class:`.DataCollector` or other logging tools.
     """
+    __slots__ = (
+        'metrics',
+        'metric_statistics',
+        'metric_histories',
+        '_objective_names',
+        'evaluation_ids',
+        'opponent_trackers',
+    )
 
     id: GenotypeID
     """The ID associated with this objective tracker. ID values are unique across all objective trackers
@@ -100,7 +142,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
 
     metrics: dict[str, MetricTypes]
     """A dictionary of metric values tracked by this individual, by name."""
-    metric_statistics: dict[str, MetricStatistics]
+    metric_statistics: dict[str, MetricStatistics | MetricStatisticsFloat]
     """The statistics tracked for each metric, by name."""
     metric_histories: dict[str, list[MetricTypes]]
     """A history of all values submitted for each metric, by name. Only stored if ``log_history=True`` was passed to :meth:`.submit_metric`."""
@@ -108,7 +150,7 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     """The names of metrics which were submitted as objectives."""
     evaluation_ids: list[EvaluationID]
     """A list of evaluation IDs this individual participated in."""
-    opponent_trackers: dict[GenotypeID, 'BaseObjectiveTracker']
+    opponent_trackers: dict[GenotypeID, 'OpponentTracker']
     """A dictionary tracking metrics specific to each opponent this individual has faced."""
 
     @property
@@ -136,7 +178,6 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-        self.id = claim_genotype_id()
         self.reset_objective_tracker()
 
     def reset_objective_tracker(self):
@@ -176,18 +217,9 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         if new_metric:
             self.metrics[metric] = value
             if isinstance(value, float):
-                self.metric_statistics[metric] = {
-                    "count": 0,
-                    "mean": 0,
-                    "std_dev_intermediate": 0,
-                    "standard_deviation": 0,
-                    "minimum": math.inf,
-                    "maximum": -math.inf
-                }
+                self.metric_statistics[metric] = MetricStatisticsFloat()
             else:
-                self.metric_statistics[metric] = {
-                    "count": 0
-                }
+                self.metric_statistics[metric] = MetricStatistics()
             if submission['is_objective']:
                 if not isinstance(value, float):
                     raise ValueError(f"Objective {metric} must be a numeric value.")
@@ -201,27 +233,27 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
                 raise ValueError(f"Metric {metric} was submitted with log_history={submission['log_history']}, but was previously submitted with log_history={metric in self.metric_histories}.")
 
         # Update statistics
-        self.metric_statistics[metric]["count"] += 1
+        self.metric_statistics[metric].count += 1
         # Update numeric statistics when relevant
         if isinstance(value, float):
-            previous_mean = self.metric_statistics[metric]["mean"]
-            total = self.metric_statistics[metric]["mean"] * (self.metric_statistics[metric]["count"] - 1) + value
-            self.metric_statistics[metric]["mean"] = total / self.metric_statistics[metric]["count"]
-            self.metric_statistics[metric]["std_dev_intermediate"] += (value - previous_mean) * (value - self.metric_statistics[metric]["mean"])
-            self.metric_statistics[metric]["standard_deviation"] = math.sqrt(self.metric_statistics[metric]["std_dev_intermediate"] / self.metric_statistics[metric]["count"])
-            self.metric_statistics[metric]["minimum"] = min(self.metric_statistics[metric]["minimum"], value)
-            self.metric_statistics[metric]["maximum"] = max(self.metric_statistics[metric]["maximum"], value)
+            previous_mean = self.metric_statistics[metric].mean
+            total = self.metric_statistics[metric].mean * (self.metric_statistics[metric].count - 1) + value
+            self.metric_statistics[metric].mean = total / self.metric_statistics[metric].count
+            self.metric_statistics[metric].std_dev_intermediate += (value - previous_mean) * (value - self.metric_statistics[metric].mean)
+            self.metric_statistics[metric].standard_deviation = math.sqrt(self.metric_statistics[metric].std_dev_intermediate / self.metric_statistics[metric].count)
+            self.metric_statistics[metric].minimum = min(self.metric_statistics[metric].minimum, value)
+            self.metric_statistics[metric].maximum = max(self.metric_statistics[metric].maximum, value)
 
         # Update metric value
         if not new_metric:
             if submission['repeat_mode'] == 'replace':
                 self.metrics[metric] = value
             elif submission['repeat_mode'] == 'average':
-                self.metrics[metric] = self.metric_statistics[metric]["mean"]
+                self.metrics[metric] = self.metric_statistics[metric].mean
             elif submission['repeat_mode'] == 'min':
-                self.metrics[metric] = self.metric_statistics[metric]["minimum"]
+                self.metrics[metric] = self.metric_statistics[metric].minimum
             elif submission['repeat_mode'] == 'max':
-                self.metrics[metric] = self.metric_statistics[metric]["maximum"]
+                self.metrics[metric] = self.metric_statistics[metric].maximum
             elif submission['repeat_mode'] == 'sum':
                 self.metrics[metric] += value
 
@@ -229,11 +261,11 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
                 self.metric_histories[metric].append(value)
 
         # Update opponent-specific metrics
-        if not prevent_recursion and 'opponents' in submission:
+        if submission['log_opponents']:
             for opponent in submission['opponents']:
                 if opponent not in self.opponent_trackers:
-                    self.opponent_trackers[opponent] = BaseObjectiveTracker()
-                self.opponent_trackers[opponent].submit_metric(submission, prevent_recursion=True)
+                    self.opponent_trackers[opponent] = OpponentTracker()
+                self.opponent_trackers[opponent].submit_metric(submission)
 
     def set_objectives(self, objectives: dict[str, float]) -> None:
         raise NotImplementedError("This method has been removed. Use submit_metric instead.")
@@ -284,30 +316,20 @@ class BaseObjectiveTracker(metaclass=abc.ABCMeta):
         """Return a list of genotype IDs of opponents this individual has been evaluated against."""
         return list(self.opponent_trackers.keys())
 
-    def get_opponent_metrics(self, opponent: GenotypeID) -> dict[str, float]:
-        """Return the metrics of this individual against a specific opponent.
+    def get_opponent_metrics(self, opponent: GenotypeID, metric_name: str) -> float:
+        """
+        Return the average metric of this individual against a specific opponent.
 
         Args:
             opponent: The genotype ID of the opponent.
+            metric_name: The name of the metric to return.
 
         Returns:
-            A dictionary of metric values, by metric name.
-
+            The average value of `name` against the specified opponent.
         """
         if opponent not in self.opponent_trackers:
             raise KeyError(f"This individual has no evaluations against individual {opponent}.")
-        return self.opponent_trackers[opponent].metrics
-
-    def share_metrics_from(self, other: 'BaseObjectiveTracker') -> None:
-        """Shallow-copy all metrics from another objective tracker.
-        Submitted metrics will apply to both trackers.
-        Don't use this with :meth:`.reset_objective_tracker`, as it will break the references."""
-        self.metrics = other.metrics
-        self.metric_statistics = other.metric_statistics
-        self.metric_histories = other.metric_histories
-        self._objective_names = other._objective_names
-        self.evaluation_ids = other.evaluation_ids
-        self.opponent_trackers = other.opponent_trackers
+        return self.opponent_trackers[opponent][metric_name]
 
 
 def compute_shared_objectives(individuals: list[BaseObjectiveTracker], opponent_id: GenotypeID, objective: str = 'fitness', total: float = 1) -> list[float]:
@@ -333,7 +355,7 @@ def compute_shared_objectives(individuals: list[BaseObjectiveTracker], opponent_
         if objective not in individual.metrics or opponent_id not in individual.opponent_trackers:
             objective_values.append(math.nan)
         else:
-            objective_value = individual.get_opponent_metrics(opponent_id)[objective]
+            objective_value = individual.get_opponent_metrics(opponent_id, objective)
             objective_values.append(objective_value)
             if min_value is None or objective_value < min_value:
                 min_value = objective_value

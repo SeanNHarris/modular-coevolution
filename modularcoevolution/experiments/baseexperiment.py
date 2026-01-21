@@ -567,7 +567,9 @@ class PopulationMetrics:
                         is_objective: bool = False,
                         repeat_mode: Literal['replace', 'average', 'min', 'max', 'sum'] = 'average',
                         log_history: bool = False,
-                        add_fitness_modifier: bool = False) -> None:
+                        log_opponents: bool = False,
+                        add_fitness_modifier: bool = False,
+                        **kwargs) -> None:
         """
         Registers a metric.
         A metric is any data derived from the evaluation results which should be logged per-individual.
@@ -588,6 +590,8 @@ class PopulationMetrics:
                 - ``'sum'``: Record the sum of all submitted values. Must be a numeric type.
             log_history: If true, store a history of all submitted values for this metric.
                 Avoid using this unnecessarily, as it can impact the size of the log file.
+            log_opponents: If true, maintain :class:`.OpponentTracker` data for this metric.
+                This is necessary for some configurations like opponent sampling, but greatly increases memory usage.
             metric_function: A function which computes the metric from the dictionary of evaluation results.
                 Alternatively, a string key can be provided as a shortcut for a function which returns the result value with this key.
             add_fitness_modifier: If true, the individual's :meth:`BaseObjectiveTracker.get_fitness_modifier`
@@ -599,6 +603,7 @@ class PopulationMetrics:
             'is_objective': is_objective,
             'repeat_mode': repeat_mode,
             'log_history': log_history,
+            'log_opponents': log_opponents,
             'automatic': True,
             'add_fitness_modifier': add_fitness_modifier
         }
@@ -606,7 +611,7 @@ class PopulationMetrics:
 
     def register_fitness_function(self,
                                   fitness_function: Union[MetricFunction, str],
-                                  repeat_mode: Literal['replace', 'average', 'min', 'max'] = 'average') -> None:
+                                  **kwargs) -> None:
         """
         Registers a fitness function.
         This is a shortcut for :meth:`register_metric` for single-objective evolution.
@@ -614,11 +619,15 @@ class PopulationMetrics:
         Args:
             fitness_function: A function which computes the fitness from the dictionary of evaluation results.
                 Alternatively, a string key can be provided as a shortcut for a function which returns the result value with this key.
-            repeat_mode: How to handle multiple submissions of the same metric. The following modes are supported:
-                - ``'replace'``: Overwrite the previous value with the new one.
-                - ``'average'``: Record the mean of all submitted values. Must be a numeric type.
-                - ``'min'``: Record the minimum of all submitted values. Must be a numeric type.
-                - ``'max'``: Record the maximum of all submitted values. Must be a numeric type.
+            kwargs: See :meth:`register_metric`.
         """
+        partial_configuration = {
+            'is_objective': True,
+            'repeat_mode': 'average',
+            'log_history': False,
+            'log_opponents': False,
+            'add_fitness_modifier': True
+        }
+        partial_configuration.update(kwargs)
 
-        self.register_metric('fitness', fitness_function, is_objective=True, repeat_mode=repeat_mode, log_history=True, add_fitness_modifier=True)
+        self.register_metric('fitness', fitness_function, **partial_configuration)
