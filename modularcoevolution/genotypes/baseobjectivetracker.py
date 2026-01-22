@@ -128,6 +128,7 @@ class BaseObjectiveTracker:
     Other metrics are only logged by the :class:`.DataCollector` or other logging tools.
     """
     __slots__ = (
+        'id',
         'metrics',
         'metric_statistics',
         'metric_histories',
@@ -137,8 +138,7 @@ class BaseObjectiveTracker:
     )
 
     id: GenotypeID
-    """The ID associated with this objective tracker. ID values are unique across all objective trackers
-    (assuming no transfer between multiple python processes)."""
+    """The id of the genotype associated with this objective tracker."""
 
     metrics: dict[str, MetricTypes]
     """A dictionary of metric values tracked by this individual, by name."""
@@ -175,8 +175,9 @@ class BaseObjectiveTracker:
 
         return self.objectives['fitness']
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, id: GenotypeID, **kwargs):
         super().__init__()
+        self.id = id
 
         self.reset_objective_tracker()
 

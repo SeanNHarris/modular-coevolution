@@ -125,6 +125,7 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
             "is_objective": False,
             "repeat_mode": "replace",
             "log_history": False,
+            "log_opponents": False,
             "automatic": False,
             "add_fitness_modifier": False,
         }
@@ -137,6 +138,7 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
             "is_objective": False,
             "repeat_mode": "replace",
             "log_history": False,
+            "log_opponents": False,
             "automatic": False,
             "add_fitness_modifier": False,
         }

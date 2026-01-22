@@ -52,7 +52,7 @@ class BaseGenotype(metaclass=abc.ABCMeta):
     def __init__(self, parameters, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.id = claim_genotype_id()
-        self.objective_tracker = BaseObjectiveTracker()
+        self.objective_tracker = BaseObjectiveTracker(self.id)
 
         self.parameters = parameters
 
