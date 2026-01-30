@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import abc
 
 #if TYPE_CHECKING:
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
-
+from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
 
 AgentParameters = TypeVar("AgentParameters", bound=dict[str, Any])
 GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
@@ -47,8 +47,12 @@ class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCM
     """
 
     @property
-    def objective_tracker(self) -> GenotypeType:
-        return self.genotype
+    def objective_tracker(self) -> BaseObjectiveTracker:
+        return self.genotype.objective_tracker
+
+    @objective_tracker.setter
+    def objective_tracker(self, value: BaseObjectiveTracker) -> None:
+        self.genotype.objective_tracker = value
 
     @classmethod
     @abc.abstractmethod

@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -54,12 +54,21 @@ class BaseAgent(metaclass=AgentTypeRegistry):
     @abc.abstractmethod
     def objective_tracker(self) -> BaseObjectiveTracker:
         """Returns the :class:`.BaseObjectiveTracker` associated with this agent.
-        This is usually a :class:`.BaseGenotype`, but for non-evolving agents it may not be.
 
         Returns:
             The objective tracker associated with this agent.
         """
 
+        ...
+
+    @objective_tracker.setter
+    @abc.abstractmethod
+    def objective_tracker(self, value: BaseObjectiveTracker) -> None:
+        """Sets the :class:`.BaseObjectiveTracker` associated with this agent.
+
+        Args:
+            value: The objective tracker to associate with this agent.
+        """
         ...
 
     @property
