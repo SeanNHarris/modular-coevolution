@@ -39,11 +39,16 @@ def cores_available() -> int:
     return num_processes
 
 
-def create_pool(num_processes: int = -1) -> concurrent.futures.Executor:
+def create_pool(num_processes: int = -1, max_tasks_per_child: int = None) -> concurrent.futures.Executor:
     """Create an Executor pool configured with the number of available CPU cores.
     If the GIL is disabled, uses a ThreadPoolExecutor instead of a ProcessPoolExecutor.
     Will automatically detect if the code is being run through Slurm on an HPC cluster node
     and use the assigned number of cores.
+
+    Args:
+        num_processes: The number of processes (or threads) to use. If -1, uses the number of available CPU cores.
+        max_tasks_per_child: If set, forces worker processes to be restarted after this many tasks.
+            This resolves some issues where processes accumulate memory over time.
     """
     # `sys._is_gil_enabled` was added in Python 3.13, but we want to use multiprocessing in earlier versions anyway.
     use_multiprocessing = not hasattr(sys, '_is_gil_enabled') or sys._is_gil_enabled()
@@ -55,7 +60,7 @@ def create_pool(num_processes: int = -1) -> concurrent.futures.Executor:
         _logger.info(f'Creating pool with {num_processes} processes.')
         # ProcessPoolExecutor handles failure much worse than multiprocessing.Pool.
         # return concurrent.futures.ProcessPoolExecutor(max_workers=num_processes)
-        return MultiprocessingPoolWrapper(processes=num_processes)
+        return MultiprocessingPoolWrapper(processes=num_processes, max_tasks_per_child=max_tasks_per_child)
     else:
         _logger.info(f'Creating pool with {num_processes} threads (GIL is disabled).')
         return concurrent.futures.ThreadPoolExecutor(max_workers=num_processes)
@@ -67,8 +72,8 @@ class MultiprocessingPoolWrapper:
     """
     pool: multiprocessing.Pool
 
-    def __init__(self, processes: int):
-        self.pool = multiprocessing.Pool(processes=processes)
+    def __init__(self, processes: int, max_tasks_per_child: int = None):
+        self.pool = multiprocessing.Pool(processes=processes, maxtasksperchild=max_tasks_per_child)
 
     def map(self, fn, *iterables, chunksize: int = 1):
         # concurrent.futures.Executor groups by argument position, then task index.

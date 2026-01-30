@@ -309,7 +309,14 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             generators.append(generator)
         return generators
 
-    def evaluate_all(self, agent_groups: Sequence[Sequence[BaseAgent]], parallel: bool = False, **kwargs) -> list[Sequence[dict[str, Any]]]:
+    def evaluate_all(
+            self,
+            agent_groups: Sequence[Sequence[BaseAgent]],
+            parallel: bool = False,
+            num_processes: int = -1,
+            max_tasks_per_child: int = None,
+            **kwargs
+    ) -> list[Sequence[dict[str, Any]]]:
         """Evaluate a list of agent groups in parallel using a multiprocessing pool and return the results.
         If ``self.parallel`` is False, this will instead evaluate the agents sequentially.
 
@@ -317,6 +324,8 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             agent_groups: A list of agent groups to evaluate.
             parallel: Whether to evaluate the agents using a multiprocessing pool.
             kwargs: Additional keyword arguments to pass to the evaluation function.
+            num_processes: Passed to :func:`utilities.parallelutils.create_pool`.
+            max_tasks_per_child: Passed to :func:`utilities.parallelutils.create_pool`.
 
         Returns:
             A list of results from the evaluation function, in the order of the agent groups passed in.
@@ -325,7 +334,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         evaluate = self.get_evaluate(**kwargs)
 
         if parallel:
-            evaluation_pool = parallelutils.create_pool()
+            evaluation_pool = parallelutils.create_pool(num_processes, max_tasks_per_child)
             chunks = parallelutils.cores_available() * 8
             chunksize = max(1, len(agent_groups) // chunks)
             result_iterator = evaluation_pool.map(evaluate, agent_groups, chunksize=chunksize)
