@@ -1,4 +1,16 @@
 #  Copyright 2026 BONSAI Lab at Auburn University
+# 
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+# 
+#      http://www.apache.org/licenses/LICENSE-2.0
+# 
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -166,7 +178,17 @@ def generate_run_parameters(
 
 def _process_metaparameters(config: dict[str, Any]) -> list[dict[str, Any]] | None:
     """Handle metaparameters such as combinations of parameter values to vary across runs."""
+    if 'meta_values' in config:
+        return _process_meta_values(config)
+    elif 'meta_sets' in config:
+        return _process_meta_sets(config)
+    else:
+        return None
 
+
+def _process_meta_values(config: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Each metaparameter is a list of values for that parameter.
+    The set of treatments generated is the Cartesian product of these lists of values."""
     if 'meta_values' not in config:
         return None
 
@@ -200,6 +222,55 @@ def _process_metaparameters(config: dict[str, Any]) -> list[dict[str, Any]] | No
             dictutils.set_config_value(merge_config, key, value)
         result.append(merge_config)
 
+    return result
+
+
+def _process_meta_sets(config: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Provide a list or dict of merge parameter dictionaries, each representing a treatment.
+    A `treatment_string` parameter can be included to specify the name of the treatment for logging.
+    Alternatively, if a dict was provided, the keys will be used as treatment strings."""
+    if 'meta_sets' not in config:
+        return None
+
+    meta_sets = config['meta_sets']
+    if not isinstance(meta_sets, list) and not isinstance(meta_sets, dict):
+        raise TypeError("Could not parse config metaparameters. meta_sets must be a list of parameter dictionaries.")
+
+    result = []
+
+    if isinstance(meta_sets, dict):
+        for treatment_string, meta_set in meta_sets.items():
+            if not isinstance(meta_set, dict):
+                raise TypeError(f"Could not parse config metaparameters. meta_sets['{treatment_string}'] is not a parameter dictionary.")
+            merge_config = meta_set.copy()
+            dictutils.set_config_value(merge_config, ('treatment_string',), treatment_string)
+            result.append(merge_config)
+        return result
+
+    for index, meta_set in enumerate(meta_sets):
+        if not isinstance(meta_set, dict):
+            raise TypeError(f"Could not parse config metaparameters. meta_sets[{index}] is not a parameter dictionary.")
+
+        merge_config = meta_set.copy()
+
+        if 'treatment_string' not in merge_config:
+            value_strings = ['treatment']
+            flat_values = dictutils.flatten_dictionary(merge_config)
+            for key, value in flat_values.items():
+                if isinstance(value, str):
+                    value_strings.append(value)
+                elif isinstance(value, int):
+                    value_strings.append(str(value))
+                elif isinstance(value, float):
+                    value_strings.append(str(value).replace('.', '_'))
+                else:
+                    # No clear value to put in the filename.
+                    # A treatment string should be provided for weird parameters like this.
+                    value_strings.append('x')
+            treatment_string = "-".join(value_strings)
+            dictutils.set_config_value(merge_config, ('treatment_string',), treatment_string)
+
+        result.append(merge_config)
     return result
 
 
