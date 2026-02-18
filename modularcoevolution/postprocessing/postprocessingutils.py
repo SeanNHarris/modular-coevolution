@@ -25,8 +25,9 @@ import os
 import re
 import warnings
 from functools import partial
-from typing import Type, Sequence, TypeVar
+from typing import Type, Sequence, TypeVar, Any
 
+from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.generators.basegenerator import BaseGenerator
@@ -371,9 +372,9 @@ def load_best_run_individuals(
             population_original_ids[genotype.id] = individual_id
 
             if load_metrics:
-                genotype.metrics = individual_data['metrics']
-                genotype.metric_statistics = individual_data['metric_statistics']
-                genotype.metric_histories = individual_data['metric_histories']
+                genotype.objective_tracker.metrics = individual_data['metrics']
+                genotype.objective_tracker.metric_statistics = individual_data['metric_statistics']
+                genotype.objective_tracker.metric_histories = individual_data['metric_histories']
 
         experiment_genotypes[population_name] = population_genotypes
         original_ids[population_name] = population_original_ids
@@ -487,7 +488,7 @@ def round_robin_evaluation(
     repeat_evaluations: int = 1,
     parallel: bool = False,
     **kwargs
-):
+) -> dict[tuple[BaseAgent, ...], dict[str, Any]]:
     """
     Evaluate the populations through round-robin evaluations.
     The resulting objective scores are managed within the archive generators.
@@ -497,8 +498,13 @@ def round_robin_evaluation(
         repeat_evaluations: The number of times to repeat each pairing.
         parallel: Whether to evaluate the populations in parallel.
         kwargs: Additional keyword arguments to pass to the evaluation function.
+    Returns:
+        A dictionary mapping agent groups to their evaluation results.
     """
     player_populations = experiment_definition.player_populations()
+    if len(player_populations) > len(populations):
+        populations = experiment_definition.supply_static_generators(populations)
+
     individual_ids = [population.get_individuals_to_test() for population in populations]
     # TODO: Build a new agent for each evaluation in case the agent has state.
     population_agents = [[population.build_agent_from_id(individual_id, True)
@@ -517,7 +523,8 @@ def round_robin_evaluation(
             generator = populations[player_populations[player_index]]
             opponents = [opponent.id for opponent in agents if opponent != agent]
             generator.submit_evaluation(agent.id, result[player_index], opponents)
-    return results
+    result_map = {agent_group: result for agent_group, result in zip(agent_groups, results)}
+    return result_map
 
 
 def round_robin_homogenous_evaluation(
@@ -636,7 +643,7 @@ def compare_experiments_symmetric(experiment_1_populations: list[ArchiveGenerato
     return experiment_metrics
 
 
-def compare_experiments(
+def compare_experiments_old(
         experiment_1_populations: list[dict[str, ArchiveGenerator]],
         experiment_2_populations: list[dict[str, ArchiveGenerator]],
         experiment_definition: BaseExperiment,
@@ -691,6 +698,71 @@ def compare_experiments(
             run_metrics.append(population_metrics)
         experiment_metrics.append(run_metrics)
     return experiment_metrics
+
+
+def compare_experiments(
+        experiment_populations: list[list[dict[str, ArchiveGenerator]]],
+        experiment_definition: BaseExperiment,
+        repeat_evaluations: int = 1,
+        parallel: bool = False,
+        return_results: bool = False
+) -> list[list[dict[str, float]]]:
+    """
+    Compare genotypes from multiple experiments by playing the representatives from all their runs against each other,
+    in order to get an average representative fitness per population per run.
+
+    Args:
+        experiment_populations: Each run's populations from each experiment.
+            A list of lists of outputs from :func:`load_best_run_individuals` per run, per experiment.
+        experiment_definition: The experiment definition to use for comparison.
+        repeat_evaluations: The number of times to repeat each pairing.
+        parallel: Whether to evaluate the populations in parallel.
+        return_results: If True, also return the raw results of the evaluations.
+
+    Returns:
+        A list of lists of dictionaries containing the fitness scores per population for each run, per experiment.
+        If `return_results` is True, the return value will be a tuple that also contains a dictionary mapping agent groups to their evaluation results.
+    """
+
+    # Can't use experiment.population_names() because not all populations are necessarily evolutionary.
+    all_population_names = experiment_definition.population_names()  # list(list(experiment_populations[0].values())[0].keys())
+    population_names = [name for index, name in enumerate(all_population_names) if index in experiment_definition.nonstatic_populations()]
+
+    # Round-robin tournaments for 3+-player games are typically not computationally feasible.
+    # We need a way to sample these fairly.
+    if len(population_names) > 2:
+        raise NotImplementedError("This function currently only supports experiments configured with up to two populations.")
+
+    population_archives = {population_name: [] for population_name in population_names}
+    for run_populations in experiment_populations:
+        for populations in run_populations.values():
+            for population_name in population_names:
+                population_archives[population_name].append(populations[population_name])
+
+    combined_archives = {
+        population_name: ArchiveGenerator.merge_archives(archives)
+        for population_name, archives in population_archives.items()
+    }
+
+    round_robin_archives = [combined_archives[population_name] for population_name in population_names]
+    results = round_robin_evaluation(round_robin_archives, experiment_definition, repeat_evaluations, parallel=parallel)
+
+    experiment_metrics = []
+    for run_populations in experiment_populations:
+        run_metrics = []
+        for populations in run_populations.values():
+            population_metrics = {}
+            for population_name in population_names:
+                archive = populations[population_name]
+                metrics = archive.aggregate_metrics()
+                population_metrics[population_name] = metrics
+            run_metrics.append(population_metrics)
+        experiment_metrics.append(run_metrics)
+
+    if return_results:
+        return experiment_metrics, results
+    else:
+        return experiment_metrics
 
 
 def identify_last_generation(pathname: str) -> int:

@@ -25,6 +25,7 @@ from typing import Sequence, Any, Union, Literal, Callable, Protocol
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
 from modularcoevolution.agents.baseagent import BaseAgent
+from modularcoevolution.generators.fixedgenerator import FixedGenerator
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, BaseObjectiveTracker
 from modularcoevolution.generators.basegenerator import BaseGenerator
@@ -538,6 +539,37 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         if genotype_parameters is not None:
             deep_update_dictionary(parameters, genotype_parameters)
         return genotype_class(parameters)
+
+    def nonstatic_populations(self) -> Sequence[int]:
+        """
+        Return a list of population indices which are using static generators.
+        Static generators are those which are stateless,
+        such as :class:`.FixedGenerator` and :class:`.RandomGenotypeGenerator`.
+        """
+        static_generator_types = (FixedGenerator, RandomGenotypeGenerator)
+        return [index for index, generator_type in enumerate(self.population_generator_types()) if not issubclass(generator_type, static_generator_types)]
+
+    def supply_static_generators(self, partial_populations: Sequence[BaseGenerator]) -> Sequence[BaseGenerator]:
+        """
+        Given a partial list of generators (usually :class:`.ArchiveGenerator` instances),
+        omitting static generators, return a complete list of generators for the experiment.
+        This allows opponent sampling during postprocessing to ignore static generators and treat the evaluation
+        function as if it had fewer populations.
+
+        Args:
+            partial_populations: A list of generators corresponding to the non-static populations in the experiment.
+        Returns:
+            A complete list of generators for the experiment, where the non-static generators are taken from `partial_populations` and the static generators are created with :meth:`create_generator`.
+        """
+        full_populations = []
+        partial_index = 0
+        for index, population_name in enumerate(self.population_names()):
+            if index in self.nonstatic_populations():
+                full_populations.append(partial_populations[partial_index])
+                partial_index += 1
+            else:
+                full_populations.append(self.create_generator(index))
+        return full_populations
 
     @staticmethod
     def set_config_value(config: dict, keys: Sequence[str], value: Any, overwrite: bool = False, update: bool = False) -> None:
