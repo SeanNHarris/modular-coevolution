@@ -178,10 +178,31 @@ def generate_run_parameters(
 
 def _process_metaparameters(config: dict[str, Any]) -> list[dict[str, Any]] | None:
     """Handle metaparameters such as combinations of parameter values to vary across runs."""
+    meta_values = None
+    meta_sets = None
     if 'meta_values' in config:
-        return _process_meta_values(config)
-    elif 'meta_sets' in config:
-        return _process_meta_sets(config)
+        meta_values = _process_meta_values(config)
+    if 'meta_sets' in config:
+        meta_sets = _process_meta_sets(config)
+
+    if meta_values is not None and meta_sets is not None:
+        result = []
+        for meta_value_group, meta_set in itertools.product(meta_values, meta_sets):
+            value_treatment_string = meta_value_group['treatment_string']
+            set_treatment_string = meta_set['treatment_string']
+            segments = set_treatment_string.split('-') + value_treatment_string.split('-')
+            segments = [segment for segment in segments if segment != 'treatment']
+            treatment_string = "treatment-" + "-".join(segments)
+
+            merge_parameters = dictutils.deep_copy_dictionary(meta_set)
+            dictutils.deep_update_dictionary(merge_parameters, meta_value_group)
+            dictutils.set_config_value(merge_parameters, ('treatment_string',), treatment_string)
+            result.append(merge_parameters)
+        return result
+    elif meta_values is not None:
+        return meta_values
+    elif meta_sets is not None:
+        return meta_sets
     else:
         return None
 
