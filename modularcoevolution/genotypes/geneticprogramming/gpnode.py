@@ -25,6 +25,8 @@ from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import G
 
 import random
 
+import modularcoevolution.utilities.treeutils as treeutils
+
 if TYPE_CHECKING:
     import matplotlib.pyplot as pyplot
 
@@ -311,28 +313,35 @@ class GPNode(metaclass=GPNodeType):
 
         return node_list
 
+    def get_node_dict(self) -> dict['GPNode', list['GPNode']]:
+        node_dict = dict()
+        node_dict[self] = self.input_nodes
+        for child in self.iterate_input_nodes():
+            node_dict.update(child.get_node_dict())
+        return node_dict
+
     def tree_string(self):
-        max_height = self.get_height()
-        depth = 0
-        return '\n'.join(self._build_tree_string(max_height, depth))
+        return treeutils.tree_to_string(self, self.get_node_dict())
 
-    def _build_tree_string(self, max_height: int, depth: int, substring_list: list[str] = None) -> list[str]:
-        if substring_list is None:
-            substring_list = []
-        string = ''
-        for _ in range(depth):
-            string += '|\t'
+    def tree_string_old(self):
+        def _build_tree_string(max_height: int, depth: int, substring_list: list[str] = None) -> list[str]:
+            if substring_list is None:
+                substring_list = []
+            string = ''
+            for _ in range(depth):
+                string += '|\t'
 
-        string += str(self)
-        substring_list.append(string)
-        for child in self.input_nodes:
-            if child is None:
-                warnings.warn(STRING_INCOMPLETE_WARNING)
-                substring_list.append('|\t' * (depth + 1) + '[MISSING CHILD]')
-                continue
-            child._build_tree_string(max_height, depth + 1, substring_list)
+            string += str(self)
+            substring_list.append(string)
+            for child in self.input_nodes:
+                if child is None:
+                    warnings.warn(STRING_INCOMPLETE_WARNING)
+                    substring_list.append('|\t' * (depth + 1) + '[MISSING CHILD]')
+                    continue
+                child._build_tree_string(max_height, depth + 1, substring_list)
 
-        return substring_list
+            return substring_list
+        return '\n'.join(_build_tree_string(self.get_height(), 0))
 
     def traverse_post_order(self) -> Generator['GPNode', None, None]:
         for child in self.iterate_input_nodes():
