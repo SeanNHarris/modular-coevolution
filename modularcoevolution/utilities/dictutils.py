@@ -117,19 +117,22 @@ def get_config_value(config: dict, keys: Sequence[str]) -> Any:
     return current
 
 
-def flatten_dictionary(config: dict[str, Any]) -> dict[tuple[str, ...], Any]:
+def flatten_dictionary(config: dict[str, Any], flatten_lists: bool = False) -> dict[tuple[str, ...], Any]:
     """
     Flatten a nested dictionary.
     The resulting dictionary keys correspond to the paths of values in the nested dictionary structure.
     Args:
         config: The dictionary to flatten.
+        flatten_lists: If True, lists will be treated as dictionaries with integer keys.
     Returns:
         A flat dictionary, where keys are a tuple of strings such that `result[(a, b, c)] == config[a][b][c]`.
     """
     result = {}
     for key, value in config.items():
+        if flatten_lists and isinstance(value, list):
+            value = {index: value for index, value in enumerate(value)}
         if isinstance(value, dict):
-            sub_result = flatten_dictionary(value)
+            sub_result = flatten_dictionary(value, flatten_lists=flatten_lists)
             for sub_key, sub_value in sub_result.items():
                 new_key = (key, *sub_key)
                 result[new_key] = sub_value
@@ -137,6 +140,23 @@ def flatten_dictionary(config: dict[str, Any]) -> dict[tuple[str, ...], Any]:
             new_key = (key,)
             result[new_key] = value
     return result
+
+
+def dictionary_to_list(dictionary: dict, flatten_lists: bool = False) -> list[tuple[Any, ...]]:
+    """
+    Convert a nested dictionary to a list of tuples, where each tuple corresponds to
+    the path of keys to a leaf value, followed by the leaf value itself.
+
+    Args:
+        dictionary: The dictionary to flatten.
+        flatten_lists: If True, lists will be treated as dictionaries with integer keys.
+
+    Returns:
+        A list of tuples, where each tuple is structured such that `dictionary[a][b][c] = value`
+        results in the entry `(a, b, c, value)` in the result.
+    """
+    flat_dictionary = flatten_dictionary(dictionary, flatten_lists=flatten_lists)
+    return [(*key_path, value) for key_path, value in flat_dictionary.items()]
 
 
 def strip_dictionary_layers(dictionary: Any, layers: list[int]) -> Any:
