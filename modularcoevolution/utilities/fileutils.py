@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -16,10 +16,12 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
+import json
 import os
 import re
 import warnings
 from pathlib import Path
+from typing import Any
 
 
 def get_nearest_path(directory: str, strict: bool = True) -> Path:
@@ -155,6 +157,9 @@ def get_run_paths(experiment_path_str: str) -> dict[int, str]:
 
     Returns:
         A dictionary of paths to the run folders within `experiment_path_str`, keyed by run number.
+
+    Todo:
+        Rewrite this using the experiment parameter file to better handle experiments with multiple treatments.
     """
     experiment_path = resolve_experiment_path(experiment_path_str)
     experiment_subpaths = [path.path for path in os.scandir(experiment_path) if path.is_dir()]
@@ -169,3 +174,43 @@ def get_run_paths(experiment_path_str: str) -> dict[int, str]:
     # The order from os.scandir uses string ordering, which will be wrong.
     run_paths = dict(sorted(run_paths.items()))
     return run_paths
+
+
+def get_treatment_paths(experiment_path_str: str) -> dict[Path, dict[str, Any]]:
+    """
+    For an experiment with multiple treatments defined for sub-experiments,
+    (i.e. defining the "meta_values" or "meta_sets" parameters in the config file)
+    get the paths to those sub-experiments, along with the parameters for each treatment.
+
+    Args:
+        experiment_path_str: The path to the experiment within the logs directory.
+
+    Returns:
+        A dictionary mapping treatment paths within the logs directory to the parameters for each treatment.
+    """
+    from modularcoevolution.utilities import configutils
+
+    experiment_path = resolve_experiment_path(experiment_path_str)
+    experiment_parameters_path = experiment_path / "parameters.json"
+    if not experiment_parameters_path.exists():
+        raise FileNotFoundError(f"Could not find the experiment parameters file at {experiment_parameters_path}")
+
+    with open(experiment_parameters_path, 'r') as file:
+        experiment_parameters = json.load(file)
+
+    treatments = configutils._process_metaparameters(experiment_parameters)
+
+    if treatments is None:
+        # No metaparameters, so there are no treatment subfolders.
+        return {experiment_path: experiment_parameters}
+
+    treatment_strings = [treatment['treatment_string'] for treatment in treatments]
+    treatment_paths = [experiment_path / treatment_string for treatment_string in treatment_strings]
+    valid_treatment_paths = {}
+    for treatment, treatment_string, treatment_path in zip(treatments, treatment_strings, treatment_paths):
+        if treatment_path.exists():
+            valid_treatment_paths[treatment_path] = treatment
+        else:
+            warnings.warn(f'Experiment treatment "{treatment_string}" was defined in the configuration file but not found.')
+
+    return valid_treatment_paths
