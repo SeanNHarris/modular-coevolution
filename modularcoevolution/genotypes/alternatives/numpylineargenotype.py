@@ -1,4 +1,16 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -41,6 +53,11 @@ from modularcoevolution.genotypes.lineargenotype import (
     MAX_VALUE_DEFAULT)
 
 
+class NumpyLinearGenotypeParameters(LinearGenotypeParameters):
+    dtype: numpy.dtype
+    """The Numpy data type of the gene array."""
+
+
 class NumpyLinearGenotype(LinearGenotype):
     genes: numpy.ndarray
     min_value: numpy.ndarray
@@ -63,13 +80,18 @@ class NumpyLinearGenotype(LinearGenotype):
 
         must_generate = False
         self.genes = None
+        if 'dtype' in parameters:
+            dtype = parameters['dtype']
+        else:
+            dtype = numpy.float16
+
         if 'values' in parameters:
             if isinstance(parameters['values'], numpy.ndarray):
                 self.genes = parameters['values'].copy()
             elif isinstance(parameters['values'], bytes):
-                self.genes = numpy.frombuffer(parameters['values'], dtype=numpy.float16)
+                self.genes = numpy.frombuffer(parameters['values'], dtype=dtype)
             elif isinstance(parameters['values'], Sequence):
-                self.genes = numpy.array(parameters['values'], dtype=numpy.float16)
+                self.genes = numpy.array(parameters['values'], dtype=dtype)
             self.length = len(self.genes)
         elif 'length' in parameters:
             must_generate = True
@@ -99,7 +121,10 @@ class NumpyLinearGenotype(LinearGenotype):
         apply_gene_parameter('round_genes', False)
 
         if must_generate:
-            self.genes = numpy.random.uniform(self.min_value, self.max_value).astype(numpy.float16)
+            if numpy.issubdtype(dtype, numpy.integer):
+                self.genes = numpy.random.randint(self.min_value, self.max_value + 1, size=self.length, dtype=dtype)
+            else:
+                self.genes = numpy.random.uniform(self.min_value, self.max_value, size=self.length).astype(dtype)
             if self.round_genes.any():
                 self.genes[self.round_genes] = numpy.round(self.genes[self.round_genes])
 
