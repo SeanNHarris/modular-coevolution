@@ -60,7 +60,6 @@ class EvaluateProtocol(Protocol):
         """
         ...
 
-
 class BaseExperiment(metaclass=abc.ABCMeta):
     """A base class providing an interface to define an experiment,
     including its populations, agents, and evaluation function.
@@ -121,12 +120,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def population_agent_types(self) -> Sequence[type]:
+    def population_agent_types(self) -> Sequence[type[BaseAgent]]:
         """Return a list containing the agent type of each population."""
         pass
 
     @abc.abstractmethod
-    def population_generator_types(self) -> Sequence[type]:
+    def population_generator_types(self) -> Sequence[type[BaseGenerator]]:
         """Return a list containing the generator type of each population.
         Used for the default implementation of :meth:`_create_generators`.
         """
@@ -142,7 +141,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         """
         pass
 
-    def create_generator(self, index) -> BaseGenerator:
+    def create_generator(self, index, data_collector = None) -> BaseGenerator:
         """Create a new generator for a specific population in the experiment.
 
         The default implementation takes parameters from:
@@ -152,6 +151,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
 
         Args:
             index: The population index to create a generator for.
+            data_collector: The :class:`.DataCollector` to pass to the generator, if any.
 
         Returns:
             A :class:`.BaseGenerator` subclass based on the `index`th entry in :meth:`.population_generator_types`.
@@ -171,11 +171,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             population_name,
             genotype_parameters=genotype_parameters,
             agent_parameters=agent_parameters,
+            data_collector=data_collector,
             **generator_parameters
         )
         return generator
 
-    def _create_manager(self, generators: Sequence[BaseGenerator]) -> BaseEvolutionManager:
+    def _create_manager(self, generators: Sequence[BaseGenerator], data_collector: DataCollector = None) -> BaseEvolutionManager:
         """Create the evolution/coevolution manager for the experiment.
 
         The default implementation uses the :class:`.Coevolution` manager, taking parameters from
@@ -184,12 +185,13 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         Args:
             generators: A list of generators corresponding to each population in the experiment.
                 Use this and do not call :meth:`._create_generators` yourself.
+                data_collector: The :class:`.DataCollector` to pass to the manager, if any.
         Returns:
             A :class:`.BaseEvolutionManager` object built with the provided `generators`.
         """
 
         manager_parameters = self.config['manager']
-        return Coevolution(generators, self.player_populations(), **manager_parameters)
+        return Coevolution(generators, self.player_populations(), data_collector=data_collector, **manager_parameters)
 
     def _apply_config_defaults(self, config: dict[str, Any]):
         """Update the config for each population with any missing default values.
@@ -221,13 +223,13 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         return updated_config
 
 
-    def create_experiment(self) -> BaseEvolutionManager:
+    def create_experiment(self, data_collector: DataCollector = None) -> BaseEvolutionManager:
         """Create and initialize the generators and manager for an experiment.
 
         Returns:
             A :class:`.BaseEvolutionManager` object initialized for the experiment.
         """
-        generators = [self.create_generator(index) for index in range(len(self.population_names()))]
+        generators = [self.create_generator(index, data_collector) for index in range(len(self.population_names()))]
         expected_names = self.population_names()
         for generator, name in zip(generators, expected_names):
             if generator.population_name != name:
@@ -238,11 +240,11 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             for metric_configuration, metric_function in population_metrics.metrics:
                 generator.register_metric(metric_configuration, metric_function)
 
-        manager = self._create_manager(generators)
+        manager = self._create_manager(generators, data_collector)
         return manager
 
     def create_archive_generators(self,
-                                  genotypes: dict[str, Sequence[BaseObjectiveTracker]],
+                                  genotypes: dict[str, Sequence[BaseGenotype]],
                                   original_ids: dict[str, dict[GenotypeID, int]]) -> dict[str, ArchiveGenerator]:
         """Create a list of :class:`.ArchiveGenerator` objects from a list of genotypes.
         This is used to load archived agents from a log to be evaluated during post-experiment analysis.
@@ -262,10 +264,10 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 raise ValueError(f"Genotypes submitted for {population_name}, which does not exist in this experiment.")
 
             generators[population_name] = ArchiveGenerator(
+                agent_class=self.agent_types_by_population_name[population_name],
                 population_name=population_name,
                 genotypes=genotypes[population_name],
                 original_ids=original_ids[population_name],
-                agent_class=self.agent_types_by_population_name[population_name],
                 agent_parameters=self.config['populations'][population_name]['agent']
             )
 
@@ -458,11 +460,11 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         original_ids = {genotype.id: genotype.id for genotype in genotypes}
 
         return ArchiveGenerator(
-            population_name,
-            genotypes,
-            original_ids,
-            agent_class,
-            agent_parameters
+            agent_class=agent_class,
+            population_name=population_name,
+            genotypes=genotypes,
+            original_ids=original_ids,
+            agent_parameters=agent_parameters
         )
 
     def get_agent_parameters(self, population_name: str) -> tuple[type[BaseAgent], dict[str, Any]]:

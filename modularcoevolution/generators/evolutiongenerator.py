@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -18,10 +18,11 @@ __license__ = 'Apache-2.0'
 
 import warnings
 
-from modularcoevolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator, AgentType
+from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
+from modularcoevolution.generators.baseevolutionarygenerator import BaseEvolutionaryGenerator
 from modularcoevolution.utilities.specialtypes import GenotypeID
 
-from typing import Any, Generic, Type
+from typing import Type
 
 import math
 import random
@@ -29,11 +30,11 @@ import random
 # if TYPE_CHECKING:
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.selfadaptivewrapper import SelfAdaptiveWrapper
-from modularcoevolution.utilities.datacollector import DataCollector
 
 
 # Normal genetic programming evolutionary algorithm
-class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
+class EvolutionGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: BaseGenotype](
+    BaseEvolutionaryGenerator[AgentType, GenotypeType]):
     """A generator that uses a standard evolutionary algorithm to evolve agents."""
 
     children_size: int
@@ -193,7 +194,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
 
         self.generation += 1
 
-    def calculate_diversity_fitness(self, individual: BaseGenotype):
+    def calculate_diversity_fitness(self, individual: GenotypeType):
         """Calculate a value from fitness weighted by novelty, for use in diversity-based selection.
 
         Args:
@@ -206,7 +207,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             return individual.fitness
         return individual.fitness * (1 + (self.diversity_weight * individual.metrics["novelty"] / self.max_novelty))
 
-    def fitness_proportionate_selection(self) -> BaseGenotype:
+    def fitness_proportionate_selection(self) -> GenotypeType:
         """Select an individual from the population using fitness-proportionate selection.
         * Todo: Rewrite and check this function.
 
@@ -223,7 +224,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
                     best_fitness - worst_fitness):
                 return choice
 
-    def tournament_selection(self, population: list[BaseGenotype], k: int) -> BaseGenotype:
+    def tournament_selection(self, population: list[GenotypeType], k: int) -> GenotypeType:
         """Select an individual from the provided population using k-tournament selection.
         `k` individuals are selected at random from the population, and the one with the highest fitness is returned.
         Results in a very gentle selection pressure with low `k`.
@@ -242,7 +243,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
             tournament = self.sorted_population(tournament)
         return tournament[0]
 
-    def generate_clone(self, population: list[BaseGenotype]) -> BaseGenotype:
+    def generate_clone(self, population: list[GenotypeType]) -> GenotypeType:
         """Generate a new individual by cloning a selected parent.
 
         Args:
@@ -255,7 +256,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         child = parent.clone()
         return child
 
-    def generate_recombination(self, population: list[BaseGenotype]) -> BaseGenotype:
+    def generate_recombination(self, population: list[GenotypeType]) -> GenotypeType:
         """Generate a new individual by recombining two selected parents.
 
         Args:
@@ -271,7 +272,7 @@ class EvolutionGenerator(BaseEvolutionaryGenerator, Generic[AgentType]):
         return child
 
     @classmethod
-    def sorted_population(cls, population: list[BaseGenotype]) -> list[BaseGenotype]:
+    def sorted_population(cls, population: list[GenotypeType]) -> list[GenotypeType]:
         """Defines the sorting order for individuals.
         By default, this sorts by raw fitness.
 

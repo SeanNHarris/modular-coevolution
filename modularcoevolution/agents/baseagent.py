@@ -119,7 +119,7 @@ class BaseAgent(metaclass=AgentTypeRegistry):
         return repr(self.get_parameters())
 
     @abc.abstractmethod
-    def perform_action(self, *args, **kwargs):
+    def perform_action(self, *args, **kwargs) -> Any:
         """Request that the agent "perform an action" using the given parameters.
 
         This can modify the arguments, or just return an action, depending on implementation.

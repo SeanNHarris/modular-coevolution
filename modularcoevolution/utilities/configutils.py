@@ -89,7 +89,7 @@ from modularcoevolution.utilities import fileutils, dictutils
 def parse_config(
         config_filename: str,
         merge_parameters: dict = None,
-        experiment_type: BaseExperiment = None
+        experiment_type: type[BaseExperiment] = None
 ) -> dict[str, Any]:
     """Parse a configuration file and return a dictionary of parameters for each run.
 
@@ -118,16 +118,15 @@ def parse_config(
 
 
 def generate_run_parameters(
-        config_filename: str,
+        config: dict[str, Any],
         run_count: int,
         run_start: int = 0,
         merge_parameters: dict | list[dict] = None,
-        experiment_type: type[BaseExperiment] = None
 ) -> list[dict[str, Any]]:
     """Parse a configuration file and return a dictionary of parameters for each run.
 
     Args:
-        config_filename: The filename of the configuration file to parse.
+        config: A config dictionary, such as the one returned by :func:`parse_config`.
         run_count: The total number of runs to perform, including runs skipped by the ``run_start`` argument.
         run_start: The run number to start at. Runs will end at the number specified by the ``run_amount`` argument.
         merge_parameters: A dictionary of parameters to merge into the configuration file's parameters,
@@ -138,11 +137,7 @@ def generate_run_parameters(
     Returns:
         A list containing a dictionary of parameters for each run.
     """
-
-    # Note: we don't pass in merge_parameters here, because we want to merge them separately per-run.
-    base_parameters = parse_config(config_filename, experiment_type=experiment_type)
-
-    treatment_merge_parameters = _process_metaparameters(base_parameters)
+    treatment_merge_parameters = _process_metaparameters(config)
 
     if merge_parameters is None:
         merge_parameters = {}
@@ -153,19 +148,19 @@ def generate_run_parameters(
 
     if treatment_merge_parameters is None:
         for i in range(run_start, run_count):
-            run_parameters = dictutils.deep_copy_dictionary(base_parameters)
-            run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/Run {i}"
+            run_parameters = dictutils.deep_copy_dictionary(config)
+            run_parameters['log_subfolder'] = f"{config['log_folder']}/Run {i}"
             dictutils.deep_update_dictionary(run_parameters, merge_parameters[i])
 
             parameter_list.append(run_parameters)
     else:
         for treatment in treatment_merge_parameters:
-            meta_run_parameters = dictutils.deep_copy_dictionary(base_parameters)
+            meta_run_parameters = dictutils.deep_copy_dictionary(config)
             dictutils.deep_update_dictionary(meta_run_parameters, treatment)
             treatment_string = treatment['treatment_string']
             for i in range(run_count):
                 run_parameters = dictutils.deep_copy_dictionary(meta_run_parameters)
-                run_parameters['log_subfolder'] = f"{base_parameters['log_folder']}/{treatment_string}/Run {i}"
+                run_parameters['log_subfolder'] = f"{config['log_folder']}/{treatment_string}/Run {i}"
                 dictutils.deep_update_dictionary(run_parameters, merge_parameters[i])
 
                 parameter_list.append(run_parameters)

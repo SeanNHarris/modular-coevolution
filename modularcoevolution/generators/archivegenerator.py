@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -19,60 +19,44 @@ __license__ = 'Apache-2.0'
 import statistics
 from typing import Any, Sequence
 
-from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
-from modularcoevolution.generators.basegenerator import BaseGenerator, AgentType
+from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
+from modularcoevolution.generators.basegenotypegenerator import BaseGenotypeGenerator
+from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.utilities.specialtypes import GenotypeID
 
 
-class ArchiveGenerator(BaseGenerator):
+class ArchiveGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: BaseGenotype](BaseGenotypeGenerator[AgentType, GenotypeType]):
     """A generator that loads archived agents from a log to be evaluated during post-experiment analysis."""
 
-    population: list[BaseObjectiveTracker]
+    population: list[GenotypeType]
     """A list of genotypes to be used as the population"""
-    agent_class: type
-    """The class of `BaseAgent` associated with the genotypes."""
-    agent_parameters: dict[str, Any]
-    """A dictionary of parameters to be passed to the agent class when creating agents."""
 
     current_to_original_ids: dict[GenotypeID, int]
     """A dictionary mapping the genotype ID assigned during analysis to the original genotype ID in the log data.
     This is necessary because genotype IDs are not unique across different runs."""
     original_to_current_ids: dict[int, GenotypeID]
     """The reverse of :attr:`current_to_original_ids`."""
-    genotypes_by_id: dict[GenotypeID, BaseObjectiveTracker]
+    genotypes_by_id: dict[GenotypeID, GenotypeType]
     """A mapping from *current* genotype ID to a genotype with that :attr:`.BaseGenotype.id`."""
 
-    def __init__(self,
-                 population_name: str,
-                 genotypes: Sequence[BaseObjectiveTracker],
-                 original_ids: dict[GenotypeID, int],
-                 agent_class: type,
-                 agent_parameters: dict[str, Any],
-                 **kwargs
-                 ):
-        super().__init__(population_name, **kwargs)
-        # TODO: Move the ID to the BaseObjectiveTracker class to ensure that it always exists.
+    def __init__(
+            self,
+            agent_class: type[AgentType],
+            population_name: str,
+            genotypes: Sequence[GenotypeType],
+            original_ids: dict[GenotypeID, int],
+            agent_parameters: dict[str, Any] | None = None,
+            **kwargs
+    ):
+        super().__init__(agent_class=agent_class, population_name=population_name, agent_parameters=agent_parameters, **kwargs)
         self.population = list(genotypes)
         self.genotypes_by_id = {genotype.id: genotype for genotype in genotypes}
         self.current_to_original_ids = original_ids
         self.original_to_current_ids = {original_id: current_id for current_id, original_id in original_ids.items()}
-        self.agent_class = agent_class
-        self.agent_parameters = agent_parameters
 
     @property
     def population_size(self) -> int:
         return len(self.population)
-
-    def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
-        return self.genotypes_by_id[agent_id]
-
-    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> AgentType:
-        if agent_id not in self.genotypes_by_id:
-            raise ValueError(f"The agent ID {agent_id} is not present in this generator."
-                             f"Ensure the correct generator is being queried.")
-
-        agent = self.agent_class(genotype=self.genotypes_by_id[agent_id], active=active, parameters=self.agent_parameters)
-        return agent
 
     def get_individuals_to_test(self) -> list[GenotypeID]:
         return list(self.genotypes_by_id.keys())
@@ -120,7 +104,7 @@ class ArchiveGenerator(BaseGenerator):
         copy_current_to_original_ids = {}
         for genotype, clone in zip(self.population, population_copy):
             copy_current_to_original_ids[clone.id] = self.current_to_original_ids[genotype.id]
-        generator = ArchiveGenerator(self.population_name, population_copy, copy_current_to_original_ids, self.agent_class, self.agent_parameters)
+        generator = ArchiveGenerator(self.agent_class, self.population_name, population_copy, copy_current_to_original_ids, agent_parameters=self.agent_parameters)
         generator.metric_configurations = self.metric_configurations
         generator.metric_functions = self.metric_functions
         return generator
@@ -134,7 +118,7 @@ class ArchiveGenerator(BaseGenerator):
         copy_current_to_original_ids = {}
         for genotype, clone in zip(subset_population, subset_copy):
             copy_current_to_original_ids[clone.id] = self.current_to_original_ids[genotype.id]
-        generator = ArchiveGenerator(self.population_name, subset_copy, copy_current_to_original_ids, self.agent_class, self.agent_parameters)
+        generator = ArchiveGenerator(self.agent_class, self.population_name, subset_copy, copy_current_to_original_ids, agent_parameters=self.agent_parameters)
         generator.metric_configurations = self.metric_configurations
         generator.metric_functions = self.metric_functions
         return generator
@@ -149,7 +133,7 @@ class ArchiveGenerator(BaseGenerator):
         for archive in archives:
             population.extend(archive.population)
             original_ids.update(archive.current_to_original_ids)
-        merged_archive = ArchiveGenerator(population_name, population, original_ids, agent_class, agent_parameters)
+        merged_archive = ArchiveGenerator(agent_class, population_name, population, original_ids, agent_parameters=agent_parameters)
         merged_archive.metric_configurations = archives[0].metric_configurations
         merged_archive.metric_functions = archives[0].metric_functions
         return merged_archive

@@ -1,4 +1,4 @@
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -98,7 +98,7 @@ class MultipleGenotype(BaseGenotype, Generic[MemberType]):
     def __str__(self):
         string = '(Multiple Genotype)'
         for name in self.members:
-            string += f'\n{name}: {self.members[name]}'
+            string += f'\n{name}:\n{self.members[name]}'
         return string
 
     def __hash__(self) -> int:

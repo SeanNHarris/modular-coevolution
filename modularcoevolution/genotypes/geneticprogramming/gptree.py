@@ -21,7 +21,7 @@ import logging
 from warnings import warn
 
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
-from modularcoevolution.genotypes.geneticprogramming.gpnode import GPNodeTypeRegistry, GPNode
+from modularcoevolution.genotypes.geneticprogramming.gpnode import GPNodeTypeRegistry, GPNode, NodeType
 from modularcoevolution.genotypes.diversity.gpdiversity import *
 
 from typing import Any, TypedDict, Union, Callable, Literal
@@ -49,7 +49,7 @@ class GPTreeParameters(TypedDict, total=False):
     node_type: Union[type, str]
     """See :attr:`GPTree.node_type`. This can be a type or a string name of a type.
     Using a string name only works if the type has been imported somewhere, such as in the experiment definition."""
-    return_type: int
+    return_type: NodeType
     """See :attr:`GPTree.return_type`."""
     min_height: int
     """See :attr:`GPTree.min_height`."""
@@ -78,7 +78,7 @@ class GPTreeParameters(TypedDict, total=False):
 class GPTree(BaseGenotype):
     node_type: type[GPNode]
     """The type of genetic programming node used in the tree, which defines the available primitives and types."""
-    return_type: int
+    return_type: NodeType
     """The return type of the tree's root node (using the types defined by :attr:`node_type`).
     This is enforced at all times."""
     min_height: int

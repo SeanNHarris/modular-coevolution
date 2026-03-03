@@ -113,7 +113,13 @@ class CoevolutionDriver:
 
         if merge_parameters is None:
             merge_parameters = {}
-        self.parameters = configutils.generate_run_parameters(config_filename, run_amount, run_start, merge_parameters, self.experiment_type)
+
+        # Note: we don't pass in merge_parameters here, because we want to merge them separately per-run.
+        raw_config = configutils.parse_config(config_filename, experiment_type=self.experiment_type)
+        with open(fileutils.get_logs_path() / raw_config['log_folder'] / 'parameters.json', 'w') as parameter_file:
+            json.dump(raw_config, parameter_file)
+
+        self.parameters = configutils.generate_run_parameters(raw_config, run_amount, run_start, merge_parameters)
 
         if self.parallel:
             # TODO: Behave differently on Windows and Linux, as this only works on linux
@@ -217,8 +223,6 @@ def _run_experiment(
     logger = logging.getLogger(__name__)
 
     config = dictutils.deep_copy_dictionary(run_parameters)
-    dictutils.set_config_value(config, ('manager', 'data_collector'), data_collector)
-    dictutils.set_config_value(config, ('default', 'generator', 'data_collector'), data_collector)
 
     run_experiment_type = experiment_type
     if 'experiment_type' in config:
@@ -236,11 +240,11 @@ def _run_experiment(
         raise ValueError("No experiment type specified as a parameter or in the configuration file.")
 
     experiment = run_experiment_type(config)
-    coevolution_manager: Coevolution = experiment.create_experiment()
+    coevolution_manager: Coevolution = experiment.create_experiment(data_collector=data_collector)
 
     with open(f'{log_path}/parameters.json', 'a+') as parameter_file:
         parameter_file.truncate(0)
-        json.dump(run_parameters, parameter_file)
+        json.dump(experiment.config, parameter_file)
 
     # Do a test evaluation to visualize what the scenario looks like
     # experiment.exhibition(coevolution_manager.agent_generators, 1, log_path, generation=0, parallel=parallel)

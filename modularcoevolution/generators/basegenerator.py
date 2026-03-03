@@ -4,7 +4,7 @@ Todo:
         It's used nowhere else, but might have been needed for CEADS-LIN
 
 """
-#  Copyright 2025 BONSAI Lab at Auburn University
+#  Copyright 2026 BONSAI Lab at Auburn University
 # 
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -22,12 +22,13 @@ __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
-from typing import Any, Callable, Generic, TypeVar, Union, final
+from typing import Any, Callable, Generic, TypeVar, Union, final, Protocol
 
 import abc
 
 # if TYPE_CHECKING:
 from modularcoevolution.agents.baseagent import BaseAgent
+from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker, MetricConfiguration, MetricTypes, \
     MetricSubmission
 from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
@@ -88,17 +89,14 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         self.agent_cache = {}
 
     @abc.abstractmethod
-    def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
-        """Return the agent parameters associated with the given ID.
-
-        To work with the implementation of :meth:`.set_objectives` here, this must return a subclass of
-        :class:`.BaseObjectiveTracker`. If no complex genotype object is required, note that a class can inherit from
-        :class:`.BaseObjectiveTracker` and :class:`.BaseAgent` simultaneously.
+    def get_tracker_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
+        """Return the :class:`.BaseObjectiveTracker` associated with the given ID.
+        This is used by :meth:`.submit_metric` to submit metrics to an agent's objective tracker.
 
         Args:
-            agent_id: The ID of the agent parameter set being requested.
+            agent_id: The ID of the :class:`.BaseObjectiveTracker` being requested.
 
-        Returns: The agent parameter set associated with the ID ``agent_id``.
+        Returns: The :class:`.BaseObjectiveTracker` associated with the ID ``agent_id``.
 
         """
         pass
@@ -275,7 +273,7 @@ class BaseGenerator(Generic[AgentType], metaclass=abc.ABCMeta):
         metric_submission['value'] = metric_value
         if opponents is not None:
             metric_submission['opponents'] = opponents
-        self.get_genotype_with_id(agent_id).submit_metric(metric_submission)
+        self.get_tracker_with_id(agent_id).submit_metric(metric_submission)
 
     def compute_metric(self, metric_name: str, evaluation_results: dict[str, Any]) -> MetricTypes:
         """Compute the requested metric from the given evaluation results.

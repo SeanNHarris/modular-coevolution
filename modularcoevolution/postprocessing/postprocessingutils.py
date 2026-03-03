@@ -25,7 +25,8 @@ import os
 import re
 import warnings
 from functools import partial
-from typing import Type, Sequence, TypeVar, Any
+from os import PathLike
+from typing import Optional, Type, Sequence, TypeVar, Any
 
 from modularcoevolution.agents.baseagent import BaseAgent
 from modularcoevolution.experiments.baseexperiment import BaseExperiment
@@ -43,7 +44,7 @@ from modularcoevolution.utilities.specialtypes import GenotypeID
 _logger = logging.getLogger(__name__)
 
 
-def load_run_config(run_folder: str, override_parameters: dict = None) -> dict:
+def load_run_config(run_folder: str | PathLike, override_parameters: dict = None) -> dict:
     """
     Load the configuration parameters logged for a run from the parameters.json file.
 
@@ -109,7 +110,7 @@ def get_experiment_type(
 
 
 def load_run_data(
-        run_folder: str,
+        run_folder: str | PathLike,
         last_generation: bool = False,
         generations: Sequence[int] = None,
         load_only: Sequence[str] = None
@@ -142,7 +143,7 @@ def load_run_data(
 
 
 def load_experiment_data(
-        experiment_folder: str,
+        experiment_folder: str | PathLike,
         last_generation: bool = False,
         generations: Sequence[int] = None,
         load_only: Sequence[str] = None,
@@ -191,7 +192,7 @@ EXPERIMENT = TypeVar('EXPERIMENT', bound=BaseExperiment)
 
 
 def load_run_experiment_definition(
-        run_folder: str,
+        run_folder: str | PathLike,
         experiment_type: Type[EXPERIMENT] = None,
         override_parameters: dict = None
 ) -> EXPERIMENT:
@@ -226,9 +227,10 @@ def load_run_experiment_definition(
 
 
 def load_experiment_definition(
-        experiment_folder: str,
-        experiment_type: type[EXPERIMENT] = None,
-        override_parameters: dict = None
+        experiment_folder: str | PathLike,
+        run_number: int = -1,
+        experiment_type: Optional[type[EXPERIMENT]] = None,
+        override_parameters: Optional[dict[str, Any]] = None
 ) -> EXPERIMENT:
     """
     Initialize a :class:`BaseExperiment` subclass based on the parameters logged for a given experiment.
@@ -236,6 +238,7 @@ def load_experiment_definition(
 
     Args:
         experiment_folder: The path to the experiment folder within the logs directory.
+        run_number: A specific run number to load, in case parameters differ per-run. Defaults to using the first run.
         experiment_type: The type of experiment used in the run.
             This should match the type logged in the parameters.json file.
             If None, the experiment type will be inferred from the parameters.json file.
@@ -249,8 +252,9 @@ def load_experiment_definition(
         UnspecifiedExperimentError: If the experiment type is not specified in the loaded config file or as a parameter.
     """
     run_folders = get_run_paths(experiment_folder)
-    first_run = next(iter(run_folders))
-    return load_run_experiment_definition(run_folders[first_run], experiment_type, override_parameters)
+    if run_number < 0:
+        run_number = min(run_folders.keys())
+    return load_run_experiment_definition(run_folders[run_number], experiment_type, override_parameters)
 
 
 def _get_run_name(run_folder: str) -> str:
@@ -333,6 +337,8 @@ def load_best_run_individuals(
 
         # Making sure to copy before sorting
         individual_ids = list(list(run_data['generations'][population_name].values())[generation]['individual_ids'])
+        # Not all individuals may be logged; assume the user chose a valid representative size.
+        individual_ids = individual_ids[:min(population_representative_size, len(individual_ids))]
         if str_needed:
             metrics = {individual_id: run_data['individuals'][population_name][str(individual_id)]['metrics'] for individual_id in individual_ids}
         else:
@@ -418,7 +424,7 @@ def load_generational_representatives(
 
 
 def easy_load_experiment_results(
-        experiment_folder: str,
+        experiment_folder: str | PathLike,
         run_numbers: Sequence[int] = None,
         limit_populations: Sequence[str] = None,
         representative_size: int = -1,
@@ -456,7 +462,13 @@ def easy_load_experiment_results(
         - A dictionary mapping run names to loaded data in the format used by the :class:`DataCollector`.
         - For each run name, for each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
-    experiment = load_experiment_definition(experiment_folder, override_parameters=override_parameters, experiment_type=experiment_type)
+    # If only one run is being loaded, specifically use that run's parameters to initialize the experiment, in case there are differences between runs.
+    if len(run_numbers) == 1:
+        run_number = run_numbers[0]
+    else:
+        run_number = -1
+    experiment = load_experiment_definition(experiment_folder, run_number=run_number, override_parameters=override_parameters, experiment_type=experiment_type)
+
     experiment_data = load_experiment_data(
         experiment_folder, run_numbers=run_numbers, last_generation=last_generation,
         generations=generations, parallel=parallel
@@ -488,7 +500,7 @@ def round_robin_evaluation(
     repeat_evaluations: int = 1,
     parallel: bool = False,
     **kwargs
-) -> dict[tuple[BaseAgent, ...], dict[str, Any]]:
+) -> tuple[tuple[BaseAgent, ...], Sequence[dict[str, Any]]]:
     """
     Evaluate the populations through round-robin evaluations.
     The resulting objective scores are managed within the archive generators.
@@ -523,7 +535,7 @@ def round_robin_evaluation(
             generator = populations[player_populations[player_index]]
             opponents = [opponent.id for opponent in agents if opponent != agent]
             generator.submit_evaluation(agent.id, result[player_index], opponents)
-    result_map = {agent_group: result for agent_group, result in zip(agent_groups, results)}
+    result_map = [(agent_group, result) for agent_group, result in zip(agent_groups, results)]
     return result_map
 
 
@@ -765,7 +777,7 @@ def compare_experiments(
         return experiment_metrics
 
 
-def identify_last_generation(pathname: str) -> int:
+def identify_last_generation(pathname: str | PathLike) -> int:
     """
     Identify the last generation from a path to a run's log directory.
 

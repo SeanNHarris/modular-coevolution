@@ -26,12 +26,12 @@ import math
 import random
 import statistics
 
+from modularcoevolution.generators.basegenotypegenerator import BaseGenotypeGenerator
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration, compute_shared_objectives
-from modularcoevolution.generators.basegenerator import BaseGenerator
 from modularcoevolution.utilities.dictutils import deep_update_dictionary
-from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
+from modularcoevolution.utilities.specialtypes import GenotypeID
 
-from typing import Any, Type, TypeVar
+from typing import Any, Type
 
 import abc
 
@@ -42,13 +42,8 @@ from modularcoevolution.utilities.datacollector import DataCollector
 from modularcoevolution.managers.coevolution import Coevolution
 
 
-AgentType = TypeVar("AgentType", bound=BaseEvolutionaryAgent)
-AgentParameters = TypeVar("AgentParameters", bound=dict[str, Any])
-GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
-GenotypeParameters = TypeVar("GenotypeParameters", bound=dict[str, Any])
-
-
-class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta):
+class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: BaseGenotype](
+    BaseGenotypeGenerator[AgentType, GenotypeType], metaclass=abc.ABCMeta):
     """A base class for evolutionary algorithms (EAs) that implements many of the abstract functions from
     :class:`.BaseGenerator`.
 
@@ -73,20 +68,9 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
     If there are fewer than this many individuals, then the remainder will be made up for with regular evaluations.
     If there are more, then a random subset will be taken. 
     """
-    genotypes_by_id: dict[GenotypeID, BaseGenotype]
-    """A mapping from an ID to a genotype with that :attr:`.BaseGenotype.id`."""
     generation: int
     """The current generation of evolution."""
 
-    agent_class: Type[AgentType]
-    """The class to instantiate agents with."""
-    genotype_class: Type[BaseGenotype]
-    """The class to instantiate genotypes with, determined by :attr:`agent_class`."""
-    agent_parameters: dict[str, Any]
-    """The parameters to be sent to the ``__init__`` function of :attr:`agent_class`, other than genotype."""
-    genotype_parameters: dict[str, Any]
-    """The parameters to be sent to the ``__init__`` function of the :attr:`genotype_class`, in addition to the default
-    parameters from :meth:`.BaseEvolutionaryAgent.genotype_default_parameters`. Overwrites any default parameters."""
     initial_size: int
     """The initial size of the population. Can be treated as the *mu* parameter."""
     copy_survivor_objectives: bool
@@ -174,22 +158,19 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
             population_log_size: If greater than zero, limit logging of individual genotypes
                 to this many of the top individuals.
         """
-        super().__init__(population_name, **kwargs)
-        self.agent_class = agent_class
-        self.agent_parameters = agent_parameters
-        if self.agent_parameters is None:
-            self.agent_parameters = dict()
-        self.genotype_parameters = genotype_parameters
-        if self.genotype_parameters is None:
-            self.genotype_parameters = dict()
+        super().__init__(
+            agent_class=agent_class,
+            population_name=population_name,
+            agent_parameters=agent_parameters,
+            genotype_parameters=genotype_parameters,
+            **kwargs
+        )
         self.initial_size = initial_size
         self.seed = seed
         self.data_collector = data_collector
         self.manager = manager
         self.copy_survivor_objectives = copy_survivor_objectives
         self.reevaluate_per_generation = reevaluate_per_generation
-        assert issubclass(agent_class, BaseEvolutionaryAgent)
-        self.genotype_class = agent_class.genotype_class()
 
         self.generation = 0
         self.population_size = self.initial_size
@@ -199,7 +180,6 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
         self.past_population_width = past_population_width
         self.hall_of_fame_size = hall_of_fame_size
         self.hall_of_fame = list()
-        self.genotypes_by_id = dict()
 
         self.compute_diversity = compute_diversity
         if self.compute_diversity:
@@ -239,36 +219,6 @@ class BaseEvolutionaryGenerator(BaseGenerator[AgentType], metaclass=abc.ABCMeta)
 
     def population_size(self) -> int:
         return len(self.population)
-
-    def get_genotype_with_id(self, agent_id) -> BaseGenotype:
-        """Return the genotype with the given ID.
-
-        Args:
-            agent_id: The ID of the genotype being requested.
-
-        Returns: The genotype associated with the ID ``agent_id``.
-
-        """
-        if agent_id not in self.genotypes_by_id:
-            raise ValueError(f"The agent ID {agent_id} is not present in this generator."
-                             f"Ensure the correct generator is being queried.")
-        return self.genotypes_by_id[agent_id]
-
-    def _build_agent_from_id(self, agent_id: GenotypeID, active: bool) -> BaseEvolutionaryAgent:
-        """Return a new instance of an agent based on the given agent ID.
-
-        Args:
-            agent_id: The ID associated with the agent being requested.
-            active: Used for the ``active`` parameter in :meth:`.BaseAgent.__init__`.
-
-        Returns: A newly created agent associated with the ID ``agent_id`` and with ``active`` as its activity state.
-
-        """
-        if agent_id not in self.genotypes_by_id:
-            raise ValueError(f"The agent ID {agent_id} is not present in this generator."
-                             f"Ensure the correct generator is being queried.")
-        agent = self.agent_class(genotype=self.genotypes_by_id[agent_id], active=active, parameters=self.agent_parameters)
-        return agent
     
     def get_individuals_to_test(self) -> list[GenotypeID]:
         """Get a list of agent IDs in need of evaluation, skipping those already evaluated if

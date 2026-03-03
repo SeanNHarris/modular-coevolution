@@ -20,25 +20,25 @@ import logging
 import statistics
 from typing import Type, Any
 
-from modularcoevolution.generators.basegenerator import AgentType
+from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.generators.evolutiongenerator import EvolutionGenerator
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.baseobjectivetracker import MetricConfiguration
 
 import functools
 import math
-import random
 
 
 # Note: these functions assume objective maximization
-class NSGAIIGenerator(EvolutionGenerator[AgentType]):
+class NSGAIIGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: BaseGenotype](
+    EvolutionGenerator[AgentType, GenotypeType]):
     """A generator that uses the NSGA-II algorithm to evolve a population of agents with multiple objectives."""
 
     parsimony_objective: bool
     """Whether to automatically register and calculate a parsimony pressure objective
     (based on :meth:`BaseObjectiveTracker.get_fitness_modifier`)."""
 
-    nondominated_fronts: list[list[BaseGenotype]]
+    nondominated_fronts: list[list[GenotypeType]]
     """A list of non-dominated fronts for the current generation as lists of genotypes,
     starting with the pareto front."""
 
@@ -115,7 +115,7 @@ class NSGAIIGenerator(EvolutionGenerator[AgentType]):
         return metric_statistics
 
     @classmethod
-    def sorted_population(cls, population: list[BaseGenotype]):
+    def sorted_population(cls, population: list[GenotypeType]):
         return sorted(population, key=functools.cmp_to_key(crowded_comparison), reverse=True)
 
     def _register_front_metric(self) -> None:

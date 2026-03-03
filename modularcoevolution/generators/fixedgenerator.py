@@ -65,7 +65,7 @@ class FixedGenerator(BaseGenerator[AgentType]):
 
         self.agent = self.agent_class(agent_parameters, active=self.reuse_agent)
 
-    def get_genotype_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
+    def get_tracker_with_id(self, agent_id: GenotypeID) -> BaseObjectiveTracker:
         objective_tracker = self.agent.objective_tracker
         if objective_tracker.id != agent_id:
             raise ValueError(f"ID {agent_id} does not match the ID of the fixed agent ({objective_tracker.id}).")

@@ -26,9 +26,7 @@ import abc
 from modularcoevolution.genotypes.basegenotype import BaseGenotype
 from modularcoevolution.genotypes.baseobjectivetracker import BaseObjectiveTracker
 
-AgentParameters = TypeVar("AgentParameters", bound=dict[str, Any])
 GenotypeType = TypeVar("GenotypeType", bound=BaseGenotype)
-GenotypeParameters = TypeVar("GenotypeParameters", bound=dict[str, Any])
 
 
 class BaseEvolutionaryAgent(BaseAgent, Generic[GenotypeType], metaclass=abc.ABCMeta):

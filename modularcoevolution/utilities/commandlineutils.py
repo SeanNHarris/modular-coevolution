@@ -23,6 +23,18 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2026, BONSAI Lab at Auburn University'
@@ -167,7 +179,7 @@ def prompt_int(prompt: str = None, minimum: int = None, default: int = None) -> 
     Prompt the user for an integer input.
 
     Args:
-        prompt: An optional message to display before the prompt.
+        prompt: An optional custom message to display before the prompt.
         minimum: An optional minimum acceptable value.
         default: An optional default value to use if the user inputs an empty string.
 
@@ -195,6 +207,47 @@ def prompt_int(prompt: str = None, minimum: int = None, default: int = None) -> 
             print(f"Value must be at least {minimum}.")
             continue
         return result
+
+
+def prompt_options(prompt: str = None, options: list[str] = None, default: str = None, ) -> str:
+    """
+    Prompt the user to select from a list of options. Defaults to a "y/n" prompt.
+
+    Args:
+        prompt: An optional custom message to display before the prompt.
+        options: A list of valid options for the user to select from. Defaults to ['y', 'n'].
+        default: An optional default value to use if the user inputs an empty string.
+
+    Returns:
+        A string from the options list, given by the user.
+    """
+    if options is None:
+        options = ['y', 'n']
+    else:
+        options = [option.lower() for option in options]
+
+    options_copy = options.copy()
+    if default is not None:
+        if default not in options_copy:
+            raise ValueError("Default value must be in options.")
+        default_index = options_copy.index(default)
+        options_copy[default_index] = options_copy[default_index].upper()
+    option_string = f"({'/'.join(options_copy)})"
+
+    if prompt is None:
+        prompt = f"Input one of the following options: {option_string}"
+    else:
+        prompt += f" {option_string}"
+
+    while True:
+        user_input = input(prompt + '\n')
+        if user_input == '' and default is not None:
+            return default
+
+        if user_input.lower() not in options:
+            print(f"Invalid input. Please enter one of the following options: {option_string}")
+            continue
+        return user_input.lower()
 
 
 def color_string_24_bit(string: str, red: int, green: int, blue: int, background: bool = False) -> str:
