@@ -60,9 +60,11 @@ class Coevolution:
     whether the two players are drawn from the same population."""
 
     evaluation_table: dict[EvaluationID, tuple[GenotypeID]]
-    """A table of evaluations which have been assigned, mapped to the IDs of the agents in the evaluation."""
+    """A table of evaluations which have been assigned, mapped to the IDs of the agents in the evaluation.
+    Cleared after each generation."""
     evaluation_types: dict[EvaluationID, EvaluationType]
-    """The type of evaluation that each evaluation ID represents."""
+    """The type of evaluation that each evaluation ID represents.
+    Cleared after each generation."""
     remaining_evolution_evaluations: list[EvaluationID]
     """A list of main evolution evaluations which have not yet received results."""
     completed_evolution_evaluations: set[EvaluationID]
@@ -179,6 +181,12 @@ class Coevolution:
             self.generation += 1
             for generator in self.agent_generators:
                 generator.next_generation()
+
+        # The evaluation table needs to be cleared, as it uses a shocking amount of memory.
+        # If this data is needed in the future, testing showed that a numpy array would use 5% of the memory.
+        # I'm trying to avoid dependencies where possible, however.
+        self.evaluation_table.clear()
+        self.evaluation_types.clear()
 
         self.remaining_evolution_evaluations.clear()
         self.remaining_tournament_evaluations.clear()
