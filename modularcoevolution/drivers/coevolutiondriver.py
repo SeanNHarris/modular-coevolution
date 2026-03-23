@@ -116,7 +116,10 @@ class CoevolutionDriver:
 
         # Note: we don't pass in merge_parameters here, because we want to merge them separately per-run.
         raw_config = configutils.parse_config(config_filename, experiment_type=self.experiment_type)
-        with open(fileutils.get_logs_path() / raw_config['log_folder'] / 'parameters.json', 'w') as parameter_file:
+        log_path = fileutils.get_logs_path() / raw_config['log_folder']
+        if not log_path.exists():
+            os.makedirs(log_path)
+        with open(log_path / 'parameters.json', 'w') as parameter_file:
             json.dump(raw_config, parameter_file)
 
         self.parameters = configutils.generate_run_parameters(raw_config, run_amount, run_start, merge_parameters)
