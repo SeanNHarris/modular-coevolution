@@ -788,7 +788,30 @@ def identify_last_generation(pathname: str | PathLike) -> int:
         int: The last generation number.
     """
     data_path = os.path.join(pathname, 'data')
-    files = [file for file in os.scandir(data_path) if file.is_file()]
+    try:
+        files = [file for file in os.scandir(data_path) if file.is_file()]
+    except FileNotFoundError:
+        raise FileNotFoundError(f"No run data found at {data_path}.")
     if len(files) == 1:
         raise ValueError("This function is not supported for run data saved to a single file (i.e. with split_generations=False).")
     return len(files) - 1
+
+
+def test_if_run_complete(pathname: str | PathLike, config: dict[str, Any]) -> bool:
+    """
+    Determine whether the last logged generation of a run is the final generation for its configuration,
+    indicating that the run completed successfully.
+
+    Args:
+        pathname: The path to the run's log directory.
+        config: The configuration dictionary for the run.
+
+    Returns:
+        True if the run is complete, False if not.
+    """
+    try:
+        last_generation = identify_last_generation(pathname)
+    except FileNotFoundError:
+        return False  # No log data, so the run is definitely not complete.
+    end_generation = config['manager']['num_generations']
+    return last_generation >= end_generation

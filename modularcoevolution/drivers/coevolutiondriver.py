@@ -61,6 +61,8 @@ class CoevolutionDriver:
     """Whether to run and log exhibition evaluations between the best individuals of each generation."""
     exhibition_rate: int
     """The rate at which to run exhibition evaluations, e.g. every 5 generations."""
+    force_rerun: bool
+    """Whether to force rerunning completed runs, instead of skipping them."""
 
     use_data_collector: bool
     """Whether to use a data collector to store results. This will result in a lot of logged data."""
@@ -78,7 +80,8 @@ class CoevolutionDriver:
                  use_data_collector: bool = True,
                  run_exhibition: bool = True,
                  exhibition_rate: int = 1,
-                 merge_parameters: dict = None):
+                 merge_parameters: dict = None,
+                 force_rerun: bool = False):
         """Create a new coevolution driver.
 
         Args:
@@ -98,7 +101,7 @@ class CoevolutionDriver:
             exhibition_rate: The rate at which to run exhibition evaluations, e.g. every 5 generations.
             merge_parameters: A dictionary of parameters to merge into the configuration file.
                 Use this for parameters generated programmatically.
-
+            force_rerun: Whether to force rerunning completed runs, instead of skipping them.
         """
         self.experiment_type = experiment_type
         
@@ -187,6 +190,8 @@ class CoevolutionDriver:
                             help='Disable exhibition evaluations.')
         parser.add_argument('--exhibition-rate', dest='exhibition_rate', type=int, default=1,
                             help='The rate at which to run exhibition evaluations, e.g. every 5 generations.')
+        parser.add_argument('--force', dest='force_rerun', action='store_true',
+                            help='Force rerunning completed runs, instead of skipping them.')
         return parser
 
 
@@ -197,7 +202,9 @@ def _run_experiment(
         use_data_collector: bool = True,
         run_exhibition: bool = True,
         exhibition_rate: int = 1,
-        redirect_output: bool = False) -> None:
+        redirect_output: bool = False,
+        force_rerun: bool = False
+) -> None:
     """Run a single experiment.
 
     Args:
@@ -220,6 +227,14 @@ def _run_experiment(
     logs_path = fileutils.get_logs_path(can_create=True)
     log_path = logs_path / log_subfolder
     os.makedirs(log_path, exist_ok=True)
+
+    run_already_exists = postprocessingutils.test_if_run_complete(log_path, run_parameters)
+    if run_already_exists:
+        if force_rerun:
+            warnings.warn(f"Rerunning completed run at {log_subfolder} because of \"--force\" parameter.")
+        else:
+            print(f"Skipping completed run at {log_subfolder}.")
+            return
 
     console_path = log_path / "console.txt"
     loggingutils.initialize_logger(log_path=console_path, console_output=not redirect_output, debug=True)
