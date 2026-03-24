@@ -146,7 +146,7 @@ class CoevolutionDriver:
 
         try:
             if self.parallel and self.parallel_runs > 1:
-                with parallelutils.create_pool(self.parallel_runs) as evaluation_pool:
+                with parallelutils.create_pool(self.parallel_runs, max_tasks_per_child=1) as evaluation_pool:
                     run_experiment_parallel = functools.partial(run_experiment, parallel=False, redirect_output=True)
                     result_iterator = evaluation_pool.map(run_experiment_parallel, self.parameters)
 
