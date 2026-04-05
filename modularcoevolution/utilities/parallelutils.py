@@ -91,7 +91,7 @@ class MultiprocessingPoolWrapper:
             self.pool.join()
 
     def __enter__(self):
-        return self.pool
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is None:

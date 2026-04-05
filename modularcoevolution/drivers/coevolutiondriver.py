@@ -81,7 +81,9 @@ class CoevolutionDriver:
                  run_exhibition: bool = True,
                  exhibition_rate: int = 1,
                  merge_parameters: dict = None,
-                 force_rerun: bool = False):
+                 force_rerun: bool = False,
+                 copy_log_parameters: str = None
+    ):
         """Create a new coevolution driver.
 
         Args:
@@ -102,6 +104,7 @@ class CoevolutionDriver:
             merge_parameters: A dictionary of parameters to merge into the configuration file.
                 Use this for parameters generated programmatically.
             force_rerun: Whether to force rerunning completed runs, instead of skipping them.
+            copy_log_parameters: A log subfolder to copy parameters from as low-priority merge parameters. Use this when some parameters are procedurally generated and not included in the config file, but need to be replicated for a new experiment. This works for multi-treatment experiments if the treatments are the same.
         """
         self.experiment_type = experiment_type
         
@@ -126,6 +129,10 @@ class CoevolutionDriver:
             json.dump(raw_config, parameter_file)
 
         self.parameters = configutils.generate_run_parameters(raw_config, run_amount, run_start, merge_parameters)
+
+        if copy_log_parameters is not None:
+            log_parameters = configutils.run_parameters_from_logs(copy_log_parameters)
+            self.parameters = configutils.merge_run_parameters(self.parameters, log_parameters)
 
         if self.parallel:
             # TODO: Behave differently on Windows and Linux, as this only works on linux
@@ -192,6 +199,8 @@ class CoevolutionDriver:
                             help='The rate at which to run exhibition evaluations, e.g. every 5 generations.')
         parser.add_argument('--force', dest='force_rerun', action='store_true',
                             help='Force rerunning completed runs, instead of skipping them.')
+        parser.add_argument('--copy-log-parameters', dest='copy_log_parameters', type=str,
+                            help='Copy parameters from the given log subfolder as low-priority merge parameters. Use this when some parameters are procedurally generated and not included in the config file, but need to be replicated for a new experiment. This works for multi-treatment experiments if the treatments are the same.')
         return parser
 
 
