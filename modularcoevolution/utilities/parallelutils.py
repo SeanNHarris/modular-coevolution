@@ -59,8 +59,8 @@ def create_pool(num_processes: int = -1, max_tasks_per_child: int = None) -> con
     if use_multiprocessing:
         _logger.info(f'Creating pool with {num_processes} processes.')
         # ProcessPoolExecutor handles failure much worse than multiprocessing.Pool.
-        # return concurrent.futures.ProcessPoolExecutor(max_workers=num_processes)
-        return MultiprocessingPoolWrapper(processes=num_processes, max_tasks_per_child=max_tasks_per_child)
+        return concurrent.futures.ProcessPoolExecutor(max_workers=num_processes, max_tasks_per_child=max_tasks_per_child)
+        # return MultiprocessingPoolWrapper(processes=num_processes, max_tasks_per_child=max_tasks_per_child)
     else:
         _logger.info(f'Creating pool with {num_processes} threads (GIL is disabled).')
         return concurrent.futures.ThreadPoolExecutor(max_workers=num_processes)
