@@ -86,7 +86,10 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 The configuration file should only contain parameters that can not be fixed
                 in the implementation of this class.
         """
-        self.config = self._apply_config_defaults(config)
+        # Apply population defaults, and THEN finish merging parameters if applicable.
+        config = self._apply_config_defaults(config)
+        self.config = self._apply_config_merge(config)
+
         if dictutils.has_config_value(config, ('manager', 'data_collector')):
             self.data_collector = dictutils.get_config_value(config, ('manager', 'data_collector'))
             self.data_collector.set_experiment_parameters(self.config)
@@ -193,11 +196,11 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         manager_parameters = self.config['manager']
         return Coevolution(generators, self.player_populations(), data_collector=data_collector, **manager_parameters)
 
-    def _apply_config_defaults(self, config: dict[str, Any]):
+    def _apply_config_defaults(self, config: dict[str, Any]) -> dict[str, Any]:
         """Update the config for each population with any missing default values.
 
         Args:
-            config: A dictionary of configuration parameters containing a `defaults` key.
+            config: A dictionary of configuration parameters potentially containing a `defaults` key.
 
         Returns:
             The config dictionary, where each population configuration uses the corresponding values from `defaults`
@@ -222,6 +225,25 @@ class BaseExperiment(metaclass=abc.ABCMeta):
             updated_config['populations'][population] = population_config
         return updated_config
 
+    def _apply_config_merge(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Merge any parameters from `config['merge_parameters']` into the config dictionary.
+        If these parameters exist, they were deferred for merging until after population default parameters were applied.
+        This is a "weak" merge, meaning that only missing parameters will be merged in.
+
+        Args:
+            config: A dictionary of configuration parameters potentially containing a `merge_parameters` key.
+                :meth:`_apply_config_defaults` should have already been applied to this dictionary.
+
+        Returns:
+            The config dictionary, where any parameters in `merge_parameters` have been weakly merged into the rest of the config.
+        """
+        updated_config = deep_copy_dictionary(config)
+        if 'merge_parameters' not in config:
+            return updated_config
+
+        merge_parameters = config['merge_parameters']
+        deep_update_dictionary(updated_config, merge_parameters, weak=True)
+        return updated_config
 
     def create_experiment(self, data_collector: DataCollector = None) -> BaseEvolutionManager:
         """Create and initialize the generators and manager for an experiment.

@@ -1,6 +1,6 @@
 [project]
 name = "modular-coevolution"
-version = "2026.4.5.1"
+version = "2026.4.9"
 description = "Evolutionary algorithm library focusing on competitive coevolution and genetic programming"
 authors = [
     {name = "Sean N. Harris", email = "snh0037@auburn.edu"}

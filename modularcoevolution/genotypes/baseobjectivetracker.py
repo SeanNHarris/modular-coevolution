@@ -18,13 +18,16 @@ __license__ = 'Apache-2.0'
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Literal, TypedDict, Union
+from typing import Literal, TypedDict, Union, TYPE_CHECKING
 
 import math
 
 import numpy
 
 from modularcoevolution.utilities.specialtypes import GenotypeID, EvaluationID
+
+if TYPE_CHECKING:
+    from modularcoevolution.genotypes import BaseGenotype
 
 MetricTypes = Union[float, str, list, dict, numpy.ndarray]
 
@@ -333,7 +336,7 @@ class BaseObjectiveTracker:
         return self.opponent_trackers[opponent][metric_name]
 
 
-def compute_shared_objectives(individuals: list[BaseObjectiveTracker], opponent_id: GenotypeID, objective: str = 'fitness', total: float = 1) -> list[float]:
+def compute_shared_objectives(individuals: list['BaseGenotype'], opponent_id: GenotypeID, objective: str = 'fitness', total: float = 1) -> list[float]:
     """Compute the shared fitness, or the equivalent for another objective,
     for a group of individuals against a common opponent.
 
@@ -353,10 +356,11 @@ def compute_shared_objectives(individuals: list[BaseObjectiveTracker], opponent_
     objective_values = []
     min_value = None
     for individual in individuals:
-        if objective not in individual.metrics or opponent_id not in individual.opponent_trackers:
+        objective_tracker = individual.objective_tracker
+        if objective not in objective_tracker.metrics or opponent_id not in objective_tracker.opponent_trackers:
             objective_values.append(math.nan)
         else:
-            objective_value = individual.get_opponent_metrics(opponent_id, objective)
+            objective_value = objective_tracker.get_opponent_metrics(opponent_id, objective)
             objective_values.append(objective_value)
             if min_value is None or objective_value < min_value:
                 min_value = objective_value

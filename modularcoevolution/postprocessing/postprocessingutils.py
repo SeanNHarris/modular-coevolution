@@ -793,7 +793,8 @@ def identify_last_generation(pathname: str | PathLike) -> int:
     except FileNotFoundError:
         raise FileNotFoundError(f"No run data found at {data_path}.")
     if len(files) == 1:
-        raise ValueError("This function is not supported for run data saved to a single file (i.e. with split_generations=False).")
+        warnings.warn("Only one data file found. This function is not supported for run data saved to a single file (i.e. with split_generations=False)."
+                      "Ignore this if there's actually only one generation of data for some reason.")
     return len(files) - 1
 
 

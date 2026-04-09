@@ -116,7 +116,7 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
             manager: Coevolution = None,
             copy_survivor_objectives: bool = False,
             reevaluate_per_generation: bool = True,
-            hall_of_fame_size: int = -1,
+            hall_of_fame_size: int = 0,
             compute_diversity: bool = False,
             past_population_width: int = -1,
             competitive_fitness_sharing: bool = False,
@@ -301,7 +301,7 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
         if self.competitive_fitness_sharing:
             opponents = set()
             for individual in self.population:
-                individual_opponents = individual.get_opponents()
+                individual_opponents = individual.objective_tracker.get_opponents()
                 opponents.update(individual_opponents)
 
             for shared_objective in self._shared_objective_map:
@@ -326,7 +326,7 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
 
         super().next_generation()
 
-    def _construct_shared_sample(self, size: int) -> list[GenotypeID]:
+    def _construct_shared_sample(self, size: int, from_top_n: int = 100) -> list[GenotypeID]:
         """Construct a sample of genotypes to be used for shared sampling.
         Shared sampling aims to construct a diverse sample set which maximizes marginal shared fitness for each
         individual added to the sample.
@@ -337,6 +337,9 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
 
         Args:
             size: The size of the sample set to be constructed.
+            from_top_n: To limit expensive quadratic search over the whole population, search for sample members
+                can be restricted to the top n individuals from the previous population.
+                If set to -1, the full population will be used.
 
         Returns: A list of genotype IDs of the requested size following the shared sampling algorithm.
 
@@ -347,11 +350,13 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
             raise ValueError("Cannot use shared sampling in the first generation.")
         if size > len(self.previous_population):
             size = len(self.previous_population)
+        if from_top_n < 0:
+            from_top_n = len(self.previous_population)
         # All single individuals will have the same shared objective value (in this continuous variant)
         # So pick a broadly "good" one to start.
         starting_individual = None
         starting_individual_score = None
-        for individual in self.previous_population:
+        for individual in self.previous_population[:from_top_n]:
             objective_sum = 0
             for base_objective in self._shared_objective_map.values():
                 objective_sum += individual.metrics[base_objective]
@@ -361,14 +366,14 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
         sample = [starting_individual]
 
         opponents = set()
-        for individual in self.previous_population:
-            individual_opponents = individual.get_opponents()
+        for individual in self.previous_population[:from_top_n]:
+            individual_opponents = individual.objective_tracker.get_opponents()
             opponents.update(individual_opponents)
 
         while len(sample) < size:
             best_individual = None
             best_individual_score = None
-            for individual in self.previous_population:
+            for individual in self.previous_population[:from_top_n]:
                 if individual in sample:
                     continue
                 augmented_sample = sample.copy()
@@ -400,6 +405,7 @@ class BaseEvolutionaryGenerator[AgentType: BaseEvolutionaryAgent, GenotypeType: 
             modified_metric: MetricConfiguration = metric_configuration.copy()
             modified_metric['name'] = 'base_' + metric_configuration['name']
             modified_metric['is_objective'] = False
+            modified_metric['log_opponents'] = True
             super().register_metric(modified_metric, metric_function)
             shared_metric: MetricConfiguration = metric_configuration.copy()
             shared_metric['automatic'] = False
