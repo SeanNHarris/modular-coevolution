@@ -148,13 +148,27 @@ class CoevolutionDriver:
 
     def start(self) -> None:
         """Start the experiment and wait for all runs to complete."""
+        queued_run_parameters = []
+        for run_parameters in self.parameters:
+            logs_path = fileutils.get_logs_path(can_create=True)
+            log_subfolder = run_parameters['log_subfolder']
+            log_path = logs_path / log_subfolder
+            run_already_exists = postprocessingutils.test_if_run_complete(log_path, run_parameters)
+            if run_already_exists:
+                if self.force_rerun:
+                    warnings.warn(f"Rerunning completed run at {log_subfolder} because of \"--force\" parameter.")
+                    queued_run_parameters.append(run_parameters)
+                else:
+                    print(f"Skipping completed run at {log_subfolder}.")
+            else:
+                queued_run_parameters.append(run_parameters)
+
         run_experiment = functools.partial(
             _run_experiment,
             experiment_type=self.experiment_type,
             use_data_collector=self.use_data_collector,
             run_exhibition=self.run_exhibition,
             exhibition_rate=self.exhibition_rate,
-            force_rerun=self.force_rerun,
         )
 
         futures = None
@@ -163,18 +177,18 @@ class CoevolutionDriver:
             if self.parallel and self.parallel_runs > 1:
                 with parallelutils.create_pool(self.parallel_runs, max_tasks_per_child=1) as evaluation_pool:
                     run_experiment_parallel = functools.partial(run_experiment, parallel=False, redirect_output=True)
-                    futures = [evaluation_pool.submit(run_experiment_parallel, parameter_set) for parameter_set in self.parameters]
+                    futures = [evaluation_pool.submit(run_experiment_parallel, parameter_set) for parameter_set in queued_run_parameters]
                     
-                    for parameter_set, future in zip(self.parameters, futures):
+                    for parameter_set, future in zip(queued_run_parameters, futures):
                         future.add_done_callback(lambda f, log_subfolder=parameter_set['log_subfolder']: print(f"Run complete: {log_subfolder}"))
                     result_iterator = concurrent.futures.as_completed(futures)
 
-                    if tqdm is not None and len(self.parameters) > 1:
-                        result_iterator = tqdm.tqdm(result_iterator, total=len(self.parameters), desc="Running experiment", unit="runs", smoothing=0.0)
+                    if tqdm is not None and len(queued_run_parameters) > 1:
+                        result_iterator = tqdm.tqdm(result_iterator, total=len(queued_run_parameters), desc="Running experiment", unit="runs", smoothing=0.0)
                     for result in result_iterator:
                         result.result()  # Make the iterator track completed results.
             else:
-                for parameter_set in self.parameters:
+                for parameter_set in queued_run_parameters:
                     run_experiment(parameter_set, parallel=self.parallel)
 
         except KeyboardInterrupt:
@@ -226,7 +240,6 @@ def _run_experiment(
         run_exhibition: bool = True,
         exhibition_rate: int = 1,
         redirect_output: bool = False,
-        force_rerun: bool = False
 ) -> None:
     """Run a single experiment.
 
@@ -250,14 +263,6 @@ def _run_experiment(
     logs_path = fileutils.get_logs_path(can_create=True)
     log_path = logs_path / log_subfolder
     os.makedirs(log_path, exist_ok=True)
-
-    run_already_exists = postprocessingutils.test_if_run_complete(log_path, run_parameters)
-    if run_already_exists:
-        if force_rerun:
-            warnings.warn(f"Rerunning completed run at {log_subfolder} because of \"--force\" parameter.")
-        else:
-            print(f"Skipping completed run at {log_subfolder}.")
-            return
 
     console_path = log_path / "console.txt"
     loggingutils.initialize_logger(log_path=console_path, console_output=not redirect_output, debug=True)
