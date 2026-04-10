@@ -17,6 +17,7 @@ __copyright__ = 'Copyright 2025, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import argparse
+import concurrent.futures
 import functools
 import logging
 import sys
@@ -116,6 +117,7 @@ class CoevolutionDriver:
             raise Warning("Disabling the data collector is not currently supported.")
         self.run_exhibition = run_exhibition
         self.exhibition_rate = exhibition_rate
+        self.force_rerun = force_rerun
 
         if merge_parameters is None:
             merge_parameters = {}
@@ -151,14 +153,21 @@ class CoevolutionDriver:
             experiment_type=self.experiment_type,
             use_data_collector=self.use_data_collector,
             run_exhibition=self.run_exhibition,
-            exhibition_rate=self.exhibition_rate
+            exhibition_rate=self.exhibition_rate,
+            force_rerun=self.force_rerun,
         )
+
+        futures = None
 
         try:
             if self.parallel and self.parallel_runs > 1:
                 with parallelutils.create_pool(self.parallel_runs, max_tasks_per_child=1) as evaluation_pool:
                     run_experiment_parallel = functools.partial(run_experiment, parallel=False, redirect_output=True)
-                    result_iterator = evaluation_pool.map(run_experiment_parallel, self.parameters)
+                    futures = [evaluation_pool.submit(run_experiment_parallel, parameter_set) for parameter_set in self.parameters]
+                    
+                    for parameter_set, future in zip(self.parameters, futures):
+                        future.add_done_callback(lambda f, log_subfolder=parameter_set['log_subfolder']: print(f"Run complete: {log_subfolder}"))
+                    result_iterator = concurrent.futures.as_completed(futures)
 
                     if tqdm is not None and len(self.parameters) > 1:
                         result_iterator = tqdm.tqdm(result_iterator, total=len(self.parameters), desc="Running experiment", unit="runs", smoothing=0.0)
@@ -170,6 +179,11 @@ class CoevolutionDriver:
 
         except KeyboardInterrupt:
             print("Keyboard interrupt received. Ending all runs.")
+
+            if futures is not None:
+                for future in futures:
+                    future.cancel()
+
             raise KeyboardInterrupt
 
     @staticmethod
