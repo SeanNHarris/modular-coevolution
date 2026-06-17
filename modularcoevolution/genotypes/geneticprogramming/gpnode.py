@@ -321,7 +321,10 @@ class GPNode(metaclass=GPNodeType):
         return node_dict
 
     def tree_string(self):
-        return treeutils.tree_to_string(self, self.get_node_dict())
+        node_dict = self.get_node_dict()
+        types = list(self.type_functions.keys())
+        node_type_colors = {node: types.index(node.output_type) for node in node_dict}
+        return treeutils.tree_to_string(self, self.get_node_dict(), color_types=node_type_colors)
 
     def tree_string_old(self):
         def _build_tree_string(max_height: int, depth: int, substring_list: list[str] = None) -> list[str]:

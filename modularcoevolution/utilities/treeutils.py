@@ -35,6 +35,18 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2026, BONSAI Lab at Auburn University'
@@ -42,6 +54,8 @@ __license__ = 'Apache-2.0'
 
 from collections.abc import Hashable
 from typing import TypeVar, Sequence, Optional, Callable
+
+from modularcoevolution.utilities.commandlineutils import color_string_256
 
 T = TypeVar('T', bound=Hashable)
 
@@ -51,7 +65,8 @@ def tree_to_string(
         children: dict[T, Sequence[T]],
         node_to_string: Optional[Callable[[T], str]] = None,
         skip_repeated: bool = False,
-        displayed: Optional[set[T]] = None
+        displayed: Optional[set[T]] = None,
+        color_types: Optional[dict[T, int]] = None
 ) -> str:
     """
     Prints a fancy string representation of a tree.
@@ -70,6 +85,7 @@ def tree_to_string(
             The default `node_to_string` will append " (displayed above)" to repeated nodes in this case.
         displayed: If provided, this set will be updated with all nodes that have been displayed in the tree so far.
             This is mainly for custom `node_to_string` functions when `skip_repeated` is used.
+        color_types: If provided, give different terminal colors for nodes based on this dictionary's values.
 
     Returns:
         A string representation of the tree.
@@ -79,10 +95,11 @@ def tree_to_string(
 
     if node_to_string is None:
         def node_to_string(node: T) -> str:
+            node_string = _color_node(node, color_types)
             if skip_repeated and node in displayed:
-                return f"{node} (displayed above)"
+                return f"{node_string} (displayed above)"
             else:
-                return f"{node}"
+                return f"{node_string}"
 
     def _build_tree(node: T, depth: int, last_child: bool, pipe_depths: list[int]) -> str:
         """
@@ -129,3 +146,22 @@ def tree_to_string(
         return "\n".join(substrings)
 
     return _build_tree(root, depth=0, last_child=True, pipe_depths=[])
+
+
+_COLORS = [
+    (5, 0, 0),
+    (5, 5, 0),
+    (0, 5, 0),
+    (0, 5, 5),
+    (0, 1, 5),
+    (5, 0, 5),
+]
+
+def _color_node(
+        node: T,
+        color_types: Optional[dict[T, int]] = None,
+):
+    if color_types is None:
+        return str(node)
+
+    return color_string_256(node, *_COLORS[color_types[node] % len(_COLORS)])

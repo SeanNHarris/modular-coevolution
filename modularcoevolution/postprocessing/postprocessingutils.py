@@ -253,7 +253,8 @@ def load_experiment_definition(
     """
     run_folders = get_run_paths(experiment_folder)
     if run_number < 0:
-        run_number = min(run_folders.keys())
+        return load_run_experiment_definition(resolve_experiment_path(experiment_folder), experiment_type, override_parameters)
+        # run_number = min(run_folders.keys())
     return load_run_experiment_definition(run_folders[run_number], experiment_type, override_parameters)
 
 
@@ -463,7 +464,7 @@ def easy_load_experiment_results(
         - For each run name, for each generation number, a dictionary mapping population names to archive generators containing the loaded individuals.
     """
     # If only one run is being loaded, specifically use that run's parameters to initialize the experiment, in case there are differences between runs.
-    if len(run_numbers) == 1:
+    if run_numbers is not None and len(run_numbers) == 1:
         run_number = run_numbers[0]
     else:
         run_number = -1

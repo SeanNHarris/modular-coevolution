@@ -221,7 +221,7 @@ class GPTree(BaseGenotype):
         try:
             return self.root.execute(context)
         except Exception as error:
-            _logger.error(f"Error while executing the following tree:\n{self}")
+            error.add_note(f"Error while executing the following tree:\n{self}")
             raise error
 
     def _replace_subtree(self, node: GPNode, replacement: GPNode) -> None:
@@ -476,6 +476,8 @@ class GPTree(BaseGenotype):
         return id_list
 
     def __str__(self):
+        self.node_type.initialize_class()  # Otherwise, calling str fails in a sub-process.
+        # This has something to do with the new tree renderer. TODO: fix this in a nicer way.
         tree_string = self.root.tree_string()
         return tree_string + f"\nID List: {self.get_node_id_list()}"
 

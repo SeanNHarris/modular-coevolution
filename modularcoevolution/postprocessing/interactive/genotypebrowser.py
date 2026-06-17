@@ -23,6 +23,18 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2026, BONSAI Lab at Auburn University'
@@ -389,7 +401,11 @@ class GenotypeBrowser(cmd.Cmd):
         return True
 
     def preloop(self):
-        experiment_name = self.experiment.config['log_subfolder']
+        if 'log_subfolder' in self.experiment.config:
+            # May only occur if the experiment has multiple treatments
+            experiment_name = self.experiment.config['log_subfolder']
+        else:
+            experiment_name = self.experiment.config['log_folder']
         experiment_type_name = type(self.experiment).__name__
         self.intro =\
         f"""Genotype browser initialized for experiment '{experiment_name}' ({experiment_type_name}).

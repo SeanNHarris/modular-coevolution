@@ -35,12 +35,25 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2026, BONSAI Lab at Auburn University'
 __license__ = 'Apache-2.0'
 
 import logging
+import re
 import sys
 
 
@@ -80,8 +93,8 @@ def initialize_logger(log_path: str = None, console_output: bool = True, debug: 
         logger.addHandler(console_stdout_handler)
 
     if log_path is not None:
-        file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        file_handler = logging.FileHandler(log_path, mode='w')
+        file_formatter = ColorlessFormatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler = logging.FileHandler(log_path, mode='w', encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
@@ -93,3 +106,16 @@ def initialize_logger(log_path: str = None, console_output: bool = True, debug: 
         logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.excepthook = except_hook
     logging.captureWarnings(True)
+
+
+_color_pattern = re.compile(r'\x1b.*?m')
+def strip_colors(text: str) -> str:
+    return re.sub(_color_pattern, '', text)
+
+
+class ColorlessFormatter(logging.Formatter):
+    """Formatter that strips ANSI color patterns"""
+    def format(self, record):
+        formatted_message = super().format(record)
+        # Remove ANSI color codes
+        return strip_colors(formatted_message)

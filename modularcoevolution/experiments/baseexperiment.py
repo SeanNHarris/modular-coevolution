@@ -38,6 +38,8 @@ from modularcoevolution.utilities.dictutils import deep_copy_dictionary, deep_up
 from modularcoevolution.utilities.specialtypes import GenotypeID
 from modularcoevolution.managers.baseevolutionmanager import BaseEvolutionManager
 
+import modularcoevolution.utilities.loggingutils as loggingutils
+
 try:
     import tqdm
 except ImportError:
@@ -332,6 +334,12 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 genotype_parameters=genotype_parameters
             )
             generators.append(generator)
+
+        metrics = self._build_metrics()
+        for generator, population_metrics in zip(generators, metrics):
+            for metric_configuration, metric_function in population_metrics.metrics:
+                generator.register_metric(metric_configuration, metric_function)
+
         return generators
 
     def evaluate_all(
@@ -405,7 +413,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         population_agents = [[population.build_agent_from_id(agent_id, True) for agent_id in agent_ids[population_index]] for population_index, population in enumerate(populations)]
         agents = [population_agents[population_index] for population_index in self.player_populations()]
         agent_names = [populations[population_index].population_name for population_index in self.player_populations()]
-        self._run_exhibition_games(agents, agent_names, log_path, parallel=False)
+        self._run_exhibition_games(agents, agent_names, log_path, parallel=parallel)
         # Disable parallel exhibitions, because of issues with pickling the extended result dictionary.
 
     def _run_exhibition_games(
@@ -426,13 +434,15 @@ class BaseExperiment(metaclass=abc.ABCMeta):
     def _process_exhibition_results(self, agent_group, agent_numbers, agent_names, result, log_path):
         number_string = '-'.join([str(number) for number in agent_numbers])
         statistics_filepath = f'{log_path}/exhibitionStats{number_string}.txt'
-        with open(statistics_filepath, 'w+') as statistics_file:
+        with open(statistics_filepath, 'w+', encoding='utf-8') as statistics_file:
             statistics_file.truncate(0)
             for player_index, agent in enumerate(agent_group):
                 agent_name = agent_names[player_index]
 
                 if isinstance(agent, BaseEvolutionaryAgent):
-                    statistics_file.write(f'{agent_name} genotype:\n{agent.genotype}\n')
+                    # TODO: Temporary solution, would be be better to only use colors when printing to the console.
+                    genotype_string = loggingutils.strip_colors(str(agent.genotype))
+                    statistics_file.write(f'{agent_name} genotype:\n{genotype_string}\n')
                 else:
                     statistics_file.write(f'{agent_name}:\nNo genotype\n')
                 for metric_name, metric_value in result[player_index].items():
@@ -481,13 +491,22 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         # Necessary to use ArchiveGenerator for this, since it wasn't made for this purpose.
         original_ids = {genotype.id: genotype.id for genotype in genotypes}
 
-        return ArchiveGenerator(
+        generator = ArchiveGenerator(
             agent_class=agent_class,
             population_name=population_name,
             genotypes=genotypes,
             original_ids=original_ids,
             agent_parameters=agent_parameters
         )
+
+        metrics = self._build_metrics()
+        population_index = self.population_names().index(population_name)
+        population_metrics = metrics[population_index]
+        metrics = self._build_metrics()
+        for metric_configuration, metric_function in population_metrics.metrics:
+            generator.register_metric(metric_configuration, metric_function)
+
+        return generator
 
     def get_agent_parameters(self, population_name: str) -> tuple[type[BaseAgent], dict[str, Any]]:
         """Get the class and default parameters for agents in the given population.

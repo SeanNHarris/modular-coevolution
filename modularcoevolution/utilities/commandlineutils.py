@@ -35,6 +35,18 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2026, BONSAI Lab at Auburn University'
@@ -146,15 +158,16 @@ def prompt_experiment_path(prompt: str = None) -> str:
     return experiment_path
 
 
-def prompt_run(experiment_path: str) -> str:
+def prompt_run(experiment_path: str, return_number = False) -> str:
     """
     Prompt the user for a valid run number for the given experiment.
 
     Args:
         experiment_path: The path to the experiment log folder.
+        return_number: If True, return the run number instead of the run path.
 
     Returns:
-        The path to the selected run's log folder.
+        The path to the selected run's log folder, or the run number if `return_number` is True.
     """
     run_folders = fileutils.get_run_paths(experiment_path)
 
@@ -171,7 +184,10 @@ def prompt_run(experiment_path: str) -> str:
             print("Invalid run number.")
             run_number = -1
 
-    return run_folders[run_number]
+    if return_number:
+        return run_number
+    else:
+        return run_folders[run_number]
 
 
 def prompt_int(prompt: str = None, minimum: int = None, default: int = None) -> int:
