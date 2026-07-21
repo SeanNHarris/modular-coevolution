@@ -23,6 +23,18 @@
 #  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 __author__ = 'Sean N. Harris'
 __copyright__ = 'Copyright 2026, BONSAI Lab at Auburn University'
@@ -37,7 +49,7 @@ import json
 from pathlib import Path
 
 from modularcoevolution.postprocessing import postprocessingutils
-from modularcoevolution.utilities import commandlineutils
+from modularcoevolution.utilities import commandlineutils, fileutils
 
 
 def main():
@@ -90,12 +102,9 @@ def main():
         save_filename = None
 
     if save_filename is not None:
-        save_paths = set()
+        log_path = fileutils.get_logs_path()
         for experiment_path in experiment_paths:
-            save_path = Path(experiment_path).parent / f"{save_filename}.json"
-            if save_path in save_paths:
-                continue
-            save_paths.add(save_path)
+            save_path = log_path / experiment_path / f"{save_filename}.json"
 
             with open(save_path, 'w+') as save_file:
                 json.dump(results, save_file)
