@@ -61,7 +61,7 @@ class GPTreeParameters(TypedDict, total=False):
     """See :attr:`GPTree.scale_parsimony_with_fitness`."""
     forbidden_nodes: tuple[str]
     """See :attr:`GPTree.forbidden_nodes`."""
-    fixed_context: list[str, Any]  # Can we do more typing enforcement with this?
+    fixed_context: dict[str, Any]  # Can we do more typing enforcement with this?
     """See :attr:`GPTree.fixed_context`."""
     id_list: list[str | Any]
     """A list of node IDs and literal values to be used to generate the tree, instead of using random generation.
@@ -367,6 +367,9 @@ class GPTree(BaseGenotype):
         If the new node has multiple inputs, the selected node will be in a random valid position.
         All other inputs will be randomly generated based on the height of the selected node."""
         node = self._random_node()
+        self._insert_mutate_target(node)
+
+    def _insert_mutate_target(self, node: GPNode, child_height = None) -> None:
         if node.get_height() + node.get_depth() >= MAXIMUM_HEIGHT:
             raise TreeConstraintException("Tree is too large to expand with insertion.")
         node_depth = node.get_depth()  # Don't compute this below, as it will change when the node is moved
@@ -383,7 +386,10 @@ class GPTree(BaseGenotype):
             if index == node_position:
                 new_node.add_input(node_clone)
             else:
-                generate_height = self._random_height(node.get_height(), node_depth + 1)  # +1 for the new parent
+                if child_height is None:
+                    generate_height = self._random_height(node.get_height(), node_depth + 1)  # +1 for the new parent
+                else:
+                    generate_height = child_height
                 new_node.add_input(self.random_subtree(generate_height, input_type))
 
         self._replace_subtree(node, new_node)
@@ -399,6 +405,61 @@ class GPTree(BaseGenotype):
         valid_children = [child for child in node.input_nodes if child.output_type == node.output_type]
         promote_child = random.choice(valid_children)
         self._replace_subtree(node, promote_child)
+
+    def mutate_structural(self) -> None:
+        """Mutates the tree in place using structural mutations, for fitness landscape analysis.
+        Based on "Fitness Landscape Analysis of Genetic Programming Search Spaces with Local Optima Networks".
+
+        Raises:
+            TreeInvalidError: If the tree exceeds the maximum height after mutation.
+        """
+        structural_mutation_functions = (self._strict_inflate_mutate, self._strict_deflate_mutate, self._point_terminal_mutate)
+        for _ in range(100):
+            mutation_function = random.choice(structural_mutation_functions)
+            try:
+                mutation_function()
+                break
+            except TreeConstraintException as e:
+                # warn(f"Mutation failed in {mutation_function.__name__} ({e.args[0]}); retrying.")
+                pass  # The constraints are stricter here, so it will be common for some to fail due to type issues.
+        else:
+            warn("Mutation failed 100 times; aborting.")
+        if self.root.get_height() > MAXIMUM_HEIGHT:
+            raise TreeInvalidError(f"Fatal error after {mutation_function.__name__}: New tree exceeds maximum height of {MAXIMUM_HEIGHT}.")
+        self.creation_method = "Mutation"
+
+    def _strict_inflate_mutate(self) -> None:
+        """Transforms a leaf node into a subtree of height 1. The root of this subtree is a random operator,
+        but its child nodes include the original terminal.
+        Used in fitness landscape analysis; not used for normal mutation."""
+        node_list = self.get_node_list()
+        valid_nodes = [node for node in node_list if len(node.input_types) == 0]
+        if len(valid_nodes) == 0:
+            raise TreeConstraintException("No valid nodes found for strict inflate.")
+        node = random.choice(valid_nodes)
+        self._insert_mutate_target(node, child_height=1)
+
+    def _strict_deflate_mutate(self) -> None:
+        """Transforms a subtree of height 1 into a terminal randomly selected from the child nodes.
+        Used in fitness landscape analysis; not used for normal mutation."""
+        node_list = self.get_node_list()
+        valid_nodes = [node for node in node_list if node.output_type in node.input_types and node.get_height() == 2]
+        if len(valid_nodes) == 0:
+            raise TreeConstraintException("No valid nodes found for strict deflate.")
+        node = random.choice(valid_nodes)
+        valid_children = [child for child in node.input_nodes if child.output_type == node.output_type]
+        promote_child = random.choice(valid_children)
+        self._replace_subtree(node, promote_child)
+
+    def _point_terminal_mutate(self) -> None:
+        """Replaces a leaf node with another random terminal.
+        Used in fitness landscape analysis; not used for normal mutation."""
+        node_list = self.get_node_list()
+        valid_nodes = [node for node in node_list if len(node.input_types) == 0]
+        node = random.choice(valid_nodes)
+        new_node = self.node_type(self.node_type.random_function(node.output_type, terminal=True),
+                                  fixed_context=self.fixed_context)
+        self._replace_point(node, new_node)
 
     # Subtree recombination
     def recombine(self, donor: 'GPTree') -> None:
