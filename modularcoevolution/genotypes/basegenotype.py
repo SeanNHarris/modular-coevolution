@@ -65,7 +65,7 @@ class BaseGenotype(metaclass=abc.ABCMeta):
         evolutionary mutation.
 
         """
-        pass
+        self.creation_method = "Mutation"
 
     @abc.abstractmethod
     def recombine(self, donor: "BaseGenotype"):
@@ -78,9 +78,9 @@ class BaseGenotype(metaclass=abc.ABCMeta):
                 recombination operators, this individual is treated as the secondary parent.
 
         """
-        pass
+        self.creation_method = "Recombination"
+        self.parent_ids.append(donor.id)
 
-    @abc.abstractmethod
     def clone(self) -> "BaseGenotype":
         """Return a new individual with an identical genotype. The new individual will have a new ID and metrics.
 
@@ -88,7 +88,10 @@ class BaseGenotype(metaclass=abc.ABCMeta):
             A new individual with an identical genotype.
 
         """
-        pass
+        cloned_genotype = type(self)(self.get_raw_genotype())
+        cloned_genotype.parent_ids.append(self.id)
+        cloned_genotype.creation_method = "Cloning"
+        return cloned_genotype
 
     @abc.abstractmethod
     def __hash__(self) -> int:
