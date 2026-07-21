@@ -285,9 +285,7 @@ class Coevolution:
         For evaluation functions with more than two players, the resulting evaluations will be populated by multiple
         generators' mandatory opponent lists simultaneously.
 
-        Todo:
-            This will create unnecessary evaluations if the mandatory opponents list
-            is not the same size for each generator.
+        If one generator does not provide mandatory opponents, opponents will be randomly pulled from the population.
 
         Returns:
             A list of evaluation groups.
@@ -297,21 +295,24 @@ class Coevolution:
         for agent_list in mandatory_opponents.values():
             random.shuffle(agent_list)
         mandatory_agent_lists = [mandatory_opponents[generator] for generator in self.get_generator_order()]
-        max_mandatory_length = max(len(agent_list) for agent_list in mandatory_agent_lists)
-        if max_mandatory_length == 0:
-            return []
 
         agent_lists = [self.current_agents_per_generator[generator].copy() for generator in self.get_generator_order()]
         for to_evaluate_index, agent_list in enumerate(agent_lists):
+            mandatory_length = max(len(agent_list) for index, agent_list in enumerate(mandatory_agent_lists) if index != to_evaluate_index)
+            if mandatory_length == 0:
+                continue
+
             for agent in agent_list:
-                for opponents_index in range(max_mandatory_length):
+                for opponents_index in range(mandatory_length):
                     group = []
                     for player_index, mandatory_agent_list in enumerate(mandatory_agent_lists):
                         if player_index == to_evaluate_index:
                             group.append(agent)
-                        else:
+                        elif len(mandatory_agent_list) > 0:
                             index = opponents_index % len(mandatory_agent_list)
                             group.append(mandatory_agent_list[index])
+                        else:
+                            group.append(random.choice(agent_lists[player_index]))
                     groups.append(tuple(group))
         return groups
 

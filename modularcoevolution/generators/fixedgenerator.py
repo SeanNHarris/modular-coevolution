@@ -36,10 +36,11 @@ class FixedGenerator(BaseGenerator[AgentType]):
     agent: AgentType
     agent_id: GenotypeID
     reuse_agent: bool
+    copies: int
 
     @property
     def population_size(self) -> int:
-        return 1
+        return self.copies
 
     def __init__(
             self,
@@ -47,6 +48,7 @@ class FixedGenerator(BaseGenerator[AgentType]):
             population_name: str,
             agent_parameters: dict[str, Any] = None,
             reuse_agent: bool = False,
+            copies: int = 1,
             *args,
             **kwargs
     ):
@@ -57,11 +59,13 @@ class FixedGenerator(BaseGenerator[AgentType]):
             agent_parameters: A dictionary of parameters sent to the agent's constructor.
             reuse_agent: If False, a fresh copy of the agent will be created each time the agent is requested.
                 Set to True if the agent needs to cache data between evaluations.
+            copies: Number of copies of this agent to emulate.
         """
         super().__init__(population_name, *args, **kwargs)
         self.agent_class = agent_class
         self.agent_parameters = agent_parameters
         self.reuse_agent = reuse_agent
+        self.copies = copies
 
         self.agent = self.agent_class(agent_parameters, active=self.reuse_agent)
 
@@ -84,10 +88,11 @@ class FixedGenerator(BaseGenerator[AgentType]):
             return new_agent
 
     def get_individuals_to_test(self) -> list[GenotypeID]:
-        return [self.agent.id]
+        # I sure hope returning multiple agents with the same ID doesn't break anything
+        return [self.agent.id] * self.copies
 
     def get_representatives_from_generation(self, generation: int, amount: int, force: bool = False) -> list[GenotypeID]:
-        return [self.agent.id]
+        return [self.agent.id] * min(self.copies, amount)
 
     def end_generation(self) -> None:
         pass

@@ -26,6 +26,8 @@ import re
 import warnings
 from functools import partial
 from os import PathLike
+
+from modularcoevolution.generators.multiplegenerator import MultipleGenerator
 from typing import Optional, Type, Sequence, TypeVar, Any
 
 from modularcoevolution.agents.baseagent import BaseAgent
@@ -501,7 +503,7 @@ def round_robin_evaluation(
     repeat_evaluations: int = 1,
     parallel: bool = False,
     **kwargs
-) -> tuple[tuple[BaseAgent, ...], Sequence[dict[str, Any]]]:
+) -> list[tuple[tuple[BaseAgent, ...], Sequence[dict[str, Any]]]]:
     """
     Evaluate the populations through round-robin evaluations.
     The resulting objective scores are managed within the archive generators.
@@ -752,10 +754,10 @@ def compare_experiments(
             for population_name in population_names:
                 population_archives[population_name].append(populations[population_name])
 
-    combined_archives = {
-        population_name: ArchiveGenerator.merge_archives(archives)
-        for population_name, archives in population_archives.items()
-    }
+    combined_archives = {population_name: MultipleGenerator(population_name) for population_name in population_names}
+    for population_name, archives in population_archives.items():
+        for archive in archives:
+            combined_archives[population_name].add_generator(archive)
 
     round_robin_archives = [combined_archives[population_name] for population_name in population_names]
     results = round_robin_evaluation(round_robin_archives, experiment_definition, repeat_evaluations, parallel=parallel)

@@ -18,7 +18,7 @@ __license__ = 'Apache-2.0'
 
 import warnings
 from abc import abstractmethod
-from functools import cache
+from functools import lru_cache
 from typing import Callable, Any, Union, Optional, Generator, Sequence, Protocol, TypeVar, TYPE_CHECKING
 
 from modularcoevolution.genotypes.geneticprogramming.gpnodetyperegistry import GPNodeTypeRegistry
@@ -190,17 +190,22 @@ class GPNode(metaclass=GPNodeType):
         self._height = None
         self.saved_value = None
 
-    def execute(self, context) -> Any:
+    def execute(self, context, use_cached: bool = False) -> Any:
         """Executes the function represented by this node, using the given context.
 
         Args:
             context: A dictionary of context values that are used to parameterize the function or its children.
                 Special keys: `save_value`: if true, the output of this node will be saved in the :attr:`GPNode.saved_value` attribute.
+            use_cached:
+                Use :attr:`GPNode.saved_value` as a cache for the return value.
+                This must be manually cleared if you need to call the node multiple times with new inputs.
 
         Returns:
             The output of the function represented by this node,
             or the literal value of this node if it is a literal node.
         """
+        if use_cached and self.saved_value is not None:
+            return self.saved_value
         if self.function_id not in type(self).literals:
             output = self.function(self.input_nodes, context)
         else:
@@ -209,29 +214,32 @@ class GPNode(metaclass=GPNodeType):
             self.saved_value = output
         return output
 
-    def set_input(self, index: int, input_node: 'GPNode') -> None:
+    def set_input(self, index: int, input_node: 'GPNode', ignore_parent: bool = False) -> None:
         """Sets the child of this node at the given index to the given node, and sets this node as the parent of the child.
 
         Args:
             index: The index of the child to set.
             input_node: The child node to set. The output type should match the input type of this node at the given index,
                 but this type constraint is not checked here.
+            ignore_parent: If True, do not set the input node's parent.
         """
         self.input_nodes[index] = input_node
         self.invalidate_height()  # Invalidate height cache (towards root)
-        if input_node is not None:
+        if input_node is not None and not ignore_parent:
             input_node.set_parent(self)
 
-    def add_input(self, input_node: 'GPNode') -> None:
+    def add_input(self, input_node: 'GPNode', ignore_parent: bool = False) -> None:
         """Adds a child to this node as an input, and sets this node as the parent of the child.
 
         Args:
             input_node: The child node to add. The output type should match corresponding input type of this node,
                 but this type constraint is not checked here.
+            ignore_parent: If True, do not set the input node's parent.
+
         """
         next_input = self.input_nodes.index(None)
         self.invalidate_height()  # Invalidate height cache (towards root)
-        self.set_input(next_input, input_node)
+        self.set_input(next_input, input_node, ignore_parent)
 
     def set_parent(self, parent: Optional['GPNode']) -> None:
         """Sets the parent of this node.
@@ -501,7 +509,8 @@ class GPNode(metaclass=GPNodeType):
 
     # Generates a table describing how deep it's possible to construct a tree with a given type.
     @classmethod
-    def build_depth_table(cls, max_height, forbidden_nodes=None):
+    @lru_cache
+    def build_depth_table(cls, max_height, forbidden_nodes=None) -> dict[NodeType, int]:
         if forbidden_nodes is None:
             forbidden_nodes = []
         type_tables = dict()
@@ -535,7 +544,59 @@ class GPNode(metaclass=GPNodeType):
         return type_depths
 
     @classmethod
-    @cache
+    @lru_cache
+    def build_min_depth_table(cls, forbidden_nodes=None) -> dict[NodeType, int]:
+        if forbidden_nodes is None:
+            forbidden_nodes = []
+        function_depths = {}
+        type_depths = {}
+        min_type_depths = {data_type: 1000000 for data_type in cls.data_types()}
+
+        remaining_functions = cls.functions.copy()
+
+        while len(remaining_functions) > 0:
+            new_remaining_functions = []
+            undecided_types = set()
+            for function in remaining_functions:
+                _, output_type, input_types = cls.get_function_data(function)
+                if len(input_types) == 0:
+                    function_depths[function] = 0
+                    type_depths[output_type] = 0
+                    continue
+
+                undecided = False
+                min_depth = 0
+                for input_type in input_types:
+                    if input_type not in type_depths:
+                        undecided = True
+                        break
+                    else:
+                        min_depth = max(min_depth, type_depths[input_type] + 1)
+
+                if undecided:
+                    new_remaining_functions.append(function)
+                    if output_type not in type_depths:
+                        undecided_types.add(output_type)
+                else:
+                    function_depths[function] = min_depth
+                    min_type_depths[output_type] = min(min_type_depths[output_type], min_depth)
+
+            for data_type in cls.data_types():
+                if data_type not in type_depths and data_type not in undecided_types:
+                    type_depths[data_type] = min_type_depths[data_type]
+
+            remaining_functions = new_remaining_functions
+
+        return function_depths, type_depths
+
+
+
+
+
+
+
+    @classmethod
+    @lru_cache
     def _get_functions(
             cls,
             output_type: NodeType,
@@ -601,7 +662,7 @@ class GPNode(metaclass=GPNodeType):
         return random.choice(possible_functions)
 
     @classmethod
-    def get_function_data(cls, func_id):
+    def get_function_data(cls, func_id) -> FunctionEntry:
         return cls.functions[func_id]
 
     @classmethod

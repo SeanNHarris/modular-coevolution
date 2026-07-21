@@ -20,7 +20,7 @@ import abc
 import gc
 import itertools
 import os
-from typing import Sequence, Any, Union, Literal, Callable, Protocol
+from typing import Sequence, Any, Union, Literal, Callable, Protocol, final
 
 from modularcoevolution.agents.baseevolutionaryagent import BaseEvolutionaryAgent
 from modularcoevolution.generators.archivegenerator import ArchiveGenerator
@@ -88,13 +88,7 @@ class BaseExperiment(metaclass=abc.ABCMeta):
                 The configuration file should only contain parameters that can not be fixed
                 in the implementation of this class.
         """
-        # Apply population defaults, and THEN finish merging parameters if applicable.
-        config = self._apply_config_defaults(config)
-        self.config = self._apply_config_merge(config)
-
-        if dictutils.has_config_value(config, ('manager', 'data_collector')):
-            self.data_collector = dictutils.get_config_value(config, ('manager', 'data_collector'))
-            self.data_collector.set_experiment_parameters(self.config)
+        self.config = self._process_config(config)
 
         self.agent_types_by_population_name = {}
         for population_name, agent_type in zip(self.population_names(), self.population_agent_types()):
@@ -246,6 +240,64 @@ class BaseExperiment(metaclass=abc.ABCMeta):
         merge_parameters = config['merge_parameters']
         deep_update_dictionary(updated_config, merge_parameters, weak=True)
         return updated_config
+
+    @final
+    def _process_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """
+        Handles modifications to the config dictionary supplied to :meth:`__init__`,
+        including processing population-default and merge parameters and setting the data collector.
+        This method calls :meth:`_preprocess_config` before any of these are applied
+        and :meth:`_postprocess_config` afterwards.
+        Override those instead of this method.
+
+        Args:
+            config: A dictionary of configuration parameters.
+
+        Returns:
+            A modified config dictionary.
+        """
+        config = self._preprocess_config(config)
+
+        # Apply population defaults, and THEN finish merging parameters if applicable.
+        config = self._apply_config_defaults(config)
+        config = self._apply_config_merge(config)
+
+        if dictutils.has_config_value(config, ('manager', 'data_collector')):
+            self.data_collector = dictutils.get_config_value(config, ('manager', 'data_collector'))
+            self.data_collector.set_experiment_parameters(self.config)
+
+        config = self._postprocess_config(config)
+        return config
+
+    def _preprocess_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """
+        This method should be overridden by child classes to handle any initial reading or writing of
+        the config dictionary *before* population-default parameters and merge parameters are applied.
+        It is called during :meth:`__init__`.
+        The base implementation makes no changes to config.
+
+        Args:
+            config: A dictionary of configuration parameters.
+
+        Returns:
+            A modified config dictionary.
+        """
+        return config
+
+    def _postprocess_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """
+        This method should be overridden by child classes to handle any initial reading or writing of
+        the config dictionary *before* population-default parameters and merge parameters are applied.
+        It is called during :meth:`__init__`.
+        The base implementation makes no changes to config.
+
+        Args:
+            config: A dictionary of configuration parameters.
+
+        Returns:
+            A modified config dictionary.
+        """
+        return config
 
     def create_experiment(self, data_collector: DataCollector = None) -> BaseEvolutionManager:
         """Create and initialize the generators and manager for an experiment.
